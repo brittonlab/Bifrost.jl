@@ -139,3 +139,5 @@ scattering.
 - Line wrap markdown and comments at 100 characters.
 - Send the output of all demo.jl methods to the folder in the repository root 
 named output. 
+- If a file has an example usage section at the top, always keep it 
+  up to date.  

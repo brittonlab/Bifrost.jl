@@ -359,7 +359,7 @@ module PlotRuntime
         return ψ
     end
 
-    function propagate_sensitivity_segment(
+    function propagate_Kω_segment(
         K,
         Kω,
         jumps,
@@ -381,7 +381,7 @@ module PlotRuntime
         for ζ in jump_points
             h1 = ζ - s
             if h1 > 0
-                Jseg, Gseg = Main.exp_sensitivity_midpoint_step(K, Kω, s, h1, Jseg, Gseg)
+                Jseg, Gseg = Main.exp_Kω_midpoint_step(K, Kω, s, h1, Jseg, Gseg)
             end
             J_pre = Jseg
             G_pre = Gseg
@@ -394,7 +394,7 @@ module PlotRuntime
 
         h2 = b - s
         if h2 > 0
-            Jseg, Gseg = Main.exp_sensitivity_midpoint_step(K, Kω, s, h2, Jseg, Gseg)
+            Jseg, Gseg = Main.exp_Kω_midpoint_step(K, Kω, s, h2, Jseg, Gseg)
         end
 
         return Jseg, Gseg
@@ -579,7 +579,7 @@ module PlotRuntime
         dgds[1] = Main.output_dgd(J, G)
 
         for i in 1:n-1
-            J, G = propagate_sensitivity_segment(K, Kω, jumps, jump_omegas, J, G, ss[i], ss[i + 1])
+            J, G = propagate_Kω_segment(K, Kω, jumps, jump_omegas, J, G, ss[i], ss[i + 1])
             dgds[i + 1] = Main.output_dgd(J, G)
         end
 
@@ -1235,3 +1235,262 @@ end
 const sample_fiber_centerline = PlotRuntime.sample_fiber_centerline
 const sample_fiber_input = PlotRuntime.sample_fiber_input
 const write_fiber_input_plot3d = PlotRuntime.write_fiber_input_plot3d
+
+# ----------------------------
+# Adaptive step-doubling diagnostics (wrapper — does not touch the production solver)
+# ----------------------------
+
+struct StepRecord
+    s_start::Float64   # position at the start of this trial
+    h::Float64         # step size tried
+    err_abs::Float64   # phase-insensitive error between full and two-half steps
+    tol::Float64       # tolerance threshold at this step
+    accepted::Bool
+end
+
+"""
+    collect_adaptive_steps(K, s0, s1, J0; kwargs...)
+
+Diagnostic wrapper that mirrors `propagate_interval!` exactly but records every trial step
+(accepted and rejected) as a `StepRecord`. The production solver is not modified.
+
+Returns `(J_final, records::Vector{StepRecord})`.
+"""
+function collect_adaptive_steps(
+    K,
+    s0::Float64,
+    s1::Float64,
+    J0::Matrix{ComplexF64};
+    rtol::Float64 = 1e-9,
+    atol::Float64 = 1e-12,
+    h_init::Float64 = (s1 - s0) / 100,
+    h_min::Float64 = 1e-12,
+    h_max::Float64 = s1 - s0,
+    safety::Float64 = 0.9,
+    growth_max::Float64 = 2.0,
+    shrink_min::Float64 = 0.2
+)
+    s = s0
+    J = copy(J0)
+    h = min(h_init, s1 - s0)
+    records = StepRecord[]
+
+    while s < s1
+        h = min(h, s1 - s)
+        h >= h_min || error("Step size underflow near s=$s")
+
+        J_full     = exp_midpoint_step(K, s, h, J)
+        J_half     = exp_midpoint_step(K, s, 0.5h, J)
+        J_twohalf  = exp_midpoint_step(K, s + 0.5h, 0.5h, J_half)
+
+        err_abs = phase_insensitive_error(J_full, J_twohalf)
+        scale   = max(opnorm(J_twohalf), opnorm(J_full))
+        tol     = atol + rtol * scale
+
+        if err_abs <= tol
+            push!(records, StepRecord(s, h, err_abs, tol, true))
+            s += h
+            J  = J_twohalf
+            fac = err_abs == 0.0 ? growth_max : clamp(safety * (tol / err_abs)^(1/3), 1.0, growth_max)
+            h = min(h * fac, h_max)
+        else
+            push!(records, StepRecord(s, h, err_abs, tol, false))
+            fac = clamp(safety * (tol / err_abs)^(1/3), shrink_min, 0.5)
+            h *= fac
+            h >= h_min || error("Step size fell below h_min near s=$s")
+        end
+    end
+
+    return J, records
+end
+
+"""
+    write_adaptive_steps_plot(records, K_norm_fn, s0, s1; output, title, rtol, atol)
+
+Write an HTML file with two stacked Plotly panels:
+
+- **Top**: accepted step sizes (green) and rejected step sizes (red crosses) vs position.
+- **Bottom**: `err_abs / tol` ratio for every trial step, with the acceptance threshold
+  drawn as a horizontal dashed line at 1.
+
+`K_norm_fn(s)` should return a scalar representing the local "stiffness" of the generator
+(e.g. `opnorm(K(s))`). It is plotted as a shaded background overlay on the top panel so the
+viewer can see where small steps coincide with rapid generator variation.
+
+Returns the output path.
+"""
+function write_adaptive_steps_plot(
+    records::Vector{StepRecord},
+    K_norm_fn,
+    s0::Float64,
+    s1::Float64;
+    output::AbstractString = "adaptive-steps.html",
+    title::AbstractString  = "Adaptive step-doubling diagnostics",
+    rtol::Float64 = 1e-9,
+    atol::Float64 = 1e-12
+)
+    acc = filter(r -> r.accepted,  records)
+    rej = filter(r -> !r.accepted, records)
+
+    s_acc   = [r.s_start       for r in acc]
+    h_acc   = [r.h             for r in acc]
+    s_rej   = [r.s_start       for r in rej]
+    h_rej   = [r.h             for r in rej]
+
+    s_all   = [r.s_start       for r in records]
+    ratio   = [r.err_abs / max(r.tol, 1e-300) for r in records]
+    accepted_flag = [r.accepted for r in records]
+
+    # For each group of consecutive rejections followed by an acceptance, build vertical
+    # bars connecting the first (largest) rejected trial to the accepted one — both for
+    # the step-size panel (bar_x/bar_y) and the err/tol panel (bar2_x/bar2_y).
+    bar_x  = Float64[]
+    bar_y  = Float64[]
+    bar2_x = Float64[]
+    bar2_y = Float64[]
+    ratios = [r.err_abs / max(r.tol, 1e-300) for r in records]
+    i = 1
+    while i <= length(records)
+        if !records[i].accepted
+            s_pos   = records[i].s_start
+            h_top   = records[i].h
+            r_top   = ratios[i]
+            j = i + 1
+            while j <= length(records) && !records[j].accepted
+                j += 1
+            end
+            if j <= length(records) && records[j].accepted
+                append!(bar_x,  [s_pos, s_pos, NaN])
+                append!(bar_y,  [h_top, records[j].h, NaN])
+                append!(bar2_x, [s_pos, s_pos, NaN])
+                append!(bar2_y, [r_top, ratios[j], NaN])
+            end
+            i = j
+        else
+            i += 1
+        end
+    end
+
+    # Background stiffness curve sampled on a fine grid
+    ns = 400
+    s_bg = collect(range(s0, s1, length = ns))
+    knorm = [Float64(opnorm(K_norm_fn(si))) for si in s_bg]
+
+    js_vec(v) = "[" * join(string.(Float64.(v)), ", ") * "]"
+    js_bool_vec(v) = "[" * join(ifelse.(v, "true", "false"), ", ") * "]"
+
+    html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>$title</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; font-family: sans-serif; background: #fafafa; }
+    #container { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+<div id="container"></div>
+<script>
+const s_acc   = $(js_vec(s_acc));
+const h_acc   = $(js_vec(h_acc));
+const s_rej   = $(js_vec(s_rej));
+const h_rej   = $(js_vec(h_rej));
+const s_all   = $(js_vec(s_all));
+const ratio   = $(js_vec(ratio));
+const acc_flag = $(js_bool_vec(accepted_flag));
+const s_bg    = $(js_vec(s_bg));
+const knorm   = $(js_vec(knorm));
+const bar_x   = $(js_vec(bar_x));
+const bar_y   = $(js_vec(bar_y));
+const bar2_x  = $(js_vec(bar2_x));
+const bar2_y  = $(js_vec(bar2_y));
+
+// Normalise stiffness to [0,1] for overlay — we scale it to fill 5% of h range
+const hAll   = h_acc.concat(h_rej);
+const hMax   = Math.max(...hAll) * 1.1;
+const hMin   = Math.min(...hAll) * 0.85;
+const knMax  = Math.max(...knorm) || 1;
+const knNorm = knorm.map(k => hMin + (hMax - hMin) * 0.25 * (k / knMax));
+
+const stiffTrace = {
+  type: "scatter", mode: "lines", name: "‖K(s)‖ (scaled)",
+  x: s_bg, y: knNorm,
+  fill: "tozeroy", fillcolor: "rgba(200,220,255,0.35)",
+  line: { color: "rgba(100,140,220,0.55)", width: 1.5 },
+  yaxis: "y", hoverinfo: "skip", showlegend: true
+};
+
+const hAccTrace = {
+  type: "scatter", mode: "markers", name: "accepted step",
+  x: s_acc, y: h_acc,
+  marker: { color: "#2ca02c", size: 6, symbol: "circle" },
+  yaxis: "y"
+};
+
+const hRejTrace = {
+  type: "scatter", mode: "markers", name: "rejected step",
+  x: s_rej, y: h_rej,
+  marker: { color: "#d62728", size: 8, symbol: "x", line: { width: 2 } },
+  yaxis: "y"
+};
+
+const barTrace = {
+  type: "scatter", mode: "lines", name: "shrink chain",
+  x: bar_x, y: bar_y,
+  line: { color: "rgba(140,140,140,0.6)", width: 1 },
+  yaxis: "y", hoverinfo: "skip", showlegend: false
+};
+
+// Colour ratio dots by accepted/rejected
+const ratioColors = acc_flag.map(a => a ? "#2ca02c" : "#d62728");
+const ratioTrace = {
+  type: "scatter", mode: "markers", name: "err / tol",
+  x: s_all, y: ratio,
+  marker: { color: ratioColors, size: 5, symbol: "circle" },
+  yaxis: "y2"
+};
+
+const bar2Trace = {
+  type: "scatter", mode: "lines", name: "shrink chain",
+  x: bar2_x, y: bar2_y,
+  line: { color: "rgba(140,140,140,0.6)", width: 1 },
+  yaxis: "y2", hoverinfo: "skip", showlegend: false
+};
+
+const threshTrace = {
+  type: "scatter", mode: "lines", name: "threshold (err = tol)",
+  x: [$(s0), $(s1)], y: [1.0, 1.0],
+  line: { color: "#888888", width: 1.5, dash: "dash" },
+  yaxis: "y2", showlegend: true
+};
+
+const layout = {
+  title: { text: $(repr(title)), font: { size: 15 } },
+  grid: { rows: 2, columns: 1, pattern: "independent", roworder: "top to bottom" },
+  xaxis:  { title: "s (arc length)", domain: [0, 1] },
+  xaxis2: { title: "s (arc length)", domain: [0, 1] },
+  yaxis:  { title: "step size h", type: "log", domain: [0.42, 1.0] },
+  yaxis2: { title: "err / tol", type: "log", domain: [0.0, 0.38] },
+  legend: { x: 1.02, y: 1.0, xanchor: "left" },
+  margin: { l: 70, r: 160, t: 60, b: 50 },
+  annotations: [
+    { text: "Step size", xref: "paper", yref: "paper", x: 0.01, y: 1.0,
+      xanchor: "left", yanchor: "top", showarrow: false, font: { size: 13 } },
+    { text: "Error / tolerance", xref: "paper", yref: "paper", x: 0.01, y: 0.37,
+      xanchor: "left", yanchor: "top", showarrow: false, font: { size: 13 } }
+  ]
+};
+
+Plotly.newPlot("container", [stiffTrace, barTrace, hAccTrace, hRejTrace, bar2Trace, ratioTrace, threshTrace],
+               layout, { responsive: true, displaylogo: false });
+</script>
+</body>
+</html>
+"""
+    open(output, "w") do io
+        write(io, html)
+    end
+    return output
+end

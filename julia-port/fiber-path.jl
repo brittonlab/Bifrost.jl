@@ -24,6 +24,7 @@ Supporting functionality includes:
 - coverage validation and breakpoint handling
 - `Fiber` assembly from low-level sources or from `FiberSpec`
 - source-level and fiber-level `K(s)` and `Kω(s)` assembly
+- `propagate_fiber` / `propagate_fiber_Kω` (fiber-level wrappers; call into `path-integral.jl`)
 - bend/twist diagnostic helpers used by plotting
 """
 
@@ -653,6 +654,30 @@ function generator_Kω(f::Fiber)
         end
         return Kω
     end
+end
+
+function propagate_fiber(
+    f::Fiber;
+    jumps::Dict{Float64, Matrix{ComplexF64}} = Dict{Float64, Matrix{ComplexF64}}(),
+    kwargs...
+)
+    return propagate_piecewise(generator_K(f), fiber_breakpoints(f); jumps = jumps, kwargs...)
+end
+
+function propagate_fiber_Kω(
+    f::Fiber;
+    jumps::Dict{Float64, Matrix{ComplexF64}} = Dict{Float64, Matrix{ComplexF64}}(),
+    jump_omegas::Dict{Float64, Matrix{ComplexF64}} = Dict{Float64, Matrix{ComplexF64}}(),
+    kwargs...
+)
+    return propagate_piecewise_Kω(
+        generator_K(f),
+        generator_Kω(f),
+        fiber_breakpoints(f);
+        jumps = jumps,
+        jump_omegas = jump_omegas,
+        kwargs...
+    )
 end
 
 # ----------------------------

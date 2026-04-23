@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(julia --project=. test/test_fiber_path.jl)"
+      "Bash(julia --project=. test/test_fiber_path.jl)",
+      "Bash(julia --project=julia-port julia-port/test/test_path_geometry.jl)",
+      "Bash(julia test/runtests.jl)",
+      "Bash(julia test/test_path_geometry.jl)",
+      "Bash(julia -e ' *)",
+      "Bash(julia julia-port/test/runtests.jl)",
+      "Bash(julia -e 'include\\(\"julia-port/demo.jl\"\\); demo_adaptive_step_doubling\\(\\)')",
+      "Bash(julia julia-port/demo-path-integral.jl)"
     ]
   }
 }

@@ -4,6 +4,7 @@ include("path-geometry.jl")
 include("path-geometry-plot.jl")
 
 
+
 const DEMO_FIBER_CROSS_SECTION = FiberCrossSection(
     GermaniaSilicaGlass(0.036),
     GermaniaSilicaGlass(0.0),

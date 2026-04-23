@@ -14,10 +14,22 @@ upcoming features. Agents should not start work on these without explicit author
       already a convention for this. In that case I'd use multiple dispatch to express
       the detailed intent for my fiber based application.
 
-- [ ] implement for T in (JumpBy, JumpTo)
-  - [ ] properly implement sample_path for these
+- [x] implement for T in (JumpBy, JumpTo)
+  - [x] properly implement sample_path for these
 
-- [ ] Remove the "Local Frenet section" subplot in path-geometry.plot.jl.
+# quality of life changes for path-geometry-plot.jl
+- [x] Make the scale factor for x,y,z the same in path-geometry-plot.jl 
+- [x] Remove the "Local Frenet section" subplot in path-geometry.plot.jl.
+- [x] Make the left-right scrub linear in s not linear in the sample number. 
+- [x] Add an option to give a string-based nickname to a Segment. This would be
+an optional argument for eg straight!. By default there is no nickname. If 
+there is a nickname add a text label to the segment 
+rendered by path-geometry-plot.jl. If possible the label should lie in the same plane as the segment. 
+
+- [x] Add minimum radius of curvature optional parameter for jumpto and jumpby in path-geometry.jl.
+- [x] Let's think if there's a more straightforward check for violation of min_bend_radius. 1) Are you using _hc_peak_curvature() to check? Based on its name it may be relevant. 2) Since HermiteConnector implements only a cubic spline does that bound the number of points that have to be sampled to conclusively determine that there is no violation of min_bend_radius? 
+  - This didn't help. 
+
 
 - [ ] In light of the recent addition of ARTHITECTURE.md and AGENT.md and README.md is
       there any refactoring that should take place? Are there any consequential
@@ -43,7 +55,7 @@ upcoming features. Agents should not start work on these without explicit author
       illustrating the transformation of an input polarization state as a function of
       distance s along the length of an optical fiber.
 
-- [ ] Is this what we want? Piecewise bend! loops don't accumulate geometric twist in total_material_twist — but they shouldn't, because a BendSegment has geometric_torsion = 0 (circular arcs have zero torsion). A helix does have nonzero geometric_torsion, but that's captured in geometric_torsion(seg, s), not in total_material_twist.
+
 
 - [ ] Create a path-geometry.md that documents how it works. Add specific 
   illustratings for important features of path-geometry.jl. Each is described in
@@ -56,3 +68,35 @@ upcoming features. Agents should not start work on these without explicit author
     - [ ] Show how the orientation of the prior segment influences the orientation of a helix and the helix exit path.
     - [ ] Devise examples that illustrate how segments respond to shrinkage and
     contrast it with 
+
+- [ ] Do I want to change the implementation of path-geometry.jl to 
+permit all the parametric parameters to be Functions? This would parallel
+how it's done in fiber-path.jl (eg in BendSegment)
+  - This could be motivated by my desire to use the MonteCarloMeasurements.jl 
+  type Particles or StaticParticles for the following parameters temperature, path geometry parameters, core_diameter, cladding_diameter, core_noncircularity, axial tension. The MonteCarloMeasurements.jl docs discusses supporting new 
+  functions here https://baggepinnen.github.io/MonteCarloMeasurements.jl/stable/overloading/
+
+- [ ] change the implementation of twist! bend! etc in fiber-path.jl to leverage
+  the same in path-geometry.pl. Note that the contents of path-geometry.jl ought 
+  not be  loaded into the global namespace of fiber-path as fiber-path 
+  implements its own twist! bend! etc variants
+
+- [ ] The following relates to path-geometry.jl, fiber-cross-section.jl and fiber-path.jl. I may need to refactor some things due to rewriting path-geometry.jl. 
+I need to decide where in the stack to store temperature as a function of s
+  - temperature directly relates to some macroscopic degrees of freedom
+  represented in path-geometry. 
+    - shrinkage depends on the material property poisson_ratio(T) 
+    - core_noncircularity birefringence 
+    - axial_tension birefringence
+    - twisting biregringence  
+    - asymmetric thermal stress
+  - temperature influences some intrinsic material properies (that don't 
+  depend on geometry) for example 
+    - core_refractive_index
+    - cladding_refractive_index
+    - mode_terms
+    - chromatic_dispersion_parameter
+
+
+
+- [ ] fiber-path.jl depends on path-geometry.jl and r-path.jl to fiber-

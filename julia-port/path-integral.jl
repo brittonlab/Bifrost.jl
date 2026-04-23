@@ -3,7 +3,8 @@ using LinearAlgebra
 
 # Code Overview:
 # - fiber-path.jl defines the fiber model, source specification, and breakpoint assembly.
-# - generator_K and generator_Kω assemble the local Jones dynamics.
+# - generator_K and generator_Kω assemble the local Jones dynamics (fiber-path.jl);
+#   fiber-level wrappers propagate_fiber and propagate_fiber_Kω also live there.
 # - the numerical propagation stack consists of
 #     - exp_jones_generator
 #     - exp_midpoint_step
@@ -319,14 +320,6 @@ function propagate_piecewise(
     return J, stats
 end
 
-function propagate_fiber(
-    f::Fiber;
-    jumps::Dict{Float64, Matrix{ComplexF64}} = Dict{Float64, Matrix{ComplexF64}}(),
-    kwargs...
-)
-    return propagate_piecewise(generator_K(f), fiber_breakpoints(f); jumps = jumps, kwargs...)
-end
-
 """
     propagate_piecewise_Kω(K, Kω, breaks; jumps=Dict(), jump_omegas=Dict(), kwargs...)
 
@@ -374,22 +367,6 @@ function propagate_piecewise_Kω(
     end
 
     return J, G, stats
-end
-
-function propagate_fiber_Kω(
-    f::Fiber;
-    jumps::Dict{Float64, Matrix{ComplexF64}} = Dict{Float64, Matrix{ComplexF64}}(),
-    jump_omegas::Dict{Float64, Matrix{ComplexF64}} = Dict{Float64, Matrix{ComplexF64}}(),
-    kwargs...
-)
-    return propagate_piecewise_Kω(
-        generator_K(f),
-        generator_Kω(f),
-        fiber_breakpoints(f);
-        jumps = jumps,
-        jump_omegas = jump_omegas,
-        kwargs...
-    )
 end
 
 function pmd_generator(J::Matrix{ComplexF64}, G::Matrix{ComplexF64}; hermitianize::Bool = true)
