@@ -1,12 +1,3 @@
-if !isdefined(Main, :FiberCrossSection)
-    include(joinpath(@__DIR__, "fiber-cross-section.jl"))
-end
-if !isdefined(Main, :PathSpecCached)
-    include(joinpath(@__DIR__, "..", "geometry", "path-geometry.jl"))
-end
-
-include(joinpath(@__DIR__, "fiber-path-meta.jl"))
-
 """
 Fiber assembly on top of `path-geometry.jl`.
 
@@ -63,9 +54,7 @@ K  = generator_K(fiber, 1550e-9)
 Kω = generator_Kω(fiber, 1550e-9)
 """
 
-if !isdefined(Main, :DEFAULT_T_REF_K)
-    const DEFAULT_T_REF_K = 297.15
-end
+const DEFAULT_T_REF_K = 297.15
 
 function bend_components(path::PathSpecCached, s::Real)
     κ = curvature(path, s)

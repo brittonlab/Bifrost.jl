@@ -1,9 +1,6 @@
 using Test
 using MonteCarloMeasurements
-
-if !isdefined(Main, :refractive_index)
-    include(joinpath(@__DIR__, "..", "src", "material-properties.jl"))
-end
+using Bifrost
 
 # Each section below exercises MCM (Particles) compatibility for one source file.
 # Sections are grouped by the file under test and delineated by a banner. Add new

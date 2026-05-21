@@ -1,12 +1,7 @@
 using MonteCarloMeasurements
-
-include(joinpath(@__DIR__, "..", "..", "src", "material-properties.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "fiber", "fiber-cross-section.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "geometry", "path-geometry.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "geometry", "path-geometry-plot.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "path-integral.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "fiber", "fiber-path-plot.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "fiber", "fiber-path-modify.jl"))
+using Bifrost
+using Bifrost.Plots
+using Bifrost.Plots.PlotRuntime
 
 
 const DEMO_FIBER_CROSS_SECTION = FiberCrossSection(
@@ -790,7 +785,7 @@ function demo_all(; index_output::AbstractString = joinpath(@__DIR__, "..", ".."
   <nav class="index-nav">
     <a href="demo1.html">demo1</a>
     <a href="demo2.html">demo2</a>
-    <a href="demo3mcm.html">demo3mcm</a>
+    <a href="demo4mcm.html">demo4mcm</a>
     <a href="demo3benchmark.html">demo3benchmark</a>
   </nav>
   <h1>BIFROST path-geometry demos</h1>""")

@@ -1,10 +1,7 @@
 using Test
 using LinearAlgebra
 using Random
-
-if !isdefined(Main, :exp_block_upper_triangular_2x2)
-    include(joinpath(@__DIR__, "..", "src", "path-integral.jl"))
-end
+using Bifrost
 
 # Verify the closed-form 4×4 block-upper-triangular exp against LinearAlgebra.exp.
 # For A = [M Mω; 0 M] we should have exp(A) = [E F; 0 E] with E = exp(M).

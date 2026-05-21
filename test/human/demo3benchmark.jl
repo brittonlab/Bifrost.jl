@@ -2,7 +2,7 @@
 # demo3benchmark.jl — MCM propagation speed benchmarks
 # =====================================================================
 #
-# Extends the MCM temperature-PTF scenarios from demo3mcm.jl with
+# Extends the MCM temperature-PTF scenarios from demo4mcm.jl with
 # timing measurements across four particle types:
 #
 #   * Float64          — deterministic baseline
@@ -26,7 +26,7 @@
 # `demo3benchmark_all()` runs both and writes `output/demo3benchmark.html`.
 
 if !isdefined(Main, :_mcm_demo_fiber)
-    include(joinpath(@__DIR__, "demo3mcm.jl"))
+    include(joinpath(@__DIR__, "demo4mcm.jl"))
 end
 
 using BenchmarkTools
@@ -359,7 +359,7 @@ function demo3benchmark_all(;
   <nav class="index-nav">
     <a href="demo1.html">demo1</a>
     <a href="demo2.html">demo2</a>
-    <a href="demo3mcm.html">demo3mcm</a>
+    <a href="demo4mcm.html">demo4mcm</a>
     <a href="demo3benchmark.html">demo3benchmark</a>
   </nav>
   <h1>BIFROST MCM propagation benchmarks</h1>""")

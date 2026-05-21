@@ -26,10 +26,6 @@ This file contains no sampling or interpretation logic — that belongs with
 whichever layer acts on the annotation.
 """
 
-if !@isdefined(AbstractMeta)
-    include(joinpath(@__DIR__, "..", "geometry", "path-geometry.jl"))
-end
-
 struct Nickname <: AbstractMeta
     label::String
 end

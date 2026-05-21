@@ -1,10 +1,7 @@
 using Test
 using LinearAlgebra
 using QuadGK
-
-if !isdefined(Main, :QuinticConnector)
-    include(joinpath(@__DIR__, "..", "src", "geometry", "path-geometry.jl"))
-end
+using Bifrost
 
 # -----------------------------------------------------------------------
 # Helpers used across multiple test sets in this file
