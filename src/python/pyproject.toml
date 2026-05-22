@@ -1,0 +1,26 @@
+[build-system]
+requires      = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name            = "bifrost-wrapper"
+version         = "0.1.0"
+description     = "Python interface to the Bifrost Julia package via juliacall."
+requires-python = ">=3.9"
+authors         = [{ name = "Britton Lab" }]
+license         = { text = "See repository LICENSE" }
+dependencies    = [
+    "juliacall>=0.9",
+]
+
+[project.optional-dependencies]
+# `pip install -e ".[notebook]"` for matplotlib / numpy / jupyter conveniences.
+notebook = [
+    "numpy",
+    "matplotlib",
+    "jupyter",
+]
+
+[tool.setuptools]
+# `wrapper.py` is the only module to install; no package directory.
+py-modules = ["wrapper"]
