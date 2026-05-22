@@ -54,20 +54,20 @@ function (poly::TemperaturePolynomial)(T_K)
     return value
 end
 
-struct ConstantLaw
+struct SellmeierConstantLaw
     value::Float64
-    ConstantLaw(value::Real) = new(Float64(value))
+    SellmeierConstantLaw(value::Real) = new(Float64(value))
 end
 
-(law::ConstantLaw)(x) = law.value * one(x)
+(law::SellmeierConstantLaw)(x) = law.value * one(x)
 
-struct QuadraticMolarLaw
+struct SellmeierQuadraticMolarLaw
     quadratic::Float64
     linear::Float64
-    QuadraticMolarLaw(quadratic::Real, linear::Real) = new(Float64(quadratic), Float64(linear))
+    SellmeierQuadraticMolarLaw(quadratic::Real, linear::Real) = new(Float64(quadratic), Float64(linear))
 end
 
-(law::QuadraticMolarLaw)(x) = law.quadratic * x^2 + law.linear * x
+(law::SellmeierQuadraticMolarLaw)(x) = law.quadratic * x^2 + law.linear * x
 
 struct SellmeierTerm{TB, TC}
     B_law::TB
@@ -77,8 +77,8 @@ end
 evaluate(term::SellmeierTerm, temperature_like) = (term.B_law(temperature_like), term.C_law(temperature_like))
 
 struct SellmeierCorrectionTerm
-    ΔB_law::QuadraticMolarLaw
-    ΔC_law::QuadraticMolarLaw
+    ΔB_law::SellmeierQuadraticMolarLaw
+    ΔC_law::SellmeierQuadraticMolarLaw
 end
 
 evaluate(term::SellmeierCorrectionTerm, molar_fraction) = (term.ΔB_law(molar_fraction), term.ΔC_law(molar_fraction))
@@ -122,23 +122,23 @@ const SILICA_TERM_3 = SellmeierTerm(
     TemperaturePolynomial((9.34454, -70.9788e-3, 1.01968e-4, -5.07660e-7, 8.21348e-10))
 )
 
-const GERMANIA_TERM_1 = SellmeierTerm(ConstantLaw(0.80686642), ConstantLaw(0.068972606))
-const GERMANIA_TERM_2 = SellmeierTerm(ConstantLaw(0.71815848), ConstantLaw(0.15396605))
-const GERMANIA_TERM_3 = SellmeierTerm(ConstantLaw(0.85416831), ConstantLaw(11.841931))
+const GERMANIA_TERM_1 = SellmeierTerm(SellmeierConstantLaw(0.80686642), SellmeierConstantLaw(0.068972606))
+const GERMANIA_TERM_2 = SellmeierTerm(SellmeierConstantLaw(0.71815848), SellmeierConstantLaw(0.15396605))
+const GERMANIA_TERM_3 = SellmeierTerm(SellmeierConstantLaw(0.85416831), SellmeierConstantLaw(11.841931))
 
 const FLUORINE_TERM_1 = SellmeierCorrectionTerm(
-    QuadraticMolarLaw(-61.25, 0.2565),
-    QuadraticMolarLaw(-23.0, 0.101)
+    SellmeierQuadraticMolarLaw(-61.25, 0.2565),
+    SellmeierQuadraticMolarLaw(-23.0, 0.101)
 )
 
 const FLUORINE_TERM_2 = SellmeierCorrectionTerm(
-    QuadraticMolarLaw(73.9, -1.836),
-    QuadraticMolarLaw(10.7, -0.005)
+    SellmeierQuadraticMolarLaw(73.9, -1.836),
+    SellmeierQuadraticMolarLaw(10.7, -0.005)
 )
 
 const FLUORINE_TERM_3 = SellmeierCorrectionTerm(
-    QuadraticMolarLaw(233.5, -5.82),
-    QuadraticMolarLaw(1090.5, -24.695)
+    SellmeierQuadraticMolarLaw(233.5, -5.82),
+    SellmeierQuadraticMolarLaw(1090.5, -24.695)
 )
 
 const PURE_SILICA = SiO2((SILICA_TERM_1, SILICA_TERM_2, SILICA_TERM_3))
