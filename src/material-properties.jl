@@ -25,7 +25,6 @@ cte_value = cte(glass, T_K)
 """
 
 abstract type AbstractMaterial end
-abstract type AbstractTemperatureDependentSellmeier <: AbstractMaterial end
 abstract type AbstractBinarySilicaGlass <: AbstractMaterial end
 abstract type SpectralStyle end
 
@@ -41,10 +40,7 @@ const SPEED_OF_LIGHT_M_PER_S = 299_792_458.0
 
 struct TemperaturePolynomial
     coeffs::NTuple{5, Float64}
-end
-
-function TemperaturePolynomial(coeffs::NTuple{5, <:Real})
-    return TemperaturePolynomial(map(Float64, coeffs))
+    TemperaturePolynomial(coeffs::NTuple{5, <:Real}) = new(map(Float64, coeffs))
 end
 
 function (poly::TemperaturePolynomial)(T_K)
@@ -57,20 +53,20 @@ function (poly::TemperaturePolynomial)(T_K)
     return value
 end
 
-struct ConstantLaw
+struct SellmeierConstantLaw
     value::Float64
+    SellmeierConstantLaw(value::Real) = new(Float64(value))
 end
 
-ConstantLaw(value::Real) = ConstantLaw(Float64(value))
-(law::ConstantLaw)(x) = law.value * one(x)
+(law::SellmeierConstantLaw)(x) = law.value * one(x)
 
-struct QuadraticMolarLaw
+struct SellmeierQuadraticMolarLaw
     quadratic::Float64
     linear::Float64
+    SellmeierQuadraticMolarLaw(quadratic::Real, linear::Real) = new(Float64(quadratic), Float64(linear))
 end
 
-QuadraticMolarLaw(quadratic::Real, linear::Real) = QuadraticMolarLaw(Float64(quadratic), Float64(linear))
-(law::QuadraticMolarLaw)(x) = law.quadratic * x^2 + law.linear * x
+(law::SellmeierQuadraticMolarLaw)(x) = law.quadratic * x^2 + law.linear * x
 
 struct SellmeierTerm{TB, TC}
     B_law::TB
@@ -80,18 +76,18 @@ end
 evaluate(term::SellmeierTerm, temperature_like) = (term.B_law(temperature_like), term.C_law(temperature_like))
 
 struct SellmeierCorrectionTerm
-    ΔB_law::QuadraticMolarLaw
-    ΔC_law::QuadraticMolarLaw
+    ΔB_law::SellmeierQuadraticMolarLaw
+    ΔC_law::SellmeierQuadraticMolarLaw
 end
 
 evaluate(term::SellmeierCorrectionTerm, molar_fraction) = (term.ΔB_law(molar_fraction), term.ΔC_law(molar_fraction))
 
-struct SiO2 <: AbstractTemperatureDependentSellmeier
-    terms::NTuple{3, SellmeierTerm}
+struct SiO2 <: AbstractMaterial
+    sellmeier_terms::NTuple{3, SellmeierTerm}
 end
 
 struct GeO2 <: AbstractMaterial
-    reference_terms::NTuple{3, SellmeierTerm}
+    sellmeier_terms::NTuple{3, SellmeierTerm}
 end
 
 struct GermaniaSilicaGlass <: AbstractBinarySilicaGlass
@@ -125,23 +121,23 @@ const SILICA_TERM_3 = SellmeierTerm(
     TemperaturePolynomial((9.34454, -70.9788e-3, 1.01968e-4, -5.07660e-7, 8.21348e-10))
 )
 
-const GERMANIA_TERM_1 = SellmeierTerm(ConstantLaw(0.80686642), ConstantLaw(0.068972606))
-const GERMANIA_TERM_2 = SellmeierTerm(ConstantLaw(0.71815848), ConstantLaw(0.15396605))
-const GERMANIA_TERM_3 = SellmeierTerm(ConstantLaw(0.85416831), ConstantLaw(11.841931))
+const GERMANIA_TERM_1 = SellmeierTerm(SellmeierConstantLaw(0.80686642), SellmeierConstantLaw(0.068972606))
+const GERMANIA_TERM_2 = SellmeierTerm(SellmeierConstantLaw(0.71815848), SellmeierConstantLaw(0.15396605))
+const GERMANIA_TERM_3 = SellmeierTerm(SellmeierConstantLaw(0.85416831), SellmeierConstantLaw(11.841931))
 
 const FLUORINE_TERM_1 = SellmeierCorrectionTerm(
-    QuadraticMolarLaw(-61.25, 0.2565),
-    QuadraticMolarLaw(-23.0, 0.101)
+    SellmeierQuadraticMolarLaw(-61.25, 0.2565),
+    SellmeierQuadraticMolarLaw(-23.0, 0.101)
 )
 
 const FLUORINE_TERM_2 = SellmeierCorrectionTerm(
-    QuadraticMolarLaw(73.9, -1.836),
-    QuadraticMolarLaw(10.7, -0.005)
+    SellmeierQuadraticMolarLaw(73.9, -1.836),
+    SellmeierQuadraticMolarLaw(10.7, -0.005)
 )
 
 const FLUORINE_TERM_3 = SellmeierCorrectionTerm(
-    QuadraticMolarLaw(233.5, -5.82),
-    QuadraticMolarLaw(1090.5, -24.695)
+    SellmeierQuadraticMolarLaw(233.5, -5.82),
+    SellmeierQuadraticMolarLaw(1090.5, -24.695)
 )
 
 const PURE_SILICA = SiO2((SILICA_TERM_1, SILICA_TERM_2, SILICA_TERM_3))
@@ -170,9 +166,6 @@ const GERMANIA_YOUNGS_MODULUS = 45.5e9
 
 const SILICA_N2 = 2.2e-20
 const GERMANIA_N2 = 4.6e-20
-
-sellmeier_terms(material::SiO2) = material.terms
-reference_sellmeier_terms(material::GeO2) = material.reference_terms
 
 # TODO Banner... validate ranges
 const MIN_VALID_TEMPERATURE_K = 243.0
@@ -215,8 +208,10 @@ function validate_model_wavelength(λ)
     return λ
 end
 
+# used for AbstractBinarySilicaGlass 
 interpolate_scalar(a, b, x) = (one(x) - x) * a + x * b
 
+# used for photoelastic_constants
 function interpolate_pair(a::Tuple, b::Tuple, x)
     return (
         interpolate_scalar(a[1], b[1], x),
@@ -224,12 +219,12 @@ function interpolate_pair(a::Tuple, b::Tuple, x)
     )
 end
 
-function sellmeier_coefficients(material::AbstractTemperatureDependentSellmeier, T_K)
+function sellmeier_coefficients(material::SiO2, T_K)
     T = validate_model_temperature(T_K)
-    return map(term -> evaluate(term, T), sellmeier_terms(material))
+    return map(term -> evaluate(term, T), material.sellmeier_terms)
 end
 
-function fluorine_corrected_sellmeier_coefficients(glass::FluorinatedSilicaGlass, T_K)
+function sellmeier_coefficients(glass::FluorinatedSilicaGlass, T_K)
     silica_coeffs = sellmeier_coefficients(PURE_SILICA, T_K)
     x_f = glass.x_f
     return ntuple(i -> begin
@@ -276,14 +271,14 @@ end
 
 function reference_refractive_index(material::GeO2, λ, T_K)
     T = validate_model_temperature(T_K)
-    base_coeffs = map(term -> evaluate(term, T), reference_sellmeier_terms(material))
+    base_coeffs = map(term -> evaluate(term, T), material.sellmeier_terms)
     n_ref = sellmeier_index_from_coefficients(base_coeffs, λ)
     return n_ref + thermo_optic_index_shift(material, T)
 end
 
 function reference_refractive_index(::WithDerivative, material::GeO2, λ, T_K)
     T = validate_model_temperature(T_K)
-    base_coeffs = map(term -> evaluate(term, T), reference_sellmeier_terms(material))
+    base_coeffs = map(term -> evaluate(term, T), material.sellmeier_terms)
     base = sellmeier_index_from_coefficients_dω(base_coeffs, λ)
     return SpectralResponse(base.value + thermo_optic_index_shift(material, T), base.dω)
 end
@@ -320,12 +315,12 @@ function refractive_index(::WithDerivative, glass::GermaniaSilicaGlass, λ, T_K)
 end
 
 function refractive_index(::ValueOnly, glass::FluorinatedSilicaGlass, λ, T_K)
-    coeffs = fluorine_corrected_sellmeier_coefficients(glass, T_K)
+    coeffs = sellmeier_coefficients(glass, T_K)
     return sellmeier_index_from_coefficients(coeffs, λ)
 end
 
 function refractive_index(::WithDerivative, glass::FluorinatedSilicaGlass, λ, T_K)
-    coeffs = fluorine_corrected_sellmeier_coefficients(glass, T_K)
+    coeffs = sellmeier_coefficients(glass, T_K)
     return sellmeier_index_from_coefficients_dω(coeffs, λ)
 end
 

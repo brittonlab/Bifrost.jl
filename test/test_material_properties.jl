@@ -100,11 +100,11 @@ end
     poly = TemperaturePolynomial((1.0, 2.0, 3.0, 4.0, 5.0))
     @test poly(2.0) == 129.0
 
-    law = ConstantLaw(7.5)
+    law = SellmeierConstantLaw(7.5)
     @test law(1.0) == 7.5
     @test law(999.0) == 7.5
 
-    quad = QuadraticMolarLaw(2.0, -0.5)
+    quad = SellmeierQuadraticMolarLaw(2.0, -0.5)
     @test quad(0.0) == 0.0
     @test quad(0.25) ≈ 0.0
     @test quad(1.0) == 1.5
@@ -122,7 +122,7 @@ end
 
 @testset "SiO2" begin
     silica = SiO2()
-    terms = sellmeier_terms(silica)
+    terms = silica.sellmeier_terms
     @test length(terms) == 3
     @test terms isa NTuple{3, SellmeierTerm}
 
