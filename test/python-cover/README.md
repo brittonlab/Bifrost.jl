@@ -35,6 +35,12 @@ If this script runs cleanly, the basics of the bridge are healthy: Julia
 selection, package resolution in `.venv/julia_env/`, signal handling, and
 data marshalling all work.
 
+Run with
+```bash
+cd test/python-cover
+uv run python julia-call-demo.py
+```
+
 ### `julia-call-mcm.py` + `julia-call-mcm.jl` + `julia-call-mcm-native.jl`
 
 Targeted probe for `MonteCarloMeasurements.jl` (MCM) under juliacall with
