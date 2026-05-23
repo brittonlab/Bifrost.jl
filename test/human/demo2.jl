@@ -1325,7 +1325,7 @@ function demo2_all(; index_output::AbstractString = joinpath(@__DIR__, "..", "..
   <nav class="index-nav">
     <a href="demo1.html">demo1</a>
     <a href="demo2.html">demo2</a>
-    <a href="demo3mcm.html">demo3mcm</a>
+    <a href="demo4mcm.html">demo4mcm</a>
     <a href="demo3benchmark.html">demo3benchmark</a>
   </nav>
   <h1>BIFROST JumpBy / JumpTo demos</h1>""")

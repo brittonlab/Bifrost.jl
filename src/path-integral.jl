@@ -1,7 +1,3 @@
-using LinearAlgebra
-using Printf
-
-
 # Code Overview:
 # - fiber-path.jl defines the fiber model, source specification, and breakpoint assembly.
 # - generator_K and generator_Kω assemble the local Jones dynamics.
@@ -20,13 +16,6 @@ using Printf
 #
 # fiber-path-plot.jl sits on top of that stack; it provides visual diagnostics.
 
-if !isdefined(Main, :Fiber)
-    include(joinpath(@__DIR__, "fiber", "fiber-path.jl"))
-end
-# NOTE: fiber-path-plot.jl is intentionally not included here. Callers that need
-# plotting helpers should include it themselves. This keeps path-integral.jl
-# focused on the propagation stack and lets test files guard their own plot
-# includes without double-inclusion.
 
 # ----------------------------
 # MCM scalar reduction

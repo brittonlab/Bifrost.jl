@@ -52,6 +52,11 @@ for brittonlab/stablepoint
       Project.toml
       ```
 
+- [ ] Confirm that spinning and twisting are separated/named correctly everywhere in the code, e.g.
+path-geometry defines a Twist meta that seems like it should be a Spin meta.
+
+- [ ] Read and edit all docstrings as appropriate; for instance path-geometry.jl's intro docs
+reference a fiber-path-shrinkage.jl that doesn't exist.
 
 #################
 #### TESTING ####
@@ -213,3 +218,31 @@ JWB focuses on these features/bugs.
   connector) and a query layer that does R_start · ...
   everywhere.
 
+#################################
+### High-Level Future Changes ###
+#################################
+
+- [ ] Eventually, web-based documentation like that of NumPy. A quick search suggests Documenter.jl
+exists for this purpose and can automatically generate web-based documentation using GitHub Actions,
+though I suspect we might want to write some of our own.
+
+- [ ] PB: I want to eventually change the philosophy of the materials/birefringences part of the
+code to be more accessible to users who want to add new fiber types, new birefringence responses,
+etc. This may somewhat merge with what Prakriti is doing, but I'd like the material data to come
+from JSON files or something clearly separated as "data", and I'd like the fiber-cross-section Julia
+file to be well-documented enough that a user who hasn't learned Julia doesn't really need to in
+order to add a new birefringence rersponse if they want to. Right now it's a disorganized morass of
+methods and some of them won't work for all fiber types. I particularly have in mind graded-index
+fiber, which should be a priority for us to add in the future since SMF-28 is likely graded-index
+fiber.
+
+- [ ] PB: Related to the above, I'd like to consider in the future turning a lot of hard-coded
+things into somewhat more dynamic lists. For instance right now, the generator_K() method directly
+adds bending plus twisting, and if someone wants the generator to also have, say, birefringence due
+to axial magnetic fields, well then they have to go in and hard-modify the generator_K() function.
+And a user might want to add this for only their fiber type or something. In the past I proposed
+a BirefringenceRegistry and MaterialRegistry to deal with this. 
+
+- [ ] PB: Remove fluorinated silica glass. I put it in BIFROST v0 to do some testing and it has
+so many unsupported pieces to it (and I didn't carefully research what I did put in), so I don't
+feel comfortable having it in. It could be a separate material if we separate fiber materials later.

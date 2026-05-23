@@ -80,13 +80,6 @@ STUB: twist overlay remapping was removed pending the per-segment-meta twist
 refactor. `modify(fiber)` no longer carries twist data through.
 """
 
-if !@isdefined(Fiber)
-    include(joinpath(@__DIR__, "fiber-path.jl"))
-end
-if !@isdefined(MCMadd)
-    include(joinpath(@__DIR__, "fiber-path-meta.jl"))
-end
-
 # ----------------------------
 # Public API
 # ----------------------------

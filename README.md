@@ -25,7 +25,7 @@ metric is insensitive to physically irrelevant global Jones phase.
 
 ## Installation
 
-1. Install Juliaup, the Julia version manager:
+1. Install Juliaup, the julia version manager:
 
    ```bash
    curl -fsSL https://install.julialang.org | sh
@@ -33,12 +33,45 @@ metric is insensitive to physically irrelevant global Jones phase.
 
    Follow the on-screen instructions to add Juliaup to your PATH.
 
-2. Install Julia 1.11 and set it as the system-wide default:
+2. Install julia 1.11 and set it as the system-wide default:
 
    ```bash
    juliaup add 1.11
    juliaup default 1.11
    ```
+
+3. Setup the julia environment for BIFROST.
+    ```bash
+    cd bifrost
+    julia --project=. -e 'using Pkg; Pkg.instantiate()'
+    ```
+    You subsequently activate the environment using `julia --project=.`
+
+    The resulting julia environment consists of the following.
+    ```
+    bifrost/
+    ├── Project.toml    # declared dependencies
+    └──  Manifest.toml  # exact dependency graph
+    ~/.julia/           # global package cache
+    ```
+
+3. (optional) Setup python support using `uv`.  This supports the pythonic API for BIFROST.
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    cd bifrost
+    uv sync
+    ```
+
+    The resulting python environment consists of the following.
+    ```
+    bifrost/
+    ├── pyproject.toml  # declared dependencies
+    ├── uv.lock         # exact resolved versions
+    └── .venv/          # python environment
+    ```
+
+
+
 
 ## Quick Start
 

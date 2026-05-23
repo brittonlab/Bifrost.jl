@@ -1,15 +1,6 @@
 using Test
 using LinearAlgebra
-
-if !isdefined(Main, :PathSpecCached)
-    include(joinpath(@__DIR__, "..", "src", "geometry", "path-geometry.jl"))
-end
-if !isdefined(Main, :Fiber)
-    include(joinpath(@__DIR__, "..", "src", "fiber", "fiber-path.jl"))
-end
-if !isdefined(Main, :modify)
-    include(joinpath(@__DIR__, "..", "src", "fiber", "fiber-path-modify.jl"))
-end
+using Bifrost
 
 # -----------------------------------------------------------------------
 # Test setup: a small helper to build a Fiber with a pure-silica cladding

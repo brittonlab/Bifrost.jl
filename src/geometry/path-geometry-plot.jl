@@ -22,18 +22,10 @@ metadata labels, and the Plotly CDN.
 
 using LinearAlgebra
 
-"""
-    PathGeometry
-
-Submodule wrapping `path-geometry.jl` (space-curve `Path` / `PathSpec`). Nesting keeps the
-analytic path API in one namespace and avoids redefining those names in `Main` when this
-file is `include`d alongside unrelated code.
-"""
-module PathGeometry
-using LinearAlgebra
-include(joinpath(@__DIR__, "path-geometry.jl"))
-include(joinpath(@__DIR__, "..", "fiber", "fiber-path-meta.jl"))
-end
+# Reuse the canonical Bifrost.PathGeometry submodule rather than re-including
+# path-geometry.jl here. This file is loaded inside `Bifrost.Plots`, which
+# can see its sibling submodules via `..`.
+using ..PathGeometry
 
 # ---------------------------------------------------------------------------
 # Sampling (uses `frame` from PathGeometry — analytic Frenet data on `Path`)
@@ -197,7 +189,7 @@ function write_path_geometry_plot3d(
     label_strs = String[]
     nudge = Float64(segment_label_nudge_frac) * diag
     for ps in placed
-        nick = PathGeometry.segment_nickname(ps.segment)
+        nick = segment_nickname(ps.segment)
         isnothing(nick) && continue
         s_lo = ps.s_offset_eff
         s_hi = s_lo + PathGeometry.arc_length(ps.segment)
@@ -228,8 +220,7 @@ function write_path_geometry_plot3d(
     html = """
     <!--
       Main 3D plot (legend names match Plotly traces):
-      - path: centerline polyline; faint gray line; small markers along the curve colored by
-        arc length s (Turbo colorscale).
+      - path: centerline polyline; thin black line.
       - segment joins: open circles at effective arc-length boundaries between authored
         segments (within the plotted s interval).
       - start / end: filled markers at the first and last sample points of the plotted
@@ -426,22 +417,14 @@ function write_path_geometry_plot3d(
 
         const pathTrace = {
           type: "scatter3d",
-          mode: "lines+markers",
+          mode: "lines",
           x: xs,
           y: ys,
           z: zs,
           hoverinfo: "skip",
           line: {
-            width: 4,
-            color: "rgba(30, 30, 30, 0.25)"
-          },
-          marker: {
-            size: 3.5,
-            color: ss,
-            colorscale: "Turbo",
-            cmin: ss[0],
-            cmax: ss[ss.length - 1],
-            showscale: false
+            width: 1.5,
+            color: "#000000"
           },
           name: "path"
         };

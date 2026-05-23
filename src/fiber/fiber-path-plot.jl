@@ -311,6 +311,18 @@ end
 # ----------------------------
 module PlotRuntime
     using LinearAlgebra
+    # Bring in runtime API from sibling Bifrost submodules. PlotRuntime lives
+    # at depth Bifrost.Plots.PlotRuntime, so `...FiberPath` (= Bifrost.FiberPath)
+    # is two parents up. In-file helpers (rotate_about_axis, frenet_serret_frame,
+    # poincare_vector_representation, render_pol_circle, render_poincare_sphere)
+    # live in `Bifrost.Plots`, reachable as `..Plots`.
+    using ...FiberPath: Fiber, bend_geometry, twist_rate, fiber_path
+    using ...PathIntegral: generator_K, generator_Kω,
+                           exp_sensitivity_midpoint_step, output_dgd
+    using ...PathGeometry: frame
+    using ..Plots: rotate_about_axis, frenet_serret_frame,
+                   poincare_vector_representation,
+                   render_pol_circle, render_poincare_sphere
 
     function js_real(x::Real)
         xf = Float64(x)
@@ -381,7 +393,7 @@ module PlotRuntime
         for ζ in jump_points
             h1 = ζ - s
             if h1 > 0
-                Jseg, Gseg = Main.exp_sensitivity_midpoint_step(K, Kω, s, h1, Jseg, Gseg)
+                Jseg, Gseg = exp_sensitivity_midpoint_step(K, Kω, s, h1, Jseg, Gseg)
             end
             J_pre = Jseg
             G_pre = Gseg
@@ -394,14 +406,14 @@ module PlotRuntime
 
         h2 = b - s
         if h2 > 0
-            Jseg, Gseg = Main.exp_sensitivity_midpoint_step(K, Kω, s, h2, Jseg, Gseg)
+            Jseg, Gseg = exp_sensitivity_midpoint_step(K, Kω, s, h2, Jseg, Gseg)
         end
 
         return Jseg, Gseg
     end
 
     """
-        sample_fiber_centerline(f::Main.Fiber, s1, s2; n = 1001)
+        sample_fiber_centerline(f::Fiber, s1, s2; n = 1001)
 
     Reconstruct a fiber centerline from a [`Fiber`](path-integral.jl)
     on the interval `[s1, s2]`, treating the input coordinate as arc length.
@@ -418,14 +430,14 @@ module PlotRuntime
     `nx`, `ny`, `nz`, `bx`, `by`, `bz`, the transported frame `e1x`, `e1y`, `e1z`, `e2x`,
     `e2y`, `e2z`, `Rb`, `theta_b`, `dtwist`, `kx`, `ky`, and `k2`.
     """
-    function sample_fiber_centerline(f::Main.Fiber, s1::Real, s2::Real; n::Int = 1001)
+    function sample_fiber_centerline(f::Fiber, s1::Real, s2::Real; n::Int = 1001)
         @assert s2 > s1 "Require s2 > s1"
         @assert n >= 2 "Require at least two sample points"
 
-        path_geometry = Main.fiber_path(f)
+        path_geometry = fiber_path(f)
         if !isnothing(path_geometry)
             ss = collect(range(Float64(s1), Float64(s2), length = n))
-            frames = [Main.frame(path_geometry, s) for s in ss]
+            frames = [frame(path_geometry, s) for s in ss]
 
             x = [Float64(fr.position[1]) for fr in frames]
             y = [Float64(fr.position[2]) for fr in frames]
@@ -493,10 +505,10 @@ module PlotRuntime
 
         for i in eachindex(ss)
             si = ss[i]
-            bend = Main.bend_geometry(f, si)
+            bend = bend_geometry(f, si)
             R = Float64(bend.Rb)
             θ = Float64(bend.theta_b)
-            τ = Float64(Main.twist_rate(f, si))
+            τ = Float64(twist_rate(f, si))
 
             Rb[i] = R
             theta_b[i] = θ
@@ -518,9 +530,9 @@ module PlotRuntime
                 else
                     u = Ω / ω
                     α = ω * ds
-                    Tnext = Main.rotate_about_axis(T, u, α)
-                    E1next = Main.rotate_about_axis(E1, u, α)
-                    E2next = Main.rotate_about_axis(E2, u, α)
+                    Tnext = rotate_about_axis(T, u, α)
+                    E1next = rotate_about_axis(E1, u, α)
+                    E2next = rotate_about_axis(E2, u, α)
                 end
 
                 E1next .-= dot(E1next, Tnext) .* Tnext
@@ -544,7 +556,7 @@ module PlotRuntime
 
         path = (; s = ss, x, y, zc, tx, ty, tz, e1x, e1y, e1z, e2x, e2y, e2z, Rb, theta_b, dtwist, kx, ky, k2)
         for i in eachindex(ss)
-            fs = Main.frenet_serret_frame(path, ss[i])
+            fs = frenet_serret_frame(path, ss[i])
             nx[i], ny[i], nz[i] = fs.normal
             bx[i], by[i], bz[i] = fs.binormal
         end
@@ -555,7 +567,7 @@ module PlotRuntime
     sample_fiber_input = sample_fiber_centerline
 
     function sample_polarization_trajectory(
-        f::Main.Fiber,
+        f::Fiber,
         s1::Real,
         s2::Real;
         λ_m::Real,
@@ -573,12 +585,12 @@ module PlotRuntime
         linear_angle_rad = zeros(Float64, n)
         linear_radius = zeros(Float64, n)
 
-        K = Main.generator_K(f, λ_m)
+        K = generator_K(f, λ_m)
         ψ = ComplexF64[input_state[1], input_state[2]]
         ψ ./= norm(ψ)
 
         ψs[1] = copy(ψ)
-        rep = Main.poincare_vector_representation(ψ)
+        rep = poincare_vector_representation(ψ)
         s1[1], s2[1], s3[1] = rep.sphere
         linear_angle_rad[1] = rep.linear.angle_rad
         linear_radius[1] = rep.linear.radius
@@ -587,7 +599,7 @@ module PlotRuntime
             ψ = propagate_state_segment(K, jumps, ψ, ss[i], ss[i + 1])
             ψ ./= norm(ψ)
             ψs[i + 1] = copy(ψ)
-            rep = Main.poincare_vector_representation(ψ)
+            rep = poincare_vector_representation(ψ)
             s1[i + 1], s2[i + 1], s3[i + 1] = rep.sphere
             linear_angle_rad[i + 1] = rep.linear.angle_rad
             linear_radius[i + 1] = rep.linear.radius
@@ -597,7 +609,7 @@ module PlotRuntime
     end
 
     function sample_dgd_trajectory(
-        f::Main.Fiber,
+        f::Fiber,
         s1::Real,
         s2::Real;
         λ_m::Real,
@@ -608,15 +620,15 @@ module PlotRuntime
         ss = collect(range(Float64(s1), Float64(s2), length = n))
         dgds = zeros(Float64, n)
 
-        K = Main.generator_K(f, λ_m)
-        Kω = Main.generator_Kω(f, λ_m)
+        K = generator_K(f, λ_m)
+        Kω = generator_Kω(f, λ_m)
         J = Matrix{ComplexF64}(I, 2, 2)
         G = zeros(ComplexF64, 2, 2)
-        dgds[1] = Main.output_dgd(J, G)
+        dgds[1] = output_dgd(J, G)
 
         for i in 1:n-1
             J, G = propagate_sensitivity_segment(K, Kω, jumps, jump_omegas, J, G, ss[i], ss[i + 1])
-            dgds[i + 1] = Main.output_dgd(J, G)
+            dgds[i + 1] = output_dgd(J, G)
         end
 
         return (; s = ss, dgd = dgds)
@@ -624,7 +636,7 @@ module PlotRuntime
 
     """
         write_fiber_input_plot3d(
-            f::Main.Fiber,
+            f::Fiber,
             s1,
             s2;
             n = 1001,
@@ -645,7 +657,7 @@ module PlotRuntime
     Returns the output path.
     """
     function write_fiber_input_plot3d(
-        f::Main.Fiber,
+        f::Fiber,
         s1::Real,
         s2::Real;
         λ_m::Real,
@@ -675,9 +687,9 @@ module PlotRuntime
             jumps = jumps,
             jump_omegas = jump_omegas
         )
-        pol_circle = Main.render_pol_circle(samples, samples.s[1], Main.poincare_vector_representation(pol.state[1]))
-        sphere_spec = Main.render_poincare_sphere(
-            Main.poincare_vector_representation(pol.state[1]);
+        pol_circle = render_pol_circle(samples, samples.s[1], poincare_vector_representation(pol.state[1]))
+        sphere_spec = render_poincare_sphere(
+            poincare_vector_representation(pol.state[1]);
             trail = (x = [pol.s1[1]], y = [pol.s2[1]], z = [pol.s3[1]], color = [samples.s[1]])
         )
 

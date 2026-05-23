@@ -1,8 +1,5 @@
 using Test
-
-if !isdefined(Main, :refractive_index)
-    include(joinpath(@__DIR__, "..", "src", "material-properties.jl"))
-end
+using Bifrost
 
 const SILICA_B_COEFFS = (
     (1.10127, -4.94251e-5, 5.27414e-7, -1.59700e-9, 1.75949e-12),

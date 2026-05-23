@@ -1,5 +1,5 @@
 # =====================================================================
-# demo3mcm.jl — MCM temperature-dependent PTF demos
+# demo4mcm.jl — MCM temperature-dependent PTF demos
 # =====================================================================
 #
 # Two demonstrations of temperature sensitivity on a multi-segment fiber:
@@ -9,7 +9,7 @@
 #   * demo_mcm_temperature_ptf_scatter — Particles(40), single propagation,
 #                                       Poincaré equatorial scatter
 #
-# `demo3mcm_all()` runs both and writes `output/demo3mcm.html`.
+# `demo4mcm_all()` runs both and writes `output/demo4mcm.html`.
 #
 # This file expects to be `include`d after demo2.jl is in scope (it
 # reuses `_sample_segment_xyz` and the path-builder API).
@@ -387,26 +387,26 @@ Plotly.newPlot('poincare_scatter',
 end
 
 # =====================================================================
-# Index page (demo3mcm.html)
+# Index page (demo4mcm.html)
 # =====================================================================
 
-const DEMO3MCM_INDEX = [
+const DEMO4MCM_INDEX = [
     (group = "MCM", fn = demo_mcm_temperature_ptf,         kwargs = (;)),
     (group = "MCM", fn = demo_mcm_temperature_ptf_scatter, kwargs = (;)),
 ]
 
 """
-    demo3mcm_all(; index_output)
+    demo4mcm_all(; index_output)
 
-Run every demo in `DEMO3MCM_INDEX` and write `demo3mcm.html`.
+Run every demo in `DEMO4MCM_INDEX` and write `demo4mcm.html`.
 """
-function demo3mcm_all(;
-    index_output::AbstractString = joinpath(@__DIR__, "..", "..", "output", "demo3mcm.html"),
+function demo4mcm_all(;
+    index_output::AbstractString = joinpath(@__DIR__, "..", "..", "output", "demo4mcm.html"),
 )
     entries = Tuple{String, String, String, String}[]
 
-    for d in DEMO3MCM_INDEX
-        println("[ demo3mcm ] $(d.fn)")
+    for d in DEMO4MCM_INDEX
+        println("[ demo4mcm ] $(d.fn)")
         result = d.fn(; d.kwargs...)
         desc_inline = (result isa NamedTuple && haskey(result, :desc)) ?
                       String(result.desc) : ""
@@ -444,7 +444,7 @@ function demo3mcm_all(;
   <nav class="index-nav">
     <a href="demo1.html">demo1</a>
     <a href="demo2.html">demo2</a>
-    <a href="demo3mcm.html">demo3mcm</a>
+    <a href="demo4mcm.html">demo4mcm</a>
     <a href="demo3benchmark.html">demo3benchmark</a>
   </nav>
   <h1>BIFROST MCM temperature PTF demos</h1>""")
@@ -469,10 +469,10 @@ function demo3mcm_all(;
 </html>""")
     end
 
-    println("Wrote demo3mcm index to: ", index_output)
+    println("Wrote demo4mcm index to: ", index_output)
     return index_output
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    demo3mcm_all()
+    demo4mcm_all()
 end
