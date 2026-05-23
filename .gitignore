@@ -3,3 +3,4 @@
 fiberinput_paddles_3d.html
 .DS_Store
 output/
+__pycache__

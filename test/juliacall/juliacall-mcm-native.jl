@@ -1,7 +1,7 @@
-include(joinpath(@__DIR__, "julia-call-mcm.jl"))
+include(joinpath(@__DIR__, "juliacall-mcm.jl"))
 using .MCMDemo
 
-const OUT = joinpath(@__DIR__, "..", "..", "output", "julia-call-mcm.julia.csv")
+const OUT = joinpath(@__DIR__, "..", "..", "output", "juliacall-mcm.julia.csv")
 
 # Accept T_sigma as an optional positional CLI arg so the Python driver can
 # pass the exact value it used. Default matches MCMDemo.run's own default.

@@ -1,4 +1,4 @@
-# test/python-cover
+# test/juliacall
 
 Coverage of the Python → Julia bridge (juliacall / PythonCall) for BIFROST.
 These tests exist because BIFROST is a Julia library that we expect to drive
@@ -6,22 +6,22 @@ from Python in real workflows, and the juliacall runtime has its own failure
 modes (Julia version selection, multithreading, signal handling, project
 environments) that the native Julia test suite cannot reach.
 
-The single entry point is `test_julia_call.py`, which runs every probe in
-this folder in order:
+These probes run as part of the standard Julia test suite via
+[`../test_juliacall.jl`](../test_juliacall.jl), which is included from
+[`../runtests.jl`](../runtests.jl):
 
 ```bash
-cd test/python-cover
-uv run python test_julia_call.py
+julia --project=. test/runtests.jl
 ```
 
-Individual probes can also be run directly (`uv run python <probe>.py`).
-All scripts assume `julia` is on `PATH` — we pin the juliacall-managed
-Julia to the system install via `PYTHON_JULIAPKG_EXE` so it matches the
-version used by `julia --project=.`.
+Individual probes can also be run directly (`uv run python <probe>.py`) for
+faster iteration. All scripts assume `julia` is on `PATH` — we pin the
+juliacall-managed Julia to the system install via `PYTHON_JULIAPKG_EXE` so it
+matches the version used by `julia --project=.`.
 
 ## Files
 
-### `julia-call-demo.py` + `julia-call-demo.jl`
+### `../../docs/juliacall-demo.py` + `../../docs/juliacall-demo.jl`
 
 Smoke test for the juliacall bridge. Defines a small `Zoo` Julia module
 (animals with weight and per-day food intake) and drives it from Python:
@@ -37,11 +37,10 @@ data marshalling all work.
 
 Run with
 ```bash
-cd test/python-cover
-uv run python julia-call-demo.py
+uv run python docs/juliacall-demo.py
 ```
 
-### `julia-call-mcm.py` + `julia-call-mcm.jl` + `julia-call-mcm-native.jl`
+### `juliacall-mcm.py` + `juliacall-mcm.jl` + `juliacall-mcm-native.jl`
 
 Targeted probe for `MonteCarloMeasurements.jl` (MCM) under juliacall with
 Julia started multi-threaded. BIFROST relies on MCM throughout
@@ -50,7 +49,7 @@ Julia started multi-threaded. BIFROST relies on MCM throughout
 and the propagator — so any MCM thread-safety or juliacall numerical drift
 matters.
 
-The Julia module `MCMDemo` (in `julia-call-mcm.jl`) builds `M` independent
+The Julia module `MCMDemo` (in `juliacall-mcm.jl`) builds `M` independent
 `T ~ Normal(T_nom, T_sigma)` `Particles` ensembles (default
 `T_nom = 293 K`, `T_sigma = 10 K`, `N = 2000` samples each), calls
 `refractive_index(PURE_SILICA, λ, T)` on each, and reduces the result to
@@ -58,13 +57,13 @@ The Julia module `MCMDemo` (in `julia-call-mcm.jl`) builds `M` independent
 both the in-process call and the native subprocess, so both runners
 provably use the same value. The same module is driven two ways:
 
-1. From Python (`julia-call-mcm.py`) under juliacall, with
+1. From Python (`juliacall-mcm.py`) under juliacall, with
    `PYTHON_JULIACALL_THREADS=auto` so `Threads.nthreads() > 1`. Runs once
    serially and once with `Threads.@threads`; asserts both produce the
-   same scalars; writes `output/julia-call-mcm.python.csv`.
-2. From a native Julia process (`julia-call-mcm-native.jl`) shelled out by
+   same scalars; writes `output/juliacall-mcm.python.csv`.
+2. From a native Julia process (`juliacall-mcm-native.jl`) shelled out by
    the Python driver, using the same module, same RNG seed, same iteration
-   order. Writes `output/julia-call-mcm.julia.csv`.
+   order. Writes `output/juliacall-mcm.julia.csv`.
 
 The Python driver then `filecmp`s the two CSVs. They are written with
 `@sprintf("%.17g", ...)` so every `Float64` round-trips exactly, and the
@@ -74,8 +73,8 @@ delta before failing.
 
 Outputs:
 
-- `output/julia-call-mcm.python.csv` — written from juliacall.
-- `output/julia-call-mcm.julia.csv` — written from native Julia.
+- `output/juliacall-mcm.python.csv` — written from juliacall.
+- `output/juliacall-mcm.julia.csv` — written from native Julia.
 
 Failure modes the probe surfaces:
 
@@ -87,11 +86,20 @@ Failure modes the probe surfaces:
   altering numerical behavior (signal handling, RNG state, library
   versions); worst |Δ| is logged.
 
-## Adding a new python-cover test
+## Adding a new juliacall test
 
 Follow the file-naming pattern (`<purpose>.py` plus an optional sibling
-`<purpose>.jl`). Keep environment setup minimal and portable: rely on
-`shutil.which("julia")`, never hard-code paths to a specific machine's
-Julia install. If a test writes artifacts, write them under the repo's
-`output/` folder (see [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md)
-entry `[20]`).
+`<purpose>.jl`). Boot juliacall with:
+
+```python
+from bifrost import start
+jl = start()                   # or start(threads="auto") for multi-threaded
+```
+
+`start()` (defined in [`../../src/bifrost.py`](../../src/bifrost.py)) handles
+the env-var ordering juliacall requires, locates the system `julia`, and
+activates + instantiates the repo's Julia project. Never hard-code paths to
+a specific machine's Julia install. If a probe also needs to shell out to
+native Julia, import `julia_exe()` from `bifrost` and use its returned path.
+If a test writes artifacts, write them under the repo's `output/` folder (see
+[`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) entry `[20]`).

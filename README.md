@@ -92,8 +92,7 @@ julia --project=. test/human/demo3mcm.jl
 julia --project=. test/human/demo3benchmark.jl
 ```
 
-The code is currently organized as include-based Julia scripts rather than a
-packaged module. Most tests and demos include only the files they need.
+Use `using Bifrost` from the project environment to load the Julia API.
 
 ## Building Blocks
 
@@ -153,19 +152,10 @@ The operating wavelength is not stored on `Fiber`. It is supplied per query to
 
 ## Example
 
-The smallest runnable example is kept in `test/human/demo-smallest.jl`:
-
-```bash
-julia --project=. test/human/demo-smallest.jl
-```
-
-Its core setup is:
+From the repository root, start Julia with `julia --project=.`:
 
 ```julia
-include(joinpath(@__DIR__, "..", "..", "src", "material-properties.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "fiber", "fiber-cross-section.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "geometry", "path-geometry.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "path-integral.jl"))
+using Bifrost
 
 xs = FiberCrossSection(
     GermaniaSilicaGlass(0.036),
@@ -202,6 +192,39 @@ dgd = output_dgd(J, G)
 
 For Monte Carlo Measurements (MCM) paths, prefer `output_dgd_2x2(J, G)` over
 `output_dgd(J, G)` because it avoids `eigvals`.
+
+## Python Example
+
+The `bifrost.py` helper starts juliacall against this project. After
+`using Bifrost`, exported Julia functions are available as Python callables on
+`jl`; Julia names ending in `!` use the `_b` suffix.
+
+```python
+from bifrost import start
+
+jl = start()
+jl.seval("using Bifrost")
+
+xs = jl.FiberCrossSection(
+    jl.GermaniaSilicaGlass(0.036),
+    jl.GermaniaSilicaGlass(0.0),
+    8.2e-6,
+    125e-6,
+)
+
+spec = jl.PathSpecBuilder()
+jl.straight_b(spec, length=0.1)
+fiber = jl.Fiber(jl.build(spec), cross_section=xs)
+
+J, stats = jl.propagate_fiber(
+    fiber,
+    **{"λ_m": 1550e-9, "verbose": False},
+)
+```
+
+For a fuller juliacall example, see
+[`docs/juliacall-demo.py`](docs/juliacall-demo.py) and its Julia-side module
+[`docs/juliacall-demo.jl`](docs/juliacall-demo.jl).
 
 ## Generator Formulation
 

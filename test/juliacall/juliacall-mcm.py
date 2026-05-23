@@ -2,35 +2,26 @@
 
 Runs MCMDemo.run() under juliacall (Julia started multi-threaded), once
 serially and once threaded, asserts the two agree, writes the threaded
-result to output/julia-call-mcm.python.csv, then shells out to native
-`julia` to produce output/julia-call-mcm.julia.csv from the same module
+result to output/juliacall-mcm.python.csv, then shells out to native
+`julia` to produce output/juliacall-mcm.julia.csv from the same module
 and compares the two byte-for-byte.
 
 See README.md."""
 
 import filecmp
-import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from bifrost import julia_exe, start
 
 REPO = Path(__file__).resolve().parents[2]
 OUT = REPO / "output"
 OUT.mkdir(exist_ok=True)
 HERE = Path(__file__).resolve().parent
 
-_julia_exe = shutil.which("julia")
-if _julia_exe is None:
-    sys.exit("No `julia` found on PATH. Install Julia (e.g. via juliaup).")
-
-os.environ.setdefault("PYTHON_JULIAPKG_EXE", _julia_exe)
-os.environ.setdefault("PYTHON_JULIACALL_HANDLE_SIGNALS", "yes")
-os.environ.setdefault("PYTHON_JULIACALL_THREADS", "auto")
-
-from juliacall import Main as jl  # noqa: E402
-
-jl.seval(f'import Pkg; Pkg.activate(raw"{REPO}"); Pkg.instantiate()')
+jl = start(threads="auto")
+julia = julia_exe()
 
 n_threads = int(jl.seval("Threads.nthreads()"))
 print(f"Julia threads (juliacall) = {n_threads}")
@@ -40,7 +31,7 @@ assert n_threads > 1, (
     "to exercise threading."
 )
 
-jl.seval(f'include(raw"{HERE / "julia-call-mcm.jl"}")')
+jl.seval(f'include(raw"{HERE / "juliacall-mcm.jl"}")')
 MCMDemo = jl.MCMDemo
 
 T_SIGMA = 10.0  # K; keep python and native runners in sync
@@ -57,17 +48,17 @@ t = to_tuples(rows_threaded)
 assert s == t, f"Serial vs threaded mismatch:\n  serial={s}\n  threaded={t}"
 print(f"Serial vs threaded (same Julia) match: True ({len(s)} rows)")
 
-py_csv = OUT / "julia-call-mcm.python.csv"
+py_csv = OUT / "juliacall-mcm.python.csv"
 MCMDemo.write_table(str(py_csv), rows_threaded)
 print(f"Wrote {py_csv}")
 
-jl_csv = OUT / "julia-call-mcm.julia.csv"
+jl_csv = OUT / "juliacall-mcm.julia.csv"
 proc = subprocess.run(
     [
-        _julia_exe,
+        julia,
         f"--project={REPO}",
         f"--threads={n_threads}",
-        str(HERE / "julia-call-mcm-native.jl"),
+        str(HERE / "juliacall-mcm-native.jl"),
         str(T_SIGMA),
     ],
     cwd=REPO,
