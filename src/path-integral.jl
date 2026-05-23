@@ -20,7 +20,7 @@ using Printf
 #
 # fiber-path-plot.jl sits on top of that stack; it provides visual diagnostics.
 
-if !isdefined(Main, :Fiber)
+if !isdefined(@__MODULE__, :Fiber)
     include(joinpath(@__DIR__, "fiber", "fiber-path.jl"))
 end
 # NOTE: fiber-path-plot.jl is intentionally not included here. Callers that need

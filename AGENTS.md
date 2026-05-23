@@ -11,6 +11,24 @@ The test orchestrator is `test/runtests.jl`.
     julia --project=. test/runtests.jl
     ```
 
+## Python Entry Point
+
+BIFROST is a Julia library and all physics logic remains in Julia. Driving BIFROST from
+Python via juliacall is a first-class use case — treat the Python on-ramp as a supported
+public interface, not a demo.
+
+- The Python entry point is `src/bifrost.py`. `start()` boots juliacall against this
+  repo's Julia project; `julia_exe()` returns the pinned Julia executable. Do not bypass
+  these helpers in tests or examples.
+- Python-side coverage lives under `test/juliacall/` and is wired into the Julia test
+  suite via `test/test_juliacall.jl`. Adding new Python-callable Julia surface requires a
+  matching juliacall probe.
+- Python users must be able to follow the README "Python Example" end-to-end without
+  editing source. If the example breaks because Julia-side APIs moved, fix it in the
+  same change.
+- Tooling: probes are launched with `uv run python <script>`. `uv` is a hard requirement
+  for the test suite.
+
 ## Test Taxonomy
 
 When writing or evaluating tests, place them in one of four categories. Each serves a
@@ -179,3 +197,9 @@ scattering.
 - When citing literature only use sources that you can verify in a library catalogue or
   database.
 - Markdown, comments and code must line wrap at 100 characters.
+- BIFROST must run on macOS, Windows 11, and Linux equally well. No POSIX-only paths, no
+  `/tmp`, no hard-coded separators, no `~/`-shorthand in code. Build paths with
+  `joinpath(...)` (Julia) or `pathlib.Path` (Python). The lint in
+  `test/cross-platform_tests.jl` enforces this for `.jl` files — keep it green and
+  extend it if a new failure mode appears. Python entry-point code (`src/bifrost.py`,
+  `test/juliacall/*.py`) follows the same rule.

@@ -35,7 +35,7 @@ Aeff = effective_mode_area(fiber, λ, T)
     axial_tension_birefringence(fiber, λ, T; bend_radius_m = 0.03, axial_tension_N = 0.5)
 """
 
-if !isdefined(Main, :GermaniaSilicaGlass)
+if !isdefined(@__MODULE__, :GermaniaSilicaGlass)
     include(joinpath(@__DIR__, "..", "material-properties.jl"))
 end
 

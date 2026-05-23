@@ -1,11 +1,13 @@
-if !isdefined(Main, :FiberCrossSection)
+if !isdefined(@__MODULE__, :FiberCrossSection)
     include(joinpath(@__DIR__, "fiber-cross-section.jl"))
 end
-if !isdefined(Main, :PathSpecCached)
+if !isdefined(@__MODULE__, :PathSpecCached)
     include(joinpath(@__DIR__, "..", "geometry", "path-geometry.jl"))
 end
 
-include(joinpath(@__DIR__, "fiber-path-meta.jl"))
+if !isdefined(@__MODULE__, :Nickname)
+    include(joinpath(@__DIR__, "fiber-path-meta.jl"))
+end
 
 """
 Fiber assembly on top of `path-geometry.jl`.
@@ -63,7 +65,7 @@ K  = generator_K(fiber, 1550e-9)
 Kω = generator_Kω(fiber, 1550e-9)
 """
 
-if !isdefined(Main, :DEFAULT_T_REF_K)
+if !isdefined(@__MODULE__, :DEFAULT_T_REF_K)
     const DEFAULT_T_REF_K = 297.15
 end
 
