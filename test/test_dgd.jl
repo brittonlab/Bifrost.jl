@@ -1,9 +1,6 @@
 using Test
 using LinearAlgebra
-
-if !isdefined(Main, :propagate_fiber_sensitivity)
-    include(joinpath(@__DIR__, "..", "src", "path-integral.jl"))
-end
+using Bifrost
 
 const SIGMA_X = ComplexF64[0 1; 1 0]
 const SIGMA_Y = ComplexF64[0 -im; im 0]

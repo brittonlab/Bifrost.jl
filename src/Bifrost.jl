@@ -102,9 +102,21 @@ end
 # `PG = PathGeometry` (or qualified `PathGeometry.X`) after `using Bifrost`.
 export MaterialProperties, FiberCS, PathGeometry, FiberPath, PathIntegral
 
-# Plotting helpers (`src/geometry/path-geometry-plot.jl` and
-# `src/fiber/fiber-path-plot.jl`) intentionally live outside the package
-# module. They reference top-level `Main` bindings and are loaded
-# include-style by demos and visual tests, not via `using Bifrost.Plots`.
+# Plotting lives in a separate `Plots` submodule, opt-in via
+# `using Bifrost.Plots`, so plain `using Bifrost` does not pull plotting
+# symbols into scope.
+module Plots
+    using LinearAlgebra
+    using ..PathGeometry
+    using ..FiberCS
+    using ..FiberPath
+    using ..PathIntegral
+    # Internal helper used by the adaptive-step diagnostic plot.
+    using ..PathIntegral: _frobenius_norm
+    include("geometry/path-geometry-plot.jl")
+    include("fiber/fiber-path-plot.jl")
+    import ..Bifrost: _export_public!
+    _export_public!(@__MODULE__)
+end
 
 end # module Bifrost

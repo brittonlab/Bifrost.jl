@@ -1,9 +1,6 @@
 using Test
 using LinearAlgebra
-
-if !isdefined(Main, :PathSpecCached)
-    include(joinpath(@__DIR__, "..", "src", "geometry", "path-geometry.jl"))
-end
+using Bifrost
 
 # -----------------------------------------------------------------------
 # Helpers

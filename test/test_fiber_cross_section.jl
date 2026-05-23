@@ -1,8 +1,5 @@
 using Test
-
-if !isdefined(Main, :FiberCrossSection)
-    include(joinpath(@__DIR__, "..", "src", "fiber", "fiber-cross-section.jl"))
-end
+using Bifrost
 
 """
 Why these tests are currently weak.
