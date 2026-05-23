@@ -1,12 +1,8 @@
+using LinearAlgebra
 using MonteCarloMeasurements
-
-include(joinpath(@__DIR__, "..", "..", "src", "material-properties.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "fiber", "fiber-cross-section.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "geometry", "path-geometry.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "geometry", "path-geometry-plot.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "path-integral.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "fiber", "fiber-path-plot.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "fiber", "fiber-path-modify.jl"))
+using Bifrost
+using Bifrost.Plots
+using Bifrost.Plots.PlotRuntime
 
 
 const DEMO_FIBER_CROSS_SECTION = FiberCrossSection(
