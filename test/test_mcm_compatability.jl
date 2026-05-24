@@ -70,7 +70,7 @@ end
         λ = 1550e-9
         T_nom = 293.0
         T = T_nom ± 2.0
-        fiber = FiberCrossSection(
+        fiber = StepIndexCrossSection(
             GermaniaSilicaGlass(0.036),
             GermaniaSilicaGlass(0.0),
             8.2e-6,
@@ -360,7 +360,7 @@ end
 @testset "MCM :: fiber-path.jl (path-backed fiber)" begin
     MonteCarloMeasurements.unsafe_comparisons(true)
     try
-        xs = FiberCrossSection(
+        xs = StepIndexCrossSection(
             GermaniaSilicaGlass(0.036),
             GermaniaSilicaGlass(0.0),
             8.2e-6,
@@ -381,8 +381,8 @@ end
         @test fiber.cross_section === xs
         @test fiber.T_ref_K isa Particles
 
-        K = generator_K(fiber, λ)(0.02)
-        Kω = generator_Kω(fiber, λ)(0.02)
+        K = generator_K(fiber, fiber.cross_section, λ)(0.02)
+        Kω = generator_Kω(fiber, fiber.cross_section, λ)(0.02)
         @test eltype(K) <: Complex
         @test real(K[1, 1]) isa Particles || imag(K[1, 1]) isa Particles
         @test real(Kω[1, 2]) isa Particles || imag(Kω[1, 2]) isa Particles
@@ -446,7 +446,7 @@ end
 @testset "MCM :: propagate_fiber lifts Particles into Jones matrix on MCM + Twist path" begin
     MonteCarloMeasurements.unsafe_comparisons(true)
     try
-        xs = FiberCrossSection(
+        xs = StepIndexCrossSection(
             GermaniaSilicaGlass(0.036),
             GermaniaSilicaGlass(0.0),
             8.2e-6,

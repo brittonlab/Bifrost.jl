@@ -133,7 +133,7 @@ function finite_difference_dω(f, λ_meters; dλ = 1e-12)
     return df_dλ * reference_dλ_dω(λ_meters)
 end
 
-const SMF_LIKE_FIBER = FiberCrossSection(
+const SMF_LIKE_FIBER = StepIndexCrossSection(
     GermaniaSilicaGlass(0.036),
     GermaniaSilicaGlass(0.0),
     8.2e-6,
@@ -142,7 +142,7 @@ const SMF_LIKE_FIBER = FiberCrossSection(
     model_number = "SMF-like"
 )
 
-@testset "FiberCrossSection reference formulas" begin
+@testset "StepIndexCrossSection reference formulas" begin
     fiber = SMF_LIKE_FIBER
     λ = 1550e-9
     T = 297.15
@@ -171,7 +171,7 @@ const SMF_LIKE_FIBER = FiberCrossSection(
     @test 9e-4 < nonlinear_coefficient(fiber, λ, T) < 1.5e-3
 end
 
-@testset "FiberCrossSection cutoff behavior" begin
+@testset "StepIndexCrossSection cutoff behavior" begin
     fiber = SMF_LIKE_FIBER
     T = 297.15
     λ_cutoff = cutoff_wavelength(fiber, T)
@@ -181,7 +181,7 @@ end
     @test is_single_mode(fiber, λ_cutoff + 1e-9, T)
 end
 
-@testset "FiberCrossSection spectral responses" begin
+@testset "StepIndexCrossSection spectral responses" begin
     fiber = SMF_LIKE_FIBER
     λ = 1550e-9
     T = 297.15
@@ -213,7 +213,7 @@ end
     @test cnc_resp.dω ≈ finite_difference_dω(λp -> core_noncircularity_birefringence(fiber, λp, T; axis_ratio = 1.01), λ) atol = 1e-12 rtol = 1e-6
 end
 
-@testset "FiberCrossSection perturbation formulas and invariants" begin
+@testset "StepIndexCrossSection perturbation formulas and invariants" begin
     fiber = SMF_LIKE_FIBER
     λ = 1550e-9
     T = 297.15
@@ -246,11 +246,11 @@ end
           -asymmetric_thermal_stress_birefringence(fiber, λ, T; axis_ratio = ε) rtol = 1e-12
 end
 
-@testset "FiberCrossSection guided and fluorinated edge cases" begin
+@testset "StepIndexCrossSection guided and fluorinated edge cases" begin
     λ = 1550e-9
     T = 297.15
 
-    unguided = FiberCrossSection(
+    unguided = StepIndexCrossSection(
         FluorinatedSilicaGlass(0.005),
         GermaniaSilicaGlass(0.0),
         8.2e-6,
@@ -258,7 +258,7 @@ end
     )
     @test_throws ArgumentError normalized_frequency(unguided, λ, T)
 
-    fluorinated_cladding = FiberCrossSection(
+    fluorinated_cladding = StepIndexCrossSection(
         GermaniaSilicaGlass(0.036),
         FluorinatedSilicaGlass(0.005),
         8.2e-6,
