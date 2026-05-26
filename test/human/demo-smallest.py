@@ -9,11 +9,14 @@ xs = bf.FiberCrossSection(
 
 print(xs.core_diameter_m)
 
-# spec = jl.PathSpecBuilder()
-# jl.straight_b(spec, length=0.1)
-# fiber = jl.Fiber(jl.build(spec), cross_section=xs)
+spec = bf.PathSpecBuilder()
+bf.straight_b(spec, length=0.5)
+bf.bend_b(spec, radius=0.05, angle=3.14159 / 2)
+bf.straight_b(spec, length=0.5)
 
-# J, stats = jl.propagate_fiber(
-#     fiber,
-#     **{"λ_m": 1550e-9, "verbose": False},
-# )
+fiber = bf.Fiber(bf.build(spec), cross_section=xs, T_ref_K=297.15)
+J, stats = bf.propagate_fiber(fiber, λ_m=1550e-9)
+
+print("Jones matrix:")
+print(J)
+print(f"\nintervals: {len(stats)}")
