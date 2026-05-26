@@ -56,17 +56,35 @@ def start(
     env vars from the first call have already taken effect and re-activating
     against a different project would be a foot-gun.
 
-    threads: value for PYTHON_JULIACALL_THREADS. None leaves it unset (Julia
+    Parameters
+    ----------
+    threads : str | int | None
+        Value for PYTHON_JULIACALL_THREADS. None leaves it unset (Julia
         starts single-threaded). Pass "auto" or an int >= 1 to enable threads.
         Must be set before juliacall is imported, so this argument is honored
         only on the first call in a process.
-    instantiate: run `Pkg.instantiate()` after activation. Set False when the
+    instantiate : bool
+        Run `Pkg.instantiate()` after activation. Set False when the
         environment is known to be resolved already.
-    project: Julia project to activate. Defaults to the repo root resolved
+    project : str | Path | None
+        Julia project to activate. Defaults to the repo root resolved
         from this file's location, which is correct for an editable install.
         Pass an explicit path when driving a different Julia project (e.g.
         when this package is wheel-installed outside the repo).
+
+    Returns
+    -------
+    jl : juliacall.Main
+        The Julia Main module handle, ready to use.
+
+    Raises
+    ------
+    RuntimeError
+        If start() was already called with different arguments.
+    FileNotFoundError
+        If the project path doesn't contain a Project.toml.
     """
+
     global _jl, _start_kwargs
     project_path = Path(project).resolve() if project is not None else REPO
     kwargs = {
@@ -97,6 +115,75 @@ def start(
     if instantiate:
         jl.seval("import Pkg; Pkg.instantiate()")
 
+    jl.seval("using Bifrost")
+
     _jl = jl
     _start_kwargs = kwargs
     return jl
+
+def info() -> None:
+    """Print diagnostic info about the loaded environment."""
+    if _jl is None:
+        print("Julia environment not yet started. Call bifrost.start() or access")
+        print("an attribute (which will trigger auto-start).")
+        return
+    
+    proj = _start_kwargs["project"]
+    print(f"BIFROST project:  {proj}")
+    print(f"Julia exe:        {julia_exe()}")
+    print(f"Bifrost loaded:   {bool(_jl.seval('isdefined(Main, :Bifrost)'))}")
+
+def load_plots():
+    """Load the optional Bifrost.plots module."""
+    if _jl is None:
+        start()
+    
+    try:
+        _jl.seval("using Bifrost.plots")
+    except Exception as e:
+        raise RuntimeError(
+            "Failed to load Bifrost.plots. Is it installed? "
+            "Check your Bifrost environment or install the plots extra."
+        ) from e
+
+# ────────────────────────────────────────────────────────────────────────────
+# PEP 562: Module-level __getattr__ and __dir__ for dynamic attribute access.
+# This allows `import bifrost as bf; bf.some_julia_name(...)` to work naturally.
+# On first attribute access, we auto-start Julia if it hasn't been started yet.
+# ────────────────────────────────────────────────────────────────────────────
+
+def __getattr__(name: str):
+    """Dynamically forward attribute access to the Julia Bifrost module.
+    
+    Auto-starts the Julia environment on first access if not already started.
+    """
+    global _jl
+    if _jl is None:
+        # First access: auto-start with defaults
+        _jl = start()
+    
+    # Try Bifrost module first, then Main
+    try:
+        return getattr(_jl.Bifrost, name)
+    except AttributeError:
+        pass
+    try:
+        return getattr(_jl, name)
+    except AttributeError as e:
+        raise AttributeError(
+            f"bifrost: '{name}' not defined in Bifrost or Main "
+            f"(the running Julia session)."
+            f"If this is from Bifrost.plots, try bifrost.load_plots() first."
+        ) from e
+
+
+def __dir__():
+    """Expose names from Bifrost for tab-completion."""
+    if _jl is None:
+        return ["start", "info"]
+    
+    own = {"start", "info"}
+    try:
+        return sorted(own | set(dir(_jl.Bifrost)))
+    except Exception:
+        return sorted(own)
