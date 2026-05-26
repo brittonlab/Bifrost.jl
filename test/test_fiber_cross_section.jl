@@ -251,7 +251,7 @@ end
     T = 297.15
 
     unguided = StepIndexCrossSection(
-        FluorinatedSilicaGlass(0.005),
+        SilicaFluorinatedGlass(0.005),
         SilicaGermaniaGlass(0.0),
         8.2e-6,
         125e-6
@@ -260,7 +260,7 @@ end
 
     fluorinated_cladding = StepIndexCrossSection(
         SilicaGermaniaGlass(0.036),
-        FluorinatedSilicaGlass(0.005),
+        SilicaFluorinatedGlass(0.005),
         8.2e-6,
         125e-6
     )

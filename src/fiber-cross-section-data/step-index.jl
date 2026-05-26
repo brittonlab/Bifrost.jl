@@ -30,7 +30,7 @@ Aeff = effective_mode_area(fiber, λ, T)
     axial_tension_birefringence(fiber, λ, T; bend_radius_m = 0.03, axial_tension_N = 0.5)
 """
 
-const STEP_INDEX_GLASS = Union{SilicaGermaniaGlass, FluorinatedSilicaGlass}
+const STEP_INDEX_GLASS = Union{SilicaGermaniaGlass, SilicaFluorinatedGlass}
 const LP11_CUTOFF_V = 2.405
 const MARCUSE_V_MIN = 1.2
 const MARCUSE_V_MAX = 2.4

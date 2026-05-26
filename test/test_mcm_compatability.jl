@@ -20,7 +20,7 @@ using Bifrost
 
         # T-GUARDRAIL: Particles flow through each material's refractive_index
         for mat in (PURE_SILICA, PURE_GERMANIA,
-                    SilicaGermaniaGlass(0.036), FluorinatedSilicaGlass(0.01))
+                    SilicaGermaniaGlass(0.036), SilicaFluorinatedGlass(0.01))
             n = refractive_index(mat, λ, T)
             @test n isa Particles
             # pmean differs from nominal at O(δ²·∂²n/∂T²); loose tolerance.
@@ -29,7 +29,7 @@ using Bifrost
 
         # T-GUARDRAIL: WithDerivative SpectralResponse lifts both fields
         for mat in (PURE_SILICA, PURE_GERMANIA,
-                    SilicaGermaniaGlass(0.036), FluorinatedSilicaGlass(0.01))
+                    SilicaGermaniaGlass(0.036), SilicaFluorinatedGlass(0.01))
             resp = refractive_index(WithDerivative(), mat, λ, T)
             @test resp.value isa Particles
             @test resp.dω isa Particles

@@ -111,13 +111,13 @@ end
 
     @test SilicaGermaniaGlass(0.0).x_ge == 0.0
     @test SilicaGermaniaGlass(1.0).x_ge == 1.0
-    @test FluorinatedSilicaGlass(0.0).x_f == 0.0
-    @test FluorinatedSilicaGlass(1.0).x_f == 1.0
+    @test SilicaFluorinatedGlass(0.0).x_f == 0.0
+    @test SilicaFluorinatedGlass(1.0).x_f == 1.0
 
     @test_throws ArgumentError SilicaGermaniaGlass(-1e-6)
     @test_throws ArgumentError SilicaGermaniaGlass(1.000001)
-    @test_throws ArgumentError FluorinatedSilicaGlass(-1e-6)
-    @test_throws ArgumentError FluorinatedSilicaGlass(1.000001)
+    @test_throws ArgumentError SilicaFluorinatedGlass(-1e-6)
+    @test_throws ArgumentError SilicaFluorinatedGlass(1.000001)
 end
 
 @testset "SiO2" begin
@@ -215,27 +215,27 @@ end
     @test p11 < p12
 end
 
-@testset "FluorinatedSilicaGlass" begin
+@testset "SilicaFluorinatedGlass" begin
     λ = 1550e-9
     T = 297.15
 
-    undoped = FluorinatedSilicaGlass(0.0)
+    undoped = SilicaFluorinatedGlass(0.0)
     @test refractive_index(undoped, λ, T) ≈ refractive_index(SiO2(), λ, T) atol = 1e-12 rtol = 1e-12
 
     for x in (0.01, 0.02)
-        glass = FluorinatedSilicaGlass(x)
+        glass = SilicaFluorinatedGlass(x)
         @test refractive_index(glass, λ, T) ≈ reference_fluorinated_index(λ, T, x) atol = 1e-12 rtol = 1e-12
     end
 
-    @test refractive_index(FluorinatedSilicaGlass(0.01), λ, T) < refractive_index(SiO2(), λ, T)
+    @test refractive_index(SilicaFluorinatedGlass(0.01), λ, T) < refractive_index(SiO2(), λ, T)
 
     unsupported_calls = [
-        () -> cte(FluorinatedSilicaGlass(0.01), T),
-        () -> softening_temperature(FluorinatedSilicaGlass(0.01), T),
-        () -> poisson_ratio(FluorinatedSilicaGlass(0.01), T),
-        () -> photoelastic_constants(FluorinatedSilicaGlass(0.01), T),
-        () -> youngs_modulus(FluorinatedSilicaGlass(0.01), T),
-        () -> nonlinear_refractive_index(FluorinatedSilicaGlass(0.01), λ, T)
+        () -> cte(SilicaFluorinatedGlass(0.01), T),
+        () -> softening_temperature(SilicaFluorinatedGlass(0.01), T),
+        () -> poisson_ratio(SilicaFluorinatedGlass(0.01), T),
+        () -> photoelastic_constants(SilicaFluorinatedGlass(0.01), T),
+        () -> youngs_modulus(SilicaFluorinatedGlass(0.01), T),
+        () -> nonlinear_refractive_index(SilicaFluorinatedGlass(0.01), λ, T)
     ]
 
     for f in unsupported_calls
@@ -250,7 +250,7 @@ end
     silica = SiO2()
     germania = GeO2()
     ge_glass = SilicaGermaniaGlass(0.036)
-    f_glass = FluorinatedSilicaGlass(0.01)
+    f_glass = SilicaFluorinatedGlass(0.01)
 
     for T in (243.0, 373.0)
         @test isfinite(refractive_index(silica, 1550e-9, T))
@@ -295,7 +295,7 @@ end
         SiO2(),
         GeO2(),
         SilicaGermaniaGlass(0.036),
-        FluorinatedSilicaGlass(0.01)
+        SilicaFluorinatedGlass(0.01)
     )
 
     for material in materials

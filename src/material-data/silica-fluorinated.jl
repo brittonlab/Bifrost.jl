@@ -18,7 +18,7 @@ Units (SI unless noted):
 
 [Example usage]
 
-glass = FluorinatedSilicaGlass(0.01)   # 1.0 mol% F in SiO2
+glass = SilicaFluorinatedGlass(0.01)   # 1.0 mol% F in SiO2
 T_K = 297.15
 λ = 1550e-9
 n = refractive_index(glass, λ, T_K)
@@ -42,15 +42,15 @@ const FLUORINE_TERM_3 = SellmeierCorrectionTerm(
 
 const FLUORINE_CORRECTION_TERMS = (FLUORINE_TERM_1, FLUORINE_TERM_2, FLUORINE_TERM_3)
 
-struct FluorinatedSilicaGlass <: AbstractMaterial
+struct SilicaFluorinatedGlass <: AbstractMaterial
     x_f::Float64
-    function FluorinatedSilicaGlass(x_f::Real)
+    function SilicaFluorinatedGlass(x_f::Real)
         xf = validate_molar_fraction(x_f)
         return new(xf)
     end
 end
 
-function sellmeier_coefficients(glass::FluorinatedSilicaGlass, T_K)
+function sellmeier_coefficients(glass::SilicaFluorinatedGlass, T_K)
     silica_coeffs = sellmeier_coefficients(PURE_SILICA, T_K)
     x_f = glass.x_f
     return ntuple(i -> begin
@@ -60,27 +60,27 @@ function sellmeier_coefficients(glass::FluorinatedSilicaGlass, T_K)
     end, 3)
 end
 
-function refractive_index(::ValueOnly, glass::FluorinatedSilicaGlass, λ, T_K)
+function refractive_index(::ValueOnly, glass::SilicaFluorinatedGlass, λ, T_K)
     coeffs = sellmeier_coefficients(glass, T_K)
     return sellmeier_index_from_coefficients(coeffs, λ)
 end
 
-function refractive_index(::WithDerivative, glass::FluorinatedSilicaGlass, λ, T_K)
+function refractive_index(::WithDerivative, glass::SilicaFluorinatedGlass, λ, T_K)
     coeffs = sellmeier_coefficients(glass, T_K)
     return sellmeier_index_from_coefficients_dω(coeffs, λ)
 end
 
-cte(::FluorinatedSilicaGlass, _) = unsupported_fluorine_property("cte")
+cte(::SilicaFluorinatedGlass, _) = unsupported_fluorine_property("cte")
 
-softening_temperature(::FluorinatedSilicaGlass, _) = unsupported_fluorine_property("softening_temperature")
+softening_temperature(::SilicaFluorinatedGlass, _) = unsupported_fluorine_property("softening_temperature")
 
-poisson_ratio(::FluorinatedSilicaGlass, _) = unsupported_fluorine_property("poisson_ratio")
+poisson_ratio(::SilicaFluorinatedGlass, _) = unsupported_fluorine_property("poisson_ratio")
 
-photoelastic_constants(::FluorinatedSilicaGlass, _) = unsupported_fluorine_property("photoelastic_constants")
+photoelastic_constants(::SilicaFluorinatedGlass, _) = unsupported_fluorine_property("photoelastic_constants")
 
-youngs_modulus(::FluorinatedSilicaGlass, _) = unsupported_fluorine_property("youngs_modulus")
+youngs_modulus(::SilicaFluorinatedGlass, _) = unsupported_fluorine_property("youngs_modulus")
 
-nonlinear_refractive_index(::FluorinatedSilicaGlass, _, _) = unsupported_fluorine_property("nonlinear_refractive_index")
+nonlinear_refractive_index(::SilicaFluorinatedGlass, _, _) = unsupported_fluorine_property("nonlinear_refractive_index")
 
 function unsupported_fluorine_property(name::AbstractString)
     throw(ArgumentError("$(name) is not defined for fluorine-doped silica in the current model"))
