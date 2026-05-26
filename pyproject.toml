@@ -1,7 +1,7 @@
 [project]
 name = "bifrost"
-version = "0.1.0"
-description = "Python entry point for BIFROST, a Julia library for birefringence simulation in optical fiber."
+version = "1.0.0"
+description = "BIFROST, a library for birefringence simulation in optical fiber."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
