@@ -216,10 +216,7 @@ spec = jl.PathSpecBuilder()
 jl.straight_b(spec, length=0.1)
 fiber = jl.Fiber(jl.build(spec), cross_section=xs)
 
-J, stats = jl.propagate_fiber(
-    fiber,
-    **{"λ_m": 1550e-9, "verbose": False},
-)
+J, stats = jl.propagate_fiber(fiber, λ_m=1550e-9, verbose=False)
 ```
 
 For a fuller juliacall example, see

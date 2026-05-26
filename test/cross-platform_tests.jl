@@ -1,6 +1,6 @@
 using Test
 
-# Cross-platform repo lint. Two kinds of checks:
+# Cross-platform repo lint. Three kinds of checks:
 #
 #   * Path-literal lint: walk every .jl file under src/, test/, and
 #     inputs/ and flag string literals that bake in platform-specific
@@ -17,6 +17,21 @@ using Test
 #     names (CON, PRN, AUX, NUL, COM1–COM9, LPT1–LPT9), with or without
 #     an extension. A repo containing such a file can't be cloned on
 #     Windows.
+#
+#   * Confusable-identifier lint: walk every .jl file under src/ and flag
+#     identifiers containing any "confusable" codepoint — a letterlike
+#     symbol that looks like a Greek/Latin letter used in identifiers but
+#     normalizes (NFKC) to a different codepoint. Julia matches
+#     identifiers by raw codepoint, but Python (juliacall callers)
+#     normalizes identifiers via NFKC before keyword lookup, so such a
+#     name is unreachable as a bare Python keyword: e.g. a kwarg `µ_x`
+#     written with MICRO SIGN (U+00B5) becomes `μ_x` (GREEK MU U+03BC) on
+#     the Python side and silently misses. We do NOT flag the whole
+#     NFKC-unstable set: physics subscripts/superscripts/primes (s₁, α₀,
+#     m², ℓ′) are legitimate internal names that never cross to Python.
+#     Only a small blocklist of known confusables is rejected, so the
+#     Python on-ramp stays usable without `**{"name": ...}` unpacking
+#     while Greek-via-\mu/\lambda/etc. notation is allowed.
 
 const _LINT_ROOT = normpath(joinpath(@__DIR__, ".."))
 const _LINT_DIRS = ("src", "test", "inputs")
@@ -213,6 +228,70 @@ function _tracked_files()
     return files
 end
 
+# --- Confusable-identifier lint ------------------------------------------
+
+# Known confusable codepoints: letterlike symbols that are valid in Julia
+# identifiers but normalize (NFKC) to a *different* identifier character,
+# so a name containing one is unreachable as a bare Python keyword. The
+# left glyph is what gets typed by accident (often a unit symbol); the
+# right is what Python's NFKC pass turns it into.
+#
+#   U+00B5 µ MICRO SIGN        -> μ U+03BC GREEK SMALL LETTER MU
+#   U+2126 Ω OHM SIGN          -> Ω U+03A9 GREEK CAPITAL LETTER OMEGA
+#   U+212A K KELVIN SIGN       -> K U+004B LATIN CAPITAL LETTER K
+#   U+212B Å ANGSTROM SIGN     -> Å U+00C5 LATIN CAPITAL LETTER A WITH RING
+#
+# Subscripts, superscripts, and primes (s₁, m², ℓ′) are deliberately NOT
+# listed: they are NFKC-unstable but are internal math names, never used
+# as Python keywords. Extend this set if a new confusable surfaces.
+const _CONFUSABLE_CHARS = Dict{Char, String}(
+    'µ' => "μ (GREEK SMALL LETTER MU U+03BC); type \\mu instead of MICRO SIGN",
+    'Ω' => "Ω (GREEK CAPITAL OMEGA U+03A9); type \\Omega instead of OHM SIGN",
+    'K' => "K (LATIN K U+004B); use plain 'K' instead of KELVIN SIGN",
+    'Å' => "Å (U+00C5); type \\AA instead of ANGSTROM SIGN",
+)
+
+"""
+Return a vector of `(lineno, identifier, reason)` tuples for every
+identifier in `path` that contains a confusable codepoint from
+`_CONFUSABLE_CHARS`. Comments are stripped first; string literals are
+scanned too (a kwarg name could appear inside a `**{...}`-style string),
+which only makes the check stricter.
+"""
+function lint_confusable_identifiers(path::AbstractString)
+    issues = Tuple{Int, String, String}[]
+    open(path) do io
+        lineno = 0
+        for line in eachline(io)
+            lineno += 1
+            stripped = _strip_line_comment(line)
+            chars = collect(stripped)
+            n = length(chars)
+            i = 1
+            while i <= n
+                c = chars[i]
+                if Base.is_id_start_char(c)
+                    j = i
+                    while j <= n && Base.is_id_char(chars[j])
+                        j += 1
+                    end
+                    id = String(chars[i:(j - 1)])
+                    for ch in id
+                        if haskey(_CONFUSABLE_CHARS, ch)
+                            push!(issues, (lineno, id, _CONFUSABLE_CHARS[ch]))
+                            break
+                        end
+                    end
+                    i = j
+                else
+                    i += 1
+                end
+            end
+        end
+    end
+    return issues
+end
+
 # --- Tests ---------------------------------------------------------------
 
 @testset "cross-platform lint" begin
@@ -256,6 +335,34 @@ end
         @test isempty(offenders)
     end
 
+    @testset "confusable identifiers" begin
+        # Only src/ — that is the surface reachable from Python via juliacall.
+        src_root = joinpath(_LINT_ROOT, "src")
+        files = String[]
+        for (dir, _, fnames) in walkdir(src_root)
+            for f in fnames
+                endswith(f, ".jl") || continue
+                push!(files, joinpath(dir, f))
+            end
+        end
+        @test !isempty(files)
+        offenders = Tuple{String, Int, String, String}[]
+        for f in files
+            for (ln, id, reason) in lint_confusable_identifiers(f)
+                push!(offenders, (relpath(f, _LINT_ROOT), ln, id, reason))
+            end
+        end
+        if !isempty(offenders)
+            msg = IOBuffer()
+            println(msg, "Confusable identifiers detected (break Python keyword lookup):")
+            for (rel, ln, id, reason) in offenders
+                println(msg, "  $rel:$ln  '$id' — use $reason")
+            end
+            @error String(take!(msg))
+        end
+        @test isempty(offenders)
+    end
+
     @testset "linter self-check" begin
         # Path-literal rules: each forbidden pattern is caught, and
         # legitimate joinpath / comment forms are not.
@@ -290,5 +397,30 @@ end
         @test !isempty(lint_filename("LPT3.csv"))
         # Reserved name buried inside a longer word is OK.
         @test isempty(lint_filename("inputs/console.log"))
+
+        # Confusable-identifier rules. Greek-via-\mu/\lambda/etc. and
+        # physics subscripts/superscripts/primes must pass; only the
+        # blocklisted confusables (chiefly MICRO SIGN U+00B5) are flagged.
+        mktempdir() do dir
+            ok = joinpath(dir, "ok.jl")
+            open(ok, "w") do io
+                println(io, "function f(; λ_m, μ_x, τ, ω_0, Δn, σ)")  # μ = GREEK MU
+                println(io, "    s₁ = μ_x^2; m² = s₁; ℓ′ = m²")        # subscripts/primes OK
+                println(io, "    return λ_m + s₁ + ℓ′")
+                println(io, "end")
+            end
+            @test isempty(lint_confusable_identifiers(ok))
+
+            bad = joinpath(dir, "bad.jl")
+            open(bad, "w") do io
+                # `µ_x` written with MICRO SIGN U+00B5 — confusable with μ_x.
+                println(io, "function g(; µ_x)")
+                println(io, "    return µ_x")
+                println(io, "end")
+            end
+            hits = lint_confusable_identifiers(bad)
+            @test !isempty(hits)
+            @test all(h -> h[2] == "µ_x", hits)  # the offending identifier
+        end
     end
 end
