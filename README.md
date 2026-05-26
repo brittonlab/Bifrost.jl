@@ -70,7 +70,8 @@ metric is insensitive to physically irrelevant global Jones phase.
     └── .venv/          # python environment
     ```
 
-
+Bifrost is a julia module. Add it to source files with `using Bifrost`. Plotting functionality
+is segregated in a second module called `Bifrost.Plots`.
 
 
 ## Quick Start
@@ -83,17 +84,6 @@ julia --project=. test/runtests.jl
 
 Human-inspected demos live under `test/human/` and write standalone HTML
 artifacts under `output/`:
-
-```bash
-julia --project=. test/human/demo-smallest.jl
-julia --project=. test/human/demo1.jl
-julia --project=. test/human/demo2.jl
-julia --project=. test/human/demo3mcm.jl
-julia --project=. test/human/demo3benchmark.jl
-```
-
-The code is currently organized as include-based Julia scripts rather than a
-packaged module. Most tests and demos include only the files they need.
 
 ## Building Blocks
 
@@ -162,10 +152,7 @@ julia --project=. test/human/demo-smallest.jl
 Its core setup is:
 
 ```julia
-include(joinpath(@__DIR__, "..", "..", "src", "material-properties.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "fiber", "fiber-cross-section.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "geometry", "path-geometry.jl"))
-include(joinpath(@__DIR__, "..", "..", "src", "path-integral.jl"))
+using Bifrost
 
 xs = FiberCrossSection(
     GermaniaSilicaGlass(0.036),
