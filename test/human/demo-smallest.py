@@ -1,4 +1,4 @@
-import bifrost as bf
+import bifrost_py as bf
 
 xs = bf.FiberCrossSection(
     bf.GermaniaSilicaGlass(0.036),
@@ -7,7 +7,7 @@ xs = bf.FiberCrossSection(
     125e-6,
 )
 
-print(xs.core_diameter)
+print(xs.core_diameter_m)
 
 # spec = jl.PathSpecBuilder()
 # jl.straight_b(spec, length=0.1)
