@@ -224,7 +224,8 @@ J, stats = jl.propagate_fiber(
 
 For a fuller juliacall example, see
 [`docs/juliacall-demo.py`](docs/juliacall-demo.py) and its Julia-side module
-[`docs/juliacall-demo.jl`](docs/juliacall-demo.jl).
+[`docs/juliacall-demo.jl`](docs/juliacall-demo.jl). To run python code in the uv environment use
+`uv run python docs/juliacall-demo.py`.
 
 ## Generator Formulation
 
@@ -237,7 +238,7 @@ J_{\mathrm{total}}=\prod_i J_i,
 with matrix order matching the order light encounters along the fiber. That
 approach is simple, but it is difficult to attach a meaningful error bound when
 linear birefringence, twist, and other non-commuting terms vary along the path.
-
+ 
 The Julia implementation instead assembles a local generator:
 
 ```math
