@@ -85,6 +85,7 @@ def start(
         If the project path doesn't contain a Project.toml.
     """
 
+    print("Starting Julia environment...", end = " ")
     global _jl, _start_kwargs
     project_path = Path(project).resolve() if project is not None else REPO
     kwargs = {
@@ -109,7 +110,7 @@ def start(
     if threads is not None:
         os.environ.setdefault("PYTHON_JULIACALL_THREADS", str(threads))
 
-    from juliacall import Main as jl
+    from juliacall import Main as jl;
 
     jl.seval(f'import Pkg; Pkg.activate(raw"{project_path}")')
     if instantiate:
@@ -119,6 +120,7 @@ def start(
 
     _jl = jl
     _start_kwargs = kwargs
+    print("Complete.")
     return jl
 
 def info() -> None:
