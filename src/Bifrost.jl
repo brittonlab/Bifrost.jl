@@ -29,15 +29,10 @@ module MaterialProperties
     using Printf
     include("material-properties.jl")
     
-    # Dynamically discover and load all materials from the materials/ directory
-    _materials_dir = joinpath(@__DIR__, "material-data")
-    if isdir(_materials_dir)
-        for material_file in sort(readdir(_materials_dir))
-            if endswith(material_file, ".jl")
-                include(joinpath(_materials_dir, material_file))
-            end
-        end
-    end
+    include("material/silica.jl")
+    include("material/germania.jl")
+    include("material/silica-germania.jl")
+    include("material/silica-fluorinated.jl")
     
     import ..Bifrost: _export_public!
     _export_public!(@__MODULE__)
@@ -64,15 +59,8 @@ module FiberCS
     using ..MaterialProperties
     include("fiber/fiber-cross-section.jl")
 
-    # Dynamically discover and load all materials from the materials/ directory
-    _cross_sections_dir = joinpath(@__DIR__, "fiber-cross-section-data")
-    if isdir(_cross_sections_dir)
-        for cross_section_file in sort(readdir(_cross_sections_dir))
-            if endswith(cross_section_file, ".jl")
-                include(joinpath(_cross_sections_dir, cross_section_file))
-            end
-        end
-    end
+    include("fiber-cross-section/step-index.jl")
+    include("fiber-cross-section/graded-index.jl")
 
     import ..Bifrost: _export_public!
     _export_public!(@__MODULE__)
