@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.11.7"
+julia_version = "1.11.9"
 manifest_format = "2.0"
-project_hash = "186ab9ea45ec694ab19c5d16bba6d82c6b4ac81c"
+project_hash = "5a2d8d3b1d73d2b264afa9337b9820e252549e8a"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra"]
@@ -252,9 +252,9 @@ version = "0.1.11"
 
 [[deps.Expat_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "8f05e9a2e7c2e3eb524102bb2926c5743c07fbe1"
+git-tree-sha1 = "c307cd83373868391f3ac30b41530bc5d5d05d08"
 uuid = "2e619515-83b5-522b-bb60-26c02a35a201"
-version = "2.8.0+0"
+version = "2.8.1+0"
 
 [[deps.FFMPEG]]
 deps = ["FFMPEG_jll"]
@@ -943,9 +943,9 @@ version = "0.1.0"
 
 [[deps.SLEEFPirates]]
 deps = ["IfElse", "Static", "VectorizationBase"]
-git-tree-sha1 = "456f610ca2fbd1c14f5fcf31c6bfadc55e7d66e0"
+git-tree-sha1 = "081c6d0ed3df37f146cd935ab11ef3a410232f4c"
 uuid = "476501e8-09a2-5ece-8869-fb82de89a1fa"
-version = "0.6.43"
+version = "0.6.45"
 
 [[deps.SciMLPublic]]
 git-tree-sha1 = "0ba076dbdce87ba230fff48ca9bca62e1f345c9b"
@@ -1180,9 +1180,9 @@ version = "0.2.0"
 
 [[deps.VectorizationBase]]
 deps = ["ArrayInterface", "CPUSummary", "HostCPUFeatures", "IfElse", "LayoutPointers", "Libdl", "LinearAlgebra", "SIMDTypes", "Static", "StaticArrayInterface"]
-git-tree-sha1 = "d1d9a935a26c475ebffd54e9c7ad11627c43ea85"
+git-tree-sha1 = "2d3e80913c0f4e7cc4f3bb3587749738746fd487"
 uuid = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
-version = "0.21.72"
+version = "0.21.73"
 
 [[deps.Vulkan_Loader_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Wayland_jll", "Xorg_libX11_jll", "Xorg_libXrandr_jll", "xkbcommon_jll"]
