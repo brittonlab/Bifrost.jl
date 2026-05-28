@@ -337,15 +337,6 @@ function group_velocity_dispersion_parameter(
     return -(λ^2 / (2π * SPEED_OF_LIGHT_M_PER_S)) * D_SI * 1e27
 end
 
-core_nonlinear_refractive_index(fiber::StepIndexCrossSection, λ, T_K) =
-    nonlinear_refractive_index(fiber.core_material, λ, T_K)
-
-function nonlinear_coefficient(fiber::StepIndexCrossSection, λ, T_K)
-    n2 = core_nonlinear_refractive_index(fiber, λ, T_K)
-    Aeff = effective_mode_area(fiber, λ, T_K)
-    return (2π / λ) * n2 / Aeff
-end
-
 is_single_mode(fiber::StepIndexCrossSection, λ, T_K) =
     normalized_frequency(fiber, λ, T_K) < LP11_CUTOFF_V
 
