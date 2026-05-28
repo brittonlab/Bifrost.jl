@@ -105,13 +105,7 @@ struct TemperaturePolynomial
 end
 
 function (poly::TemperaturePolynomial)(T_K)
-    value = zero(T_K)
-    power = one(T_K)
-    for coeff in poly.coeffs
-        value += coeff * power
-        power *= T_K
-    end
-    return value
+    return evalpoly(T_K, poly.coeffs)
 end
 
 struct SellmeierConstantLaw
