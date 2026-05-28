@@ -15,18 +15,23 @@ Units (SI unless noted):
 - nonlinear_refractive_index (n_2)  m²/W
 """
 
+const SPEED_OF_LIGHT_M_PER_S = 299_792_458.0
+
 abstract type AbstractMaterial end
 abstract type SpectralStyle end
-
-struct ValueOnly <: SpectralStyle end
-struct WithDerivative <: SpectralStyle end
 
 struct SpectralResponse{T}
     value::T
     dω::T
 end
 
-const SPEED_OF_LIGHT_M_PER_S = 299_792_458.0
+struct ValueOnly <: SpectralStyle end
+struct WithDerivative <: SpectralStyle end
+
+# Shared by all materials to simplify the ValueOnly() case;
+# Users do not need to copy or override.
+refractive_index(material::AbstractMaterial, λ, T_K) =
+    refractive_index(ValueOnly(), material, λ, T_K)
 
 #################################################
 #
@@ -179,8 +184,3 @@ youngs_modulus(material::AbstractMaterial, T_K)
 nonlinear_refractive_index(material::AbstractMaterial, λ, T_K)
 
 """
-
-# Shared by all materials to simplify the ValueOnly() case;
-# Users do not need to copy or override.
-refractive_index(material::AbstractMaterial, λ, T_K) =
-    refractive_index(ValueOnly(), material, λ, T_K)
