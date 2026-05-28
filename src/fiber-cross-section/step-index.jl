@@ -118,14 +118,15 @@ function waveguide_factor_prime(V)
     return α * (den - V * dt_dV) / den^2
 end
 
+# This is 1-u^2/V^2 in many of our formulas, using the approximation for u(V) from Gloge
 function modal_prefactor(V)
-    α = one(V) + sqrt(one(V) + one(V))
+    α = one(V) + sqrt(2*one(V))
     t = one(V) + (4 + V^4)^(one(V) / 4)
     return one(V) - α^2 / t^2
 end
 
 function modal_prefactor_prime(V)
-    α = one(V) + sqrt(one(V) + one(V))
+    α = one(V) + sqrt(2*one(V))
     t = (4 + V^4)^(one(V) / 4)
     dt_dV = V^3 / (4 + V^4)^(3 * one(V) / 4)
     den = one(V) + t
