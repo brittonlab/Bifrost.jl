@@ -30,6 +30,12 @@ Aeff = effective_mode_area(fiber, λ, T)
     axial_tension_birefringence(fiber, λ, T; bend_radius_m = 0.03, axial_tension_N = 0.5)
 """
 
+#################################################
+#
+# Base Constants and Structure
+#
+#################################################
+
 const STEP_INDEX_GLASS = Union{SilicaGermaniaGlass, SilicaFluorinatedGlass}
 const LP11_CUTOFF_V = 2.405
 const MARCUSE_V_MIN = 1.2
@@ -69,6 +75,12 @@ struct StepIndexCrossSection{T<:Real} <: FiberCrossSection
     end
 end
 
+#################################################
+#
+# Convenience Methods
+#
+#################################################
+
 core_radius(fiber::StepIndexCrossSection) = fiber.core_diameter_m / 2
 cladding_radius(fiber::StepIndexCrossSection) = fiber.cladding_diameter_m / 2
 
@@ -86,14 +98,20 @@ end
 cladding_refractive_index(fiber::StepIndexCrossSection, λ, T_K) =
     cladding_refractive_index(ValueOnly(), fiber, λ, T_K)
 
+#################################################
+#
+# Refractive Index
+#
+#################################################
+
 function waveguide_factor(V)
-    α = one(V) + sqrt(one(V) + one(V))
+    α = one(V) + sqrt(2 * one(V))
     t = (4 + V^4)^(one(V) / 4)
     return α * V / (one(V) + t)
 end
 
 function waveguide_factor_prime(V)
-    α = one(V) + sqrt(one(V) + one(V))
+    α = one(V) + sqrt(2 * one(V))
     t = (4 + V^4)^(one(V) / 4)
     dt_dV = V^3 / (4 + V^4)^(3 * one(V) / 4)
     den = one(V) + t
@@ -102,8 +120,8 @@ end
 
 function modal_prefactor(V)
     α = one(V) + sqrt(one(V) + one(V))
-    den = one(V) + (4 + V^4)^(one(V) / 4)
-    return one(V) - α^2 / den^2
+    t = one(V) + (4 + V^4)^(one(V) / 4)
+    return one(V) - α^2 / t^2
 end
 
 function modal_prefactor_prime(V)
@@ -130,7 +148,7 @@ function mode_terms(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K)
     V = r_core * k0 * na
     g = waveguide_factor(V)
     q = modal_prefactor(V)
-    β = sqrt((n_core^2) * k0^2 - g^2 / r_core^2)
+    β = sqrt((n_core^2 * k0^2) - g^2 / r_core^2)
     z = zero(β)
 
     return (
@@ -205,24 +223,9 @@ function mode_terms(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K)
     )
 end
 
-function guided_refractive_indices(style::ValueOnly, fiber::StepIndexCrossSection, λ, T_K)
-    terms = mode_terms(style, fiber, λ, T_K)
-    return terms.n_core, terms.n_clad
-end
-
-function guided_refractive_indices(style::WithDerivative, fiber::StepIndexCrossSection, λ, T_K)
-    terms = mode_terms(style, fiber, λ, T_K)
-    return (
-        SpectralResponse(terms.n_core, terms.dn_core_dω),
-        SpectralResponse(terms.n_clad, terms.dn_clad_dω)
-    )
-end
-
-guided_refractive_indices(fiber::StepIndexCrossSection, λ, T_K) =
-    guided_refractive_indices(ValueOnly(), fiber, λ, T_K)
-
 function relative_index_difference(style::ValueOnly, fiber::StepIndexCrossSection, λ, T_K)
-    n_core, n_clad = guided_refractive_indices(style, fiber, λ, T_K)
+    n_core = core_refractive_index(fiber, λ, T_K)
+    n_clad = cladding_refractive_index(fiber, λ, T_K)
     return (n_core - n_clad) / n_clad
 end
 
