@@ -283,22 +283,27 @@ effective_mode_index(fiber::StepIndexCrossSection, λ, T_K) =
 function effective_group_index(
     fiber::StepIndexCrossSection,
     λ,
-    T_K;
-    dλ = 0.1e-9
+    T_K
 )
-    n_center = effective_mode_index(fiber, λ, T_K)
-    n_minus = effective_mode_index(fiber, λ - dλ, T_K)
-    n_plus = effective_mode_index(fiber, λ + dλ, T_K)
-    dndλ = (n_plus - n_minus) / (2 * dλ)
-    return n_center - λ * dndλ
+
+    n_eff = effective_mode_index(WithDerivative(), fiber, λ, T_K)
+    ω = 2*pi*SPEED_OF_LIGHT_M_PER_S/λ
+    return n_eff.value + ω*n_eff.dω
 end
 
+# Using the 1/e^2 criterion
+# Uses a modified form of the traditional Marcuse approximation that's better at lower V;
+#    this form is accurate to within 1% for 1.5 < V < 2.5
+# This form applies to the fundamental mode above V = 2.405.
 function effective_mode_area(fiber::StepIndexCrossSection, λ, T_K)
-    v = normalized_frequency(fiber, λ, T_K)
-    if !(MARCUSE_V_MIN <= v <= MARCUSE_V_MAX)
+    V = normalized_frequency(fiber, λ, T_K)
+    if !(MARCUSE_V_MIN <= V <= MARCUSE_V_MAX)
         @warn "Marcuse effective-area approximation is calibrated for 1.2 <= V <= 2.4; got V=$(v)"
     end
-    w_over_r = 0.65 + 1.619 / v^1.5 + 2.879 / v^6
+    if (V > LP11_CUTOFF_V)
+        @warn "Marcuse approximation only applies to the fundamental mode. V=$(v) is above the single-mode cutoff."
+    end
+    w_over_r = 0.65 + 1.619 / V^1.5 + 2.879 / V^6 - 0.016 - 1.561 / V^7
     w = w_over_r * core_radius(fiber)
     return π * w^2
 end
