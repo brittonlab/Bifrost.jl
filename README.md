@@ -43,7 +43,7 @@ metric is insensitive to physically irrelevant global Jones phase.
 3. Setup the julia environment for BIFROST.
     ```bash
     cd bifrost
-    julia --project=. -e 'using Pkg; Pkg.instantiate()'
+    julia --project=. -e "using Pkg; Pkg.instantiate()"
     ```
     You subsequently activate the environment using `julia --project=.`
 
