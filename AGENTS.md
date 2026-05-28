@@ -138,6 +138,11 @@ Do not break these without explicit user discussion:
   - MCM prohibits conditionals anywhere that needs to propagate Particles. 
     Here this includes most methods in material-properties.jl, fiber-cross-section.jl,
     path-geometry.jl, fiber-path.jl, fiber-path-modify.jl, path-integral.jl.
+- **python wrapper**: A Python wrapper for `Bifrost.jl` is supplied in `src/wrapper.py`. The spirit 
+    for this wrapper is that Python is the workspace and Julia modules are guest libraries. No Julia
+    methods should be used in th python environment except those explicitly exposed via
+    `wrapper.wrap()`. It is never acceptable to expose general julia methods
+    in the python workspace.   
 
 ## Adding a New Birefringence Source
 

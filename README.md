@@ -195,28 +195,28 @@ For Monte Carlo Measurements (MCM) paths, prefer `output_dgd_2x2(J, G)` over
 
 ## Python Example
 
-The `bifrost.py` helper starts juliacall against this project. After
-`using Bifrost`, exported Julia functions are available as Python callables on
-`jl`; Julia names ending in `!` use the `_b` suffix.
+The `wrapper.py` shim boots juliacall against this project and returns a
+tab-completable view of any Julia module. Names listed in `dir(Bf)` are exactly
+what that module `export`s — none of the ~1000 names a juliacall module
+otherwise inherits from `Base`. Julia names ending in `!` use the `_b` suffix.
 
 ```python
-from bifrost import start
+import wrapper
 
-jl = start()
-jl.seval("using Bifrost")
+Bf = wrapper.wrap("Bifrost")
 
-xs = jl.FiberCrossSection(
-    jl.GermaniaSilicaGlass(0.036),
-    jl.GermaniaSilicaGlass(0.0),
+xs = Bf.FiberCrossSection(
+    Bf.GermaniaSilicaGlass(0.036),
+    Bf.GermaniaSilicaGlass(0.0),
     8.2e-6,
     125e-6,
 )
 
-spec = jl.PathSpecBuilder()
-jl.straight_b(spec, length=0.1)
-fiber = jl.Fiber(jl.build(spec), cross_section=xs)
+spec = Bf.PathSpecBuilder()
+Bf.straight_b(spec, length=0.1)
+fiber = Bf.Fiber(Bf.build(spec), cross_section=xs)
 
-J, stats = jl.propagate_fiber(fiber, λ_m=1550e-9, verbose=False)
+J, stats = Bf.propagate_fiber(fiber, λ_m=1550e-9, verbose=False)
 ```
 
 For a fuller juliacall example, see
