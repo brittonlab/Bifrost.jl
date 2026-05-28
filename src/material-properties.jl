@@ -100,8 +100,8 @@ end
 #################################################
 
 struct TemperaturePolynomial
-    coeffs::NTuple{5, Float64}
-    TemperaturePolynomial(coeffs::NTuple{5, <:Real}) = new(map(Float64, coeffs))
+    coeffs::Tuple{Vararg{Float64}}
+    TemperaturePolynomial(coeffs::Tuple{Vararg{<:Real}}) = new(map(Float64, coeffs))
 end
 
 function (poly::TemperaturePolynomial)(T_K)
