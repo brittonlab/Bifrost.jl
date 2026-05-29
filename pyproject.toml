@@ -15,4 +15,4 @@ dependencies = [
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["bifrost"]
+packages = ["bifrost_py"]
