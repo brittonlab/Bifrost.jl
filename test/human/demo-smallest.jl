@@ -27,3 +27,13 @@ println("J =")
 display(J)
 println()
 println("intervals = ", length(stats))
+println("Accepted = ", stats[1].accepted_steps, "; Rejected = ", stats[1].rejected_steps)
+
+# plot_path = write_path_geometry_plot3d(
+#     path,
+#     path.spec.s_start,
+#     path.s_end;
+#     output = joinpath(@__DIR__, "..", "..", "output", "demo-smallest.html"),
+#     title = "demo-smallest path",
+# )
+# println("Wrote path plot to: ", plot_path)
