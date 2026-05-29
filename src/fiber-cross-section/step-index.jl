@@ -6,9 +6,6 @@ core/cladding materials and diameters. Perturbations such as core ellipticity,
 bending, axial tension, and twist are handled by separate functions with
 explicit arguments rather than stored on the type.
 
-NOTE: All the dω derivatives computed in this file are computed by ChatGPT-5.4 and have
-not been checked by a human.
-
 Example
 -------
 fiber = StepIndexCrossSection(
@@ -29,6 +26,12 @@ Aeff = effective_mode_area(fiber, λ, T)
 Δβ_bend = bending_birefringence(fiber, λ, T; bend_radius_m = 0.03) +
     axial_tension_birefringence(fiber, λ, T; bend_radius_m = 0.03, axial_tension_N = 0.5)
 """
+
+#################################################
+#
+# Base Constants and Structure
+#
+#################################################
 
 const STEP_INDEX_GLASS = Union{SilicaGermaniaGlass, SilicaFluorinatedGlass}
 const LP11_CUTOFF_V = 2.405
@@ -69,6 +72,12 @@ struct StepIndexCrossSection{T<:Real} <: FiberCrossSection
     end
 end
 
+#################################################
+#
+# Convenience Methods
+#
+#################################################
+
 core_radius(fiber::StepIndexCrossSection) = fiber.core_diameter_m / 2
 cladding_radius(fiber::StepIndexCrossSection) = fiber.cladding_diameter_m / 2
 
@@ -86,28 +95,35 @@ end
 cladding_refractive_index(fiber::StepIndexCrossSection, λ, T_K) =
     cladding_refractive_index(ValueOnly(), fiber, λ, T_K)
 
+#################################################
+#
+# Base Quantities (needed for subsequent calculations)
+#
+#################################################
+
 function waveguide_factor(V)
-    α = one(V) + sqrt(one(V) + one(V))
+    α = one(V) + sqrt(2 * one(V))
     t = (4 + V^4)^(one(V) / 4)
     return α * V / (one(V) + t)
 end
 
 function waveguide_factor_prime(V)
-    α = one(V) + sqrt(one(V) + one(V))
+    α = one(V) + sqrt(2 * one(V))
     t = (4 + V^4)^(one(V) / 4)
     dt_dV = V^3 / (4 + V^4)^(3 * one(V) / 4)
     den = one(V) + t
     return α * (den - V * dt_dV) / den^2
 end
 
+# This is 1-u^2/V^2 in many of our formulas, using the approximation for u(V) from Gloge
 function modal_prefactor(V)
-    α = one(V) + sqrt(one(V) + one(V))
-    den = one(V) + (4 + V^4)^(one(V) / 4)
-    return one(V) - α^2 / den^2
+    α = one(V) + sqrt(2*one(V))
+    t = one(V) + (4 + V^4)^(one(V) / 4)
+    return one(V) - α^2 / t^2
 end
 
 function modal_prefactor_prime(V)
-    α = one(V) + sqrt(one(V) + one(V))
+    α = one(V) + sqrt(2*one(V))
     t = (4 + V^4)^(one(V) / 4)
     dt_dV = V^3 / (4 + V^4)^(3 * one(V) / 4)
     den = one(V) + t
@@ -130,7 +146,7 @@ function mode_terms(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K)
     V = r_core * k0 * na
     g = waveguide_factor(V)
     q = modal_prefactor(V)
-    β = sqrt((n_core^2) * k0^2 - g^2 / r_core^2)
+    β = sqrt((n_core^2 * k0^2) - g^2 / r_core^2)
     z = zero(β)
 
     return (
@@ -205,24 +221,9 @@ function mode_terms(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K)
     )
 end
 
-function guided_refractive_indices(style::ValueOnly, fiber::StepIndexCrossSection, λ, T_K)
-    terms = mode_terms(style, fiber, λ, T_K)
-    return terms.n_core, terms.n_clad
-end
-
-function guided_refractive_indices(style::WithDerivative, fiber::StepIndexCrossSection, λ, T_K)
-    terms = mode_terms(style, fiber, λ, T_K)
-    return (
-        SpectralResponse(terms.n_core, terms.dn_core_dω),
-        SpectralResponse(terms.n_clad, terms.dn_clad_dω)
-    )
-end
-
-guided_refractive_indices(fiber::StepIndexCrossSection, λ, T_K) =
-    guided_refractive_indices(ValueOnly(), fiber, λ, T_K)
-
 function relative_index_difference(style::ValueOnly, fiber::StepIndexCrossSection, λ, T_K)
-    n_core, n_clad = guided_refractive_indices(style, fiber, λ, T_K)
+    n_core = core_refractive_index(fiber, λ, T_K)
+    n_clad = cladding_refractive_index(fiber, λ, T_K)
     return (n_core - n_clad) / n_clad
 end
 
@@ -280,26 +281,35 @@ effective_mode_index(fiber::StepIndexCrossSection, λ, T_K) =
 function effective_group_index(
     fiber::StepIndexCrossSection,
     λ,
-    T_K;
-    dλ = 0.1e-9
+    T_K
 )
-    n_center = effective_mode_index(fiber, λ, T_K)
-    n_minus = effective_mode_index(fiber, λ - dλ, T_K)
-    n_plus = effective_mode_index(fiber, λ + dλ, T_K)
-    dndλ = (n_plus - n_minus) / (2 * dλ)
-    return n_center - λ * dndλ
+
+    n_eff = effective_mode_index(WithDerivative(), fiber, λ, T_K)
+    ω = 2*pi*SPEED_OF_LIGHT_M_PER_S/λ
+    return n_eff.value + ω*n_eff.dω
 end
 
+# Using the 1/e^2 criterion
+# Uses a modified form of the traditional Marcuse approximation that's better at lower V;
+#    this form is accurate to within 1% for 1.5 < V < 2.5
+# This form applies to the fundamental mode above V = 2.405.
 function effective_mode_area(fiber::StepIndexCrossSection, λ, T_K)
-    v = normalized_frequency(fiber, λ, T_K)
-    if !(MARCUSE_V_MIN <= v <= MARCUSE_V_MAX)
+    V = normalized_frequency(fiber, λ, T_K)
+    if !(MARCUSE_V_MIN <= V <= MARCUSE_V_MAX)
         @warn "Marcuse effective-area approximation is calibrated for 1.2 <= V <= 2.4; got V=$(v)"
     end
-    w_over_r = 0.65 + 1.619 / v^1.5 + 2.879 / v^6
+    if (V > LP11_CUTOFF_V)
+        @warn "Marcuse approximation only applies to the fundamental mode. V=$(v) is above the single-mode cutoff."
+    end
+    w_over_r = 0.65 + 1.619 / V^1.5 + 2.879 / V^6 - 0.016 - 1.561 / V^7
     w = w_over_r * core_radius(fiber)
     return π * w^2
 end
 
+# This is D_CD, the second derivative with respect to *wavelength*, often
+# used by engineers, -2πc/λ^2 * (d^2k/dω^2), often given in ps/(nm km) for fibers
+# Uses a numerical approximation of the second derivative of n_eff
+# Output in ps/(nm km)
 function chromatic_dispersion_parameter(
     fiber::StepIndexCrossSection,
     λ,
@@ -312,6 +322,9 @@ function chromatic_dispersion_parameter(
     return -λ / SPEED_OF_LIGHT_M_PER_S * (n_plus - 2 * n_center + n_minus) / dλ^2 * 1e6
 end
 
+# This is β_2 = d^2k/dω^2, the second derivative with respect to *angular frequency*
+# Often given in ps^2/km for optical fibers
+# Output is in ps^2/km
 function group_velocity_dispersion_parameter(
     fiber::StepIndexCrossSection,
     λ,
@@ -319,16 +332,7 @@ function group_velocity_dispersion_parameter(
     dλ = 0.1e-9
 )
     D_SI = chromatic_dispersion_parameter(fiber, λ, T_K; dλ = dλ) * 1e-6
-    return -(λ^2 / (2π * SPEED_OF_LIGHT_M_PER_S)) * D_SI
-end
-
-core_nonlinear_refractive_index(fiber::StepIndexCrossSection, λ, T_K) =
-    nonlinear_refractive_index(fiber.core_material, λ, T_K)
-
-function nonlinear_coefficient(fiber::StepIndexCrossSection, λ, T_K)
-    n2 = core_nonlinear_refractive_index(fiber, λ, T_K)
-    Aeff = effective_mode_area(fiber, λ, T_K)
-    return (2π / λ) * n2 / Aeff
+    return -(λ^2 / (2π * SPEED_OF_LIGHT_M_PER_S)) * D_SI * 1e27
 end
 
 is_single_mode(fiber::StepIndexCrossSection, λ, T_K) =
@@ -356,14 +360,14 @@ function cutoff_wavelength(
     λ_hi = validate_positive_length(λ_max, "λ_max")
     λ_lo < λ_hi || throw(ArgumentError("λ_min must be smaller than λ_max"))
 
-    f_lo = normalized_frequency(fiber, λ_lo, T_K) - LP11_CUTOFF_V
-    f_hi = normalized_frequency(fiber, λ_hi, T_K) - LP11_CUTOFF_V
+    V_lo = normalized_frequency(fiber, λ_lo, T_K) - LP11_CUTOFF_V
+    V_hi = normalized_frequency(fiber, λ_hi, T_K) - LP11_CUTOFF_V
 
-    if f_lo == 0.0
+    if V_lo == 0.0
         return λ_lo
-    elseif f_hi == 0.0
+    elseif V_hi == 0.0
         return λ_hi
-    elseif signbit(f_lo) == signbit(f_hi)
+    elseif signbit(V_lo) == signbit(V_hi)
         throw(ArgumentError(
             "cutoff wavelength is not bracketed in [$(λ_lo), $(λ_hi)] m"
         ))
@@ -371,16 +375,16 @@ function cutoff_wavelength(
 
     a = λ_lo
     b = λ_hi
-    fa = f_lo
+    Va = V_lo
 
     for _ in 1:maxiter
         mid = (a + b) / 2
-        fm = normalized_frequency(fiber, mid, T_K) - LP11_CUTOFF_V
-        if abs(fm) <= atol || (b - a) / 2 <= atol
+        Vm = normalized_frequency(fiber, mid, T_K) - LP11_CUTOFF_V
+        if abs(Vm) <= atol || (b - a) / 2 <= atol
             return mid
-        elseif signbit(fm) == signbit(fa)
+        elseif signbit(Vm) == signbit(Va)
             a = mid
-            fa = fm
+            Va = Vm
         else
             b = mid
         end
@@ -398,6 +402,16 @@ function eccentricity_squared(axis_ratio; signed::Bool = false)
     return signed ? -value : value
 end
 
+#################################################
+#
+# Birefringences
+#
+#################################################
+
+# TODO: Determine signs on this answer
+#    PB: Right now axis_ratio is not fixed to any definition and neither is Δβ so it's unclear
+#    when the result should be negative. I think planned changes should just get the magnitude
+#    of the birefringence and then orient it appropriately when constructing the generator.
 function core_noncircularity_dω(style::SpectralStyle, fiber::StepIndexCrossSection, λ, T_K; axis_ratio)
     terms = mode_terms(style, fiber, λ, T_K)
     ε = validate_axis_ratio(axis_ratio)
@@ -405,11 +419,12 @@ function core_noncircularity_dω(style::SpectralStyle, fiber::StepIndexCrossSect
     χ = one(terms.n_core) - terms.n_clad^2 / terms.n_core^2
     dχ_dω = -2 * terms.n_clad * terms.dn_clad_dω / terms.n_core^2 +
             2 * terms.n_clad^2 * terms.dn_core_dω / terms.n_core^3
-    h = 4 * log(terms.V)^3 / (terms.V^3 * (one(terms.V) + log(terms.V)))
-    h_prime = h / terms.V * (3 / log(terms.V) - 3 - inv(one(terms.V) + log(terms.V)))
+    V = terms.V
+    h = 4 * log(V)^3 / (V^3 * (one(V) + log(V)))
+    h_prime = h / V * (3 / log(V) - 3 - inv(one(V) + log(V)))
     prefactor = eccentricity_squared(ε; signed = true) / terms.core_radius
-    Δβ = prefactor * χ^(3 / 2) * h
-    dω = prefactor * ((3 / 2) * sqrt(χ) * dχ_dω * h + χ^(3 / 2) * h_prime * terms.dV_dω)
+    Δβ = prefactor * (2*χ)^(3 / 2) * h
+    dω = prefactor * ((3 / 2) * sqrt(2*χ) * dχ_dω * h + (2*χ)^(3 / 2) * h_prime * terms.dV_dω)
     return BirefringenceResponse(Δβ, dω)
 end
 
@@ -483,6 +498,11 @@ function axial_tension_dω(
     return BirefringenceResponse(Δβ, dω)
 end
 
+# TODO: Determine signs on this answer
+#    PB: Similar to the core ellipticity, the sign will need to be carefully considered.
+#    Note that this birefringence is *circular.* The answer here will need to be matrix-transformed
+#        back to the right basis at generator contruction time.
+#    The answer here is βLC - βRC.
 function twisting_dω(
     style::SpectralStyle,
     fiber::StepIndexCrossSection,
@@ -496,7 +516,7 @@ function twisting_dω(
     tr == zero(tr) && return BirefringenceResponse(zero(terms.β), zero(terms.β))
     p11, p12 = photoelastic_constants(fiber.core_material, T_K)
     coeff = (p11 - p12) / 2
-    Δβ = (one(terms.n_core) + coeff * terms.n_core^2) * tr
+    Δβ = coeff * terms.n_core^2 * tr
     dω = 2 * coeff * terms.n_core * terms.dn_core_dω * tr
     return BirefringenceResponse(Δβ, dω)
 end
