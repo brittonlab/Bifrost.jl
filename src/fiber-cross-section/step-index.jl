@@ -495,6 +495,11 @@ function axial_tension_dω(
     return BirefringenceResponse(Δβ, dω)
 end
 
+# TODO: Determine signs on this answer
+#    PB: Similar to the core ellipticity, the sign will need to be carefully considered.
+#    Note that this birefringence is *circular.* The answer here will need to be matrix-transformed
+#        back to the right basis at generator contruction time.
+#    The answer here is βLC - βRC.
 function twisting_dω(
     style::SpectralStyle,
     fiber::StepIndexCrossSection,
@@ -508,7 +513,7 @@ function twisting_dω(
     tr == zero(tr) && return BirefringenceResponse(zero(terms.β), zero(terms.β))
     p11, p12 = photoelastic_constants(fiber.core_material, T_K)
     coeff = (p11 - p12) / 2
-    Δβ = (one(terms.n_core) + coeff * terms.n_core^2) * tr
+    Δβ = coeff * terms.n_core^2 * tr
     dω = 2 * coeff * terms.n_core * terms.dn_core_dω * tr
     return BirefringenceResponse(Δβ, dω)
 end
