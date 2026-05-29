@@ -16,31 +16,24 @@ class ParticlesMatrix:
     - Raw samples: .particles (shape (2, 2, n_samples))
     - Statistical summaries: .mean, .std (shape (2, 2))
     - Individual element samples: pm[i, j] → (n_samples,)
-    
-    Examples
-    --------
-    >>> J, stats = bf.propagate_fiber(fiber_ensemble, ...)
-    >>> print(J.particles.shape)  # (2, 2, 100)
-    >>> print(J.mean)  # (2, 2) mean matrix
-    >>> j00 = J.particles[0, 0, :]  # 100 samples of J[0,0]
     """
     
     def __init__(self, jl_particles_matrix: Any):
         """
-        Initialize from Julia 2x2 matrix of Particles.
+        Initialize from Julia 2x2 matrix of Complex{Particles}.
         
         Parameters
         ----------
         jl_particles_matrix : Any
-            Julia matrix where each element is a Particles object.
+            Julia matrix where each element is Complex{Particles}.
         """
         self._jl_mat = jl_particles_matrix
         self.shape = (2, 2)
         
         # Extract samples to (2, 2, n) numpy array
-        # Get n from first element
-        first_element = jl_particles_matrix[0, 0]
-        n_samples = len(first_element.particles)
+        # For Complex{Particles}, extract from real part to get n_samples
+        first_element_real = jl_particles_matrix[0, 0].real
+        n_samples = len(first_element_real.particles)
         
         self._particles_array = np.zeros(
             (2, 2, n_samples),
@@ -49,10 +42,13 @@ class ParticlesMatrix:
         
         for i in range(2):
             for j in range(2):
-                element_particles = jl_particles_matrix[i, j]
-                self._particles_array[i, j, :] = np.asarray(
-                    element_particles.particles,
-                    dtype=np.complex128
+                element = jl_particles_matrix[i, j]  # This is Complex{Particles}
+                # Extract real and imaginary parts (each is Particles)
+                real_part = element.real.particles
+                imag_part = element.imag.particles
+                self._particles_array[i, j, :] = (
+                    np.asarray(real_part, dtype=np.float64) +
+                    1j * np.asarray(imag_part, dtype=np.float64)
                 )
         
         # Compute statistics

@@ -175,13 +175,14 @@ def propagate_fiber(
     mcm.StaticParticles : Create fixed-seed ensemble (deterministic).
     ParticlesMatrix : Return type for ensemble results.
     """
+    
     # Input validation
     if not isinstance(lambda_m, (int, float)) or lambda_m <= 0:
         raise ValueError(f"wavelength_m must be positive, got {lambda_m}")
     if rtol <= 0 or atol <= 0:
         raise ValueError(f"Tolerances must be positive, got rtol={rtol}, atol={atol}")
     
-    # Call Julia (passes Particles through directly if present)
+    # Call Julia
     jl = get_jl()
     J_jl, stats_jl = jl.Bifrost.propagate_fiber(
         fiber,
@@ -191,18 +192,8 @@ def propagate_fiber(
         verbose=verbose,
     )
     
-    # Detect if result is Particles (each matrix element is a Particles object)
-    is_ensemble = _is_particles_matrix(J_jl)
-    
-    if is_ensemble:
-        # Return ParticlesMatrix wrapper
-        J = ParticlesMatrix(J_jl)
-        stats = jl_particles_stats_to_python(stats_jl)
-    else:
-        # Regular deterministic result
-        J, stats = convert_propagate_result(J_jl, stats_jl)
-    
-    return J, stats
+    # Convert: handles both deterministic and ensemble automatically
+    return convert_propagate_result(J_jl, stats_jl)
 
 
 def _is_particles_matrix(mat: Any) -> bool:
