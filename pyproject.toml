@@ -17,5 +17,4 @@ optional-dependencies = {
 }
 
 [tool.setuptools]
-package-dir = {"" = "src/bifrost_py"}
-packages = ["bifrost_py"]
+packages = ["src/bifrost_py"]
