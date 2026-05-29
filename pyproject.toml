@@ -12,9 +12,6 @@ dependencies = [
     "matplotlib>=3.8",
     "numpy>=1.26",
 ]
-optional-dependencies = {
-    dev = ["pytest", "pytest-cov"],
-}
 
 [tool.setuptools]
 packages = ["src/bifrost_py"]
