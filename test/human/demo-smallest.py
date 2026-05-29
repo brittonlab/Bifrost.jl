@@ -17,3 +17,7 @@ bf.straight_b(spec, length=0.5)
 
 fiber = bf.Fiber(bf.build(spec), cross_section=xs, T_ref_K=297.15)
 J, stats = bf.propagate_fiber(fiber, lambda_m=1550e-9)
+
+print("Jones matrix:")
+print(J)
+print(f"\nintervals: {len(stats)}")
