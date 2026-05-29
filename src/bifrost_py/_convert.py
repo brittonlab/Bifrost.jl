@@ -5,9 +5,11 @@ When Julia functions return complex objects (matrices, named tuples, etc.),
 convert them to standard Python types for better usability.
 """
 
-from typing import Any, Union
+from typing import Any, Union, TYPE_CHECKING
 import numpy as np
-from ._particles_matrix import ParticlesMatrix
+
+if TYPE_CHECKING:
+    from ._particles_matrix import ParticlesMatrix
 
 
 def jl_matrix_to_numpy(jl_matrix: Any) -> np.ndarray:
@@ -23,18 +25,9 @@ def jl_matrix_to_numpy(jl_matrix: Any) -> np.ndarray:
     -------
     np.ndarray
         Numpy array with appropriate dtype (complex128 if complex input).
-    
-    Examples
-    --------
-    >>> J_jl = jl.Bifrost.some_function()  # Returns Julia matrix
-    >>> J = jl_matrix_to_numpy(J_jl)
-    >>> print(type(J), J.dtype)
-    <class 'numpy.ndarray'> complex128
     """
-    # juliacall matrices implement numpy's array interface
     arr = np.asarray(jl_matrix)
     
-    # Ensure proper dtype
     if np.iscomplexobj(arr):
         arr = arr.astype(np.complex128)
     else:
@@ -56,28 +49,33 @@ def jl_namedtuple_to_dict(jl_nt: Any) -> dict:
     -------
     dict
         Dictionary with same keys/values (recursively converts nested structures).
-    
-    Examples
-    --------
-    >>> stats_jl = jl.Bifrost.get_stats()  # Returns NamedTuple
-    >>> stats = jl_namedtuple_to_dict(stats_jl)
-    >>> print(stats["n_intervals"])
-    42
     """
     result = {}
     
-    # Julia NamedTuple exposes keys via indexing
+    # Extract keys from Julia NamedTuple.
+    # Julia's _fields returns Symbols (which are AnyValue in juliacall),
+    # so we MUST convert to string before using getattr.
     try:
-        keys = list(jl_nt._fields)  # Most reliable way
-    except AttributeError:
+        keys = [str(k) for k in jl_nt._fields]
+    except (AttributeError, TypeError):
         try:
-            keys = list(jl_nt.keys())
+            keys = [str(k) for k in jl_nt.keys()]
         except (AttributeError, TypeError):
-            # Fallback: try to iterate
-            keys = list(jl_nt)
+            # Last resort: try to iterate
+            try:
+                keys = [str(k) for k in jl_nt]
+            except (TypeError, AttributeError):
+                return result
     
     for key in keys:
-        val = getattr(jl_nt, key, None) or jl_nt[key]
+        # Safely extract value
+        try:
+            val = getattr(jl_nt, key)
+        except (AttributeError, TypeError):
+            try:
+                val = jl_nt[key]
+            except (KeyError, TypeError, IndexError):
+                continue
         
         # Recursively convert nested structures
         if hasattr(val, "_fields"):  # Another NamedTuple
@@ -90,32 +88,9 @@ def jl_namedtuple_to_dict(jl_nt: Any) -> dict:
                 for v in val
             ]
         
-        result[str(key)] = val
+        result[key] = val
     
     return result
-
-
-def convert_propagate_result(J_jl: Any, stats_jl: Any) -> tuple[np.ndarray, dict]:
-    """
-    Convert propagate_fiber return values to Python types.
-    
-    Parameters
-    ----------
-    J_jl : Any
-        Julia Jones matrix (2×2 complex).
-    stats_jl : Any
-        Julia NamedTuple with propagation statistics.
-    
-    Returns
-    -------
-    J : np.ndarray
-        Shape (2, 2), dtype complex128.
-    stats : dict
-        Dictionary with keys like 'n_intervals', 'arc_length_m', etc.
-    """
-    J = jl_matrix_to_numpy(J_jl)
-    stats = jl_namedtuple_to_dict(stats_jl)
-    return J, stats
 
 
 def jl_particles_to_numpy(jl_p: Any) -> np.ndarray:
@@ -132,7 +107,6 @@ def jl_particles_to_numpy(jl_p: Any) -> np.ndarray:
     np.ndarray
         1D array of samples.
     """
-    # Julia Particles exposes .particles field
     return np.asarray(jl_p.particles, dtype=np.complex128)
 
 
@@ -150,6 +124,7 @@ def jl_particles_matrix_to_python(jl_mat: Any) -> "ParticlesMatrix":
     ParticlesMatrix
         Wrapper providing .particles, .mean, .std properties.
     """
+    from ._particles_matrix import ParticlesMatrix
     return ParticlesMatrix(jl_mat)
 
 
@@ -173,30 +148,33 @@ def jl_particles_stats_to_python(stats_jl: Any) -> dict:
     result = {}
     
     try:
-        keys = list(stats_jl._fields)
+        keys = [str(k) for k in stats_jl._fields]
     except AttributeError:
-        keys = list(stats_jl.keys()) if hasattr(stats_jl, 'keys') else []
+        keys = [str(k) for k in stats_jl.keys()] if hasattr(stats_jl, 'keys') else []
     
     for key in keys:
-        val = getattr(stats_jl, key, None) or stats_jl[key]
+        try:
+            val = getattr(stats_jl, key)
+        except (AttributeError, TypeError):
+            try:
+                val = stats_jl[key]
+            except (KeyError, TypeError, IndexError):
+                continue
         
         # If Particles, reduce to mean
         if hasattr(val, "particles"):
             particles_array = np.asarray(val.particles)
-            result[str(key)] = np.mean(particles_array)
-            result[str(key) + "_std"] = np.std(particles_array)
+            result[key] = np.mean(particles_array)
+            result[key + "_std"] = np.std(particles_array)
         elif hasattr(val, "__array__"):
-            result[str(key)] = np.asarray(val)
+            result[key] = np.asarray(val)
         else:
-            result[str(key)] = val
+            result[key] = val
     
     return result
 
 
-def convert_propagate_result(
-    J_jl: Any,
-    stats_jl: Any
-) -> tuple[np.ndarray, dict]:
+def convert_propagate_result(J_jl: Any, stats_jl: Any) -> tuple[np.ndarray, dict]:
     """
     Convert deterministic propagate_fiber result to numpy.
     
