@@ -198,11 +198,12 @@ Examples
 
 __version__ = "0.1.0"
 
+# Utilities
+import numpy as np
+from numpy import pi
+
 # Core API
 from .bifrost_py import start, info, load_plots, __getattr__, __dir__
-
-# Wrapped high-level function
-from ._propagate import propagate_fiber
 
 # Result type for ensemble propagation
 from ._particles_matrix import ParticlesMatrix
@@ -210,9 +211,9 @@ from ._particles_matrix import ParticlesMatrix
 # MCM submodule
 from . import _mcm as mcm
 
-# Utilities
-import numpy as np
-from numpy import pi
+# Wrapped high-level function
+from ._propagate import propagate_fiber
+from ._fiber_proxy import Fiber
 
 __all__ = [
     # Bootstrap
@@ -221,6 +222,7 @@ __all__ = [
     "load_plots",
     # Wrapped entry point
     "propagate_fiber",
+    "Fiber",
     # Result type for ensembles
     "ParticlesMatrix",
     # MCM support

@@ -75,6 +75,7 @@ def start(
         jl.seval("import Pkg; Pkg.instantiate()")
 
     jl.seval("using Bifrost")
+    jl.seval("using MonteCarloMeasurements")
 
     _jl = jl
     _start_kwargs = kwargs

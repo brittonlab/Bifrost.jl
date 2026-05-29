@@ -93,10 +93,11 @@ class Particles:
     
     @property
     def _julia_type(self) -> Any:
-        """Convert to Julia Particles object."""
+        """Convert to Julia StaticParticles object."""
         jl = get_jl()
-        # Use juliacall to pass to Julia's MCM.Particles
-        return jl.MonteCarloMeasurements.Particles(self.particles)
+        # Convert numpy array to Julia Vector explicitly
+        jl_array = jl.Vector(self.particles)
+        return jl.MonteCarloMeasurements.StaticParticles(jl_array)
     
     def __repr__(self) -> str:
         return f"Particles(n={self.n}, mean={self.mean:.4f}, std={self.std:.4f})"
@@ -151,7 +152,9 @@ class StaticParticles:
     def _julia_type(self) -> Any:
         """Convert to Julia StaticParticles object."""
         jl = get_jl()
-        return jl.MonteCarloMeasurements.StaticParticles(self.particles)
+        # Convert numpy array to Julia Vector explicitly
+        jl_array = jl.Vector(self.particles)
+        return jl.MonteCarloMeasurements.StaticParticles(jl_array)
     
     def __repr__(self) -> str:
         return f"StaticParticles(n={self.n}, mean={self.mean:.4f}, std={self.std:.4f})"
