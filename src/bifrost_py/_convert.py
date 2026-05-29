@@ -52,43 +52,76 @@ def jl_namedtuple_to_dict(jl_nt: Any) -> dict:
     """
     result = {}
     
-    # Extract keys from Julia NamedTuple.
-    # Julia's _fields returns Symbols (which are AnyValue in juliacall),
-    # so we MUST convert to string before using getattr.
+    # Extract keys and values from Julia NamedTuple.
+    # Julia's _fields returns Symbols, so we index by position to be safe.
     try:
-        keys = [str(k) for k in jl_nt._fields]
-    except (AttributeError, TypeError):
+        fields = jl_nt._fields
+        n_fields = len(fields)
+        
+        for i in range(n_fields):
+            # Get key as string
+            key = str(fields[i])
+            # Index by position (more reliable than getattr with converted strings)
+            val = jl_nt[i]
+            
+            # Recursively convert nested structures
+            if hasattr(val, "_fields"):  # Another NamedTuple
+                val = jl_namedtuple_to_dict(val)
+            elif hasattr(val, "__array__"):  # Matrix-like
+                val = jl_matrix_to_numpy(val)
+            elif isinstance(val, (list, tuple)):
+                val = [
+                    jl_matrix_to_numpy(v) if hasattr(v, "__array__") else v
+                    for v in val
+                ]
+            
+            result[key] = val
+            
+    except (AttributeError, TypeError, IndexError):
+        # Fallback: try dict-like access
         try:
-            keys = [str(k) for k in jl_nt.keys()]
-        except (AttributeError, TypeError):
-            # Last resort: try to iterate
-            try:
-                keys = [str(k) for k in jl_nt]
-            except (TypeError, AttributeError):
-                return result
-    
-    for key in keys:
-        # Safely extract value
-        try:
-            val = getattr(jl_nt, key)
-        except (AttributeError, TypeError):
-            try:
+            for key in jl_nt.keys():
+                key_str = str(key)
                 val = jl_nt[key]
-            except (KeyError, TypeError, IndexError):
-                continue
-        
-        # Recursively convert nested structures
-        if hasattr(val, "_fields"):  # Another NamedTuple
-            val = jl_namedtuple_to_dict(val)
-        elif hasattr(val, "__array__"):  # Matrix-like
-            val = jl_matrix_to_numpy(val)
-        elif isinstance(val, (list, tuple)):
-            val = [
-                jl_matrix_to_numpy(v) if hasattr(v, "__array__") else v
-                for v in val
-            ]
-        
-        result[key] = val
+                result[key_str] = val
+        except (AttributeError, TypeError):
+            pass
+    
+    return result
+
+
+def jl_vector_of_structs_to_list(jl_vec: Any) -> list:
+    """
+    Convert a Julia Vector of structs to a Python list of dicts.
+    
+    Parameters
+    ----------
+    jl_vec : Any
+        Julia Vector where each element is a struct (has ._fields).
+    
+    Returns
+    -------
+    list
+        List of dicts, one per struct.
+    
+    Examples
+    --------
+    Julia:  [PropagatorStats(1, 0), PropagatorStats(2, 1)]
+    Python: [{'accepted_steps': 1, 'rejected_steps': 0}, 
+             {'accepted_steps': 2, 'rejected_steps': 1}]
+    """
+    result = []
+    try:
+        for item in jl_vec:
+            if hasattr(item, "_fields"):
+                # It's a struct-like object
+                result.append(jl_namedtuple_to_dict(item))
+            elif hasattr(item, "__array__"):
+                result.append(jl_matrix_to_numpy(item))
+            else:
+                result.append(item)
+    except (TypeError, AttributeError):
+        pass
     
     return result
 
@@ -174,12 +207,35 @@ def jl_particles_stats_to_python(stats_jl: Any) -> dict:
     return result
 
 
-def convert_propagate_result(J_jl: Any, stats_jl: Any) -> tuple[np.ndarray, dict]:
+def convert_propagate_result(J_jl: Any, stats_jl: Any) -> tuple[np.ndarray, Union[dict, list]]:
     """
-    Convert deterministic propagate_fiber result to numpy.
+    Convert propagate_fiber return values to Python types.
     
-    (For ensemble results, use ParticlesMatrix directly.)
+    Parameters
+    ----------
+    J_jl : Any
+        Julia Jones matrix (2×2 complex).
+    stats_jl : Any
+        Julia stats. Can be:
+        - A NamedTuple (single struct)
+        - A Vector of structs (list of PropagatorStats)
+    
+    Returns
+    -------
+    J : np.ndarray
+        Shape (2, 2), dtype complex128.
+    stats : dict or list
+        If NamedTuple: dict with keys like 'n_intervals', 'arc_length_m', etc.
+        If Vector of structs: list of dicts, one per interval.
     """
     J = jl_matrix_to_numpy(J_jl)
-    stats = jl_namedtuple_to_dict(stats_jl)
+    
+    # Detect if stats_jl is a vector or a NamedTuple
+    if hasattr(stats_jl, "__len__") and not hasattr(stats_jl, "_fields"):
+        # It's a vector/list (has __len__ but no _fields)
+        stats = jl_vector_of_structs_to_list(stats_jl)
+    else:
+        # It's a NamedTuple or dict-like
+        stats = jl_namedtuple_to_dict(stats_jl)
+    
     return J, stats

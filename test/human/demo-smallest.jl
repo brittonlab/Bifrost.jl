@@ -23,6 +23,7 @@ J, stats = propagate_fiber(fiber; λ_m = 1550e-9, rtol = 1e-9, verbose = false)
 println("J =")
 display(J)
 println("intervals = ", length(stats))
+println("Accepted = ", stats[1].accepted_steps, "; Rejected = ", stats[1].rejected_steps)
 
 # plot_path = write_path_geometry_plot3d(
 #     path,
