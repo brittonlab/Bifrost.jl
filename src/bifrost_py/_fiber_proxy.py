@@ -36,7 +36,6 @@ def Fiber(path, cross_section, T_ref_K=None):
     
     # Convert Particles to Julia type if present
     if T_ref_K is not None and hasattr(T_ref_K, '_julia_type'):
-        print("Yeah, it's got it")
         jl_temperature = T_ref_K._julia_type
     else:
         jl_temperature = T_ref_K

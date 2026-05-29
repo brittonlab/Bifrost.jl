@@ -5,6 +5,8 @@ import bifrost_py as bf
 import numpy as np
 from scipy.stats import norm
 
+N_SAMPLES = 100
+
 
 def jones_to_rotation_angle(J):
     """
@@ -61,11 +63,10 @@ print("Creating Monte Carlo ensemble...")
 
 # Temperature: 24°C ± 5°C (normal distribution, 50 samples)
 T_dist = norm(loc=297.15, scale=5.0)  # mean, std
-T_K_particles = bf.mcm.StaticParticles(n=50, distribution=T_dist, seed=42)
+T_K_particles = bf.mcm.StaticParticles(n=N_SAMPLES, distribution=T_dist, seed=42)
 
 print(f"  Temperature: {T_K_particles.mean:.2f} ± {T_K_particles.std:.2f} K")
 print(f"  Samples: {T_K_particles.n}")
-print(T_K_particles._julia_type)
 
 # Fiber with uncertain temperature
 fiber_mcm = bf.Fiber(path, cross_section=xs, T_ref_K=T_K_particles)
@@ -106,14 +107,14 @@ angles = np.array(angles)
 
 print("\nResults:")
 print(f"  Temperature range: {T_K_particles.particles.min():.2f}–{T_K_particles.particles.max():.2f} K")
-print(f"  Rotation angle (rad):")
-print(f"    Mean:  {np.mean(angles):.6f}")
-print(f"    Std:   {np.std(angles):.6f}")
-print(f"    Min:   {np.min(angles):.6f}")
-print(f"    Max:   {np.max(angles):.6f}")
+print(f"  Rotation angle (°):")
+print(f"    Mean:  {np.mean(angles*180/np.pi):.3f}")
+print(f"    Std:   {np.std(angles*180/np.pi):.4f}")
+print(f"    Min:   {np.min(angles*180/np.pi):.3f}")
+print(f"    Max:   {np.max(angles*180/np.pi):.3f}")
 
 print("\nFirst 5 samples:")
 for k in range(min(5, J_particles.n_samples)):
     T_k = T_K_particles.particles[k]
     theta_k = angles[k]
-    print(f"  Sample {k+1}: T={T_k-273.15:.2f}°C, θ={theta_k:.6f} rad")
+    print(f"  Sample {k+1}: T={T_k-273.15:.2f}°C, θ={theta_k*180/np.pi:.3f}°")

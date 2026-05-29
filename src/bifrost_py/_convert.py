@@ -26,8 +26,23 @@ def jl_matrix_to_numpy(jl_matrix: Any) -> np.ndarray:
     np.ndarray
         Numpy array with appropriate dtype (complex128 if complex input).
     """
+    # Check if this is an ensemble result (2×2 of Complex{Particles})
+    try:
+        if (hasattr(jl_matrix[0, 0], 'real') and 
+            hasattr(jl_matrix[0, 0].real, 'particles')):
+            # It's an ensemble matrix; don't try to convert to numpy here
+            # Let the caller use ParticlesMatrix instead
+            raise ValueError(
+                "Ensemble matrix detected (Complex{Particles}). "
+                "Use jl_particles_matrix_to_python() or ParticlesMatrix() instead."
+            )
+    except (TypeError, IndexError):
+        pass
+    
+    # Regular deterministic matrix
     arr = np.asarray(jl_matrix)
     
+    # Ensure proper dtype
     if np.iscomplexobj(arr):
         arr = arr.astype(np.complex128)
     else:
@@ -207,35 +222,34 @@ def jl_particles_stats_to_python(stats_jl: Any) -> dict:
     return result
 
 
-def convert_propagate_result(J_jl: Any, stats_jl: Any) -> tuple[np.ndarray, Union[dict, list]]:
+def convert_propagate_result(
+    J_jl: Any,
+    stats_jl: Any
+) -> tuple[Union[np.ndarray, "ParticlesMatrix"], Union[dict, list]]:
     """
-    Convert propagate_fiber return values to Python types.
+    Convert propagate_fiber result to numpy/Python types.
     
-    Parameters
-    ----------
-    J_jl : Any
-        Julia Jones matrix (2×2 complex).
-    stats_jl : Any
-        Julia stats. Can be:
-        - A NamedTuple (single struct)
-        - A Vector of structs (list of PropagatorStats)
-    
-    Returns
-    -------
-    J : np.ndarray
-        Shape (2, 2), dtype complex128.
-    stats : dict or list
-        If NamedTuple: dict with keys like 'n_intervals', 'arc_length_m', etc.
-        If Vector of structs: list of dicts, one per interval.
+    Detects whether result is deterministic or ensemble and handles accordingly.
     """
-    J = jl_matrix_to_numpy(J_jl)
+    from ._particles_matrix import ParticlesMatrix
     
-    # Detect if stats_jl is a vector or a NamedTuple
-    if hasattr(stats_jl, "__len__") and not hasattr(stats_jl, "_fields"):
-        # It's a vector/list (has __len__ but no _fields)
+    # Detect ensemble result
+    is_ensemble = False
+    try:
+        # Check if any element is Complex{Particles}
+        elem = J_jl[0, 0]
+        if hasattr(elem, 'real') and hasattr(elem.real, 'particles'):
+            is_ensemble = True
+    except (TypeError, IndexError, AttributeError):
+        pass
+    
+    if is_ensemble:
+        # Ensemble result: J is Complex{Particles}, stats is Vector{PropagatorStats}
+        J = ParticlesMatrix(J_jl)
         stats = jl_vector_of_structs_to_list(stats_jl)
     else:
-        # It's a NamedTuple or dict-like
-        stats = jl_namedtuple_to_dict(stats_jl)
+        # Deterministic result: J is Complex64, stats is Vector{PropagatorStats}
+        J = jl_matrix_to_numpy(J_jl)
+        stats = jl_vector_of_structs_to_list(stats_jl)
     
     return J, stats
