@@ -83,6 +83,7 @@ J_particles0, stats0 = propagate_fiber(
 println("    Extracting rotation angles per sample...")
 n_samples = length(real(J_particles0[1, 1]).particles)
 angles0 = Float64[]
+on_diags0 = ComplexF64[]
 
 for k in 1:n_samples
     # Extract k-th sample from each matrix element
@@ -92,7 +93,7 @@ for k in 1:n_samples
     ]
     θ_k = jones_to_rotation_angle(J_k)
     push!(angles0, θ_k)
-    #k <= 3 ? display(J_k) : nothing
+    push!(on_diags0, J_k[1,1])
 end
 println("    Done.")
 
@@ -129,7 +130,7 @@ J_particles1, stats1 = propagate_fiber(
 println("    Extracting rotation angles per sample...")
 n_samples = length(real(J_particles1[1, 1]).particles)
 angles1 = Float64[]
-T_eff = Float64[]  # Effective temperature for each sample
+on_diags1 = ComplexF64[]
 
 for k in 1:n_samples
     # Extract k-th sample
@@ -139,7 +140,7 @@ for k in 1:n_samples
     ]
     θ_k = jones_to_rotation_angle(J_k)
     push!(angles1, θ_k)
-    push!(T_eff, T_ref_K + T_K_samples1.particles[k])
+    push!(on_diags1, J_k[1,1])
 end
 println("    Done.")
 
@@ -161,7 +162,10 @@ println("Bend-only temperature varied:")
 #
 # The fact that the SDs are very different (and the means are different at all)
 # is an indication of an underlying physics failure.
-#
+
+println(" ")
+println(" ")
+
 # Two possible failure points: MCMAdd meta interpretation and generator construction.
 #
 # The generators should be easy to check. So let's start there.
@@ -176,6 +180,43 @@ fiber_base = Fiber(path0; cross_section = xs, T_ref_K = T_ref_K)
 # )
 # But we won't do that...
 K_base = generator_K(fiber_base, fiber_base.cross_section, λ_0)
+println("Base generator checks:")
 println(K_base(0.1))
 println(K_base(0.5005))
-println(K_base(0.7))
+println(K_base(0.9))
+result = K_base(0.1)
+println("Type of result[1,1]: $(typeof(result[1,1]))")
+println(result[1,1])
+result = K_base(0.5005)
+println("Type of result[1,1]: $(typeof(result[1,1]))")
+println(result[1,1])
+#
+# Running this:
+# println(K_base(0.1))
+# println(K_base(0.5005))
+# println(K_base(0.7))
+# This returns:
+# ComplexF64[0.0 + 0.0im 0.0 + 0.0im; 0.0 + 0.0im 0.0 + 0.0im]
+# ComplexF64[0.0 - 10.558396096235342im -0.0 - 0.0im; 0.0 - 0.0im 0.0 + 10.558396096235342im]
+# ComplexF64[0.0 + 0.0im 0.0 + 0.0im; 0.0 + 0.0im 0.0 + 0.0im]
+#
+# All of this is reasonable. It might seem weird that K = [0], but the generator is 
+# K ∝ ϵ - n_avg^2. So that makes sense.
+# Let's try it with the MCM-modified fiber:
+K_MCM = generator_K(fiber_modified, fiber_modified.cross_section, λ_0)
+println("MCM'd generator checks:")
+println(K_MCM(0.1))
+println(K_MCM(0.5005))
+println(K_MCM(0.9))
+result = K_MCM(0.1)
+println("Type of result[1,1]: $(typeof(result[1,1]))")
+println(result[1,1])
+result = K_MCM(0.5005)
+println("Type of result[1,1]: $(typeof(result[1,1]))")
+println(result[1,1])
+
+# This returns the fact that, for the bend-only gend generator, we get a
+# Complex{Particles{Float64, 100}} return type.
+# Are the off-diagonals varying the same? Let's see.
+@printf "Whole fiber: %.6f + %.6f i\n" std(real.(on_diags0)) std(imag.(on_diags0))
+@printf "Bend only:   %.6f + %.6f i\n" std(real.(on_diags1)) std(imag.(on_diags1))
