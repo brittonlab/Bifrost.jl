@@ -22,6 +22,7 @@ using Printf
 using MonteCarloMeasurements
 
 const N_SAMPLES = 100
+const λ_0 = 1550e-9
 
 # Reference temperature: 24°C (fixed for the whole fiber)
 T_ref_K = 297.15
@@ -74,7 +75,7 @@ fiber_mcm0 = Fiber(path0; cross_section = xs, T_ref_K = T_K_samples0)
 println("    Propagating fiber with uncertain temperature ($(N_SAMPLES) samples)...")
 J_particles0, stats0 = propagate_fiber(
     fiber_mcm0;
-    λ_m = 1550e-9,
+    λ_m = λ_0,
     rtol = 1e-9,
     verbose = false,
 )
@@ -119,7 +120,7 @@ fiber_modified = Fiber(modified_path; cross_section = xs, T_ref_K = T_ref_K)
 println("    Propagating with segment-level temperature variation...")
 J_particles1, stats1 = propagate_fiber(
     fiber_modified;
-    λ_m = 1550e-9,
+    λ_m = λ_0,
     rtol = 1e-9,
     verbose = false,
 )
@@ -160,3 +161,21 @@ println("Bend-only temperature varied:")
 #
 # The fact that the SDs are very different (and the means are different at all)
 # is an indication of an underlying physics failure.
+#
+# Two possible failure points: MCMAdd meta interpretation and generator construction.
+#
+# The generators should be easy to check. So let's start there.
+fiber_base = Fiber(path0; cross_section = xs, T_ref_K = T_ref_K)
+
+# The propagate_fiber() call that should work:
+# J_base, stats_base = propagate_fiber(
+#     fiber_base;
+#     λ_m = 1550e-9,
+#     rtol = 1e-9,
+#     verbose = false,
+# )
+# But we won't do that...
+K_base = generator_K(fiber_base, fiber_base.cross_section, λ_0)
+println(K_base(0.1))
+println(K_base(0.5005))
+println(K_base(0.7))
