@@ -16,7 +16,7 @@ $$ \frac{\partial^2\vec{E}}{\partial z^2} = -k_0^2 \epsilon \vec{E}. $$
 
 Here $k_0 = \omega/c$ and $\epsilon$ is the permittivity tensor. This is what contains all of the interesting physics; we'll come back to it in a moment.
 
-We approximate the waves as transverse, so $\vec{E} = (E_x, E_y)$ (i.e. only two components). There is a common phase gained by both polarization modes of the form $e^{-i k_0 \bar{n} z}$ where $\bar{n}$ is an average refractive index. Let's transform this away by defining $E_{x,y} = \mathcal{E}_{x,y} e^{-ik_0 \bar{n}z}$. If the anisotropy is low ($\epsilon_i, \epsilon_c \ll \bar{\epsilon}$), then this acts like a slowly-varying envelope approximation and, upon substitution into our wave equation, we can ignore the second-order derivatives of $\mathcal{E}_{x,y}$, which turns our wave equation into a Schr\"odinger-like equation:
+We approximate the waves as transverse, so $\vec{E} = (E_x, E_y)$ (i.e. only two components). There is a common phase gained by both polarization modes of the form $e^{-i k_0 \bar{n} z}$ where $\bar{n}$ is an average refractive index. Let's transform this away by defining $E_{x,y} = \mathcal{E}_{x,y} e^{-ik_0 \bar{n}z}$. If the anisotropy is low ($\epsilon_i, \epsilon_c \ll \bar{\epsilon}$), then this acts like a slowly-varying envelope approximation and, upon substitution into our wave equation, we can ignore the second-order derivatives of $\mathcal{E}_{x,y}$, which turns our wave equation into a Schrödinger-like equation:
 
 $$ 2i\bar{n} \frac{\partial \mathcal{E}}{\partial z} = k_0(\epsilon - \bar{n}^2)\mathcal{E}. $$
 
