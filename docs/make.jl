@@ -42,6 +42,6 @@ makedocs(
 
 deploydocs(
     repo = "github.com/brittonlab/BIFROST.git",
-    devbranch = "main",
+    devbranch = "documentor-support",  # TEMP: demo deploy from this branch; restore "main" before merge
     push_preview = true,
 )

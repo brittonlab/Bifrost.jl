@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - documentor-support   # TEMP: demo the workflow from this branch; remove before merge
     tags: ['*']
   pull_request:
   workflow_dispatch:
