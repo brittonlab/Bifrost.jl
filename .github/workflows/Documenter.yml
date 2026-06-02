@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64]   # TEMP: demo on @jbqubit's Mac runner; restore ubuntu-latest before merge
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
