@@ -240,15 +240,16 @@ broadcasts elementwise over a `Particles` length.
 struct StraightSegment{T} <: AbstractPathSegment
     length::T
     meta::Vector{AbstractMeta}
-end
 
-"""
-    StraightSegment(length; meta=AbstractMeta[]) -> StraightSegment
+    """
+        StraightSegment(length; meta=AbstractMeta[]) -> StraightSegment
 
-Construct a straight segment of signed `length`. See [`AbstractPathSegment`](@ref).
-"""
-function StraightSegment(length; meta = AbstractMeta[])
-    StraightSegment{typeof(length)}(length, Vector{AbstractMeta}(meta))
+    Construct a straight segment of signed `length`. See
+    [`AbstractPathSegment`](@ref).
+    """
+    function StraightSegment(length; meta = AbstractMeta[])
+        new{typeof(length)}(length, Vector{AbstractMeta}(meta))
+    end
 end
 
 """
