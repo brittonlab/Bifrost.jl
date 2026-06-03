@@ -154,34 +154,31 @@ function demo_path_geometry_jumps_min_radius(;
                incoming_tangent = (0.0, 0.0, -1.0),
                min_bend_radius = 0.4)
 
-    # Subpath 2: starts at (1,0,1) heading -z, straight to (1,0,0), seals
-    # to (2,0,0) with incoming tangent (0,0,1).
+    # Subpath 2: inherits sb1's endpoint (1,0,1) heading -z via :inherit, runs
+    # straight to (1,0,0), seals to (2,0,0) with incoming tangent (0,0,1). The
+    # start coordinates are no longer hand-loaded — they flow from sb1 (#51).
     sb2 = PG.SubpathBuilder()
-    PG.start!(sb2; point = (1.0, 0.0, 1.0),
-                  outgoing_tangent = (0.0, 0.0, -1.0))
+    PG.start!(sb2, :inherit)
     PG.straight!(sb2; length = 1.0, meta = [PG.Nickname("Sub2 straight")])
     PG.jumpto!(sb2; point = (2.0, 0.0, 0.0),
                incoming_tangent = (0.0, 0.0, 1.0),
                min_bend_radius = 0.1)
 
-    # Subpath 3: starts at (2,0,0) heading +z, straight to (2,0,1),
+    # Subpath 3: inherits sb2's endpoint (2,0,0) heading +z, straight to (2,0,1),
     # seals to (3,0,1) with incoming tangent (0,0,-1).
     sb3 = PG.SubpathBuilder()
-    PG.start!(sb3; point = (2.0, 0.0, 0.0),
-                  outgoing_tangent = (0.0, 0.0, 1.0))
+    PG.start!(sb3, :inherit)
     PG.straight!(sb3; length = 1.0, meta = [PG.Nickname("Sub3 straight")])
     PG.jumpto!(sb3; point = (3.0, 0.0, 1.0),
                incoming_tangent = (0.0, 0.0, -1.0),
                min_bend_radius = 0.05)
 
-    # Subpath 4: starts at (3,0,1) heading -z, straight + interior JumpBy.
-    # JumpBy delta is in the local frame; after the straight, local +z is
-    # global -z, so delta=(-1,0,0) (local) lands at (2,0,0) heading +z.
-    # Seal with an explicit jumpto! at that landing point so the endpoint is
-    # declared up front — Subpath 5 starts there directly, no probe build.
+    # Subpath 4: inherits sb3's endpoint (3,0,1) heading -z, straight + interior
+    # JumpBy. JumpBy delta is in the local frame; after the straight, local +z is
+    # global -z, so delta=(-1,0,0) (local) lands at (2,0,0) heading +z. Seal with
+    # an explicit jumpto! at that landing point.
     sb4 = PG.SubpathBuilder()
-    PG.start!(sb4; point = (3.0, 0.0, 1.0),
-                  outgoing_tangent = (0.0, 0.0, -1.0))
+    PG.start!(sb4, :inherit)
     PG.straight!(sb4; length = 1.0, meta = [PG.Nickname("Sub4 straight")])
     PG.jumpby!(sb4; delta = (-1.0, 0.0, 0.0),
                tangent = (0.0, 0.0, -1.0),
@@ -190,10 +187,10 @@ function demo_path_geometry_jumps_min_radius(;
     PG.jumpto!(sb4; point = (2.0, 0.0, 0.0),
                incoming_tangent = (0.0, 0.0, 1.0))
 
-    # Subpath 5: continues straight from sb4's landing point (2,0,0), +z.
+    # Subpath 5: inherits sb4's landing point (2,0,0) heading +z, continues
+    # straight.
     sb5 = PG.SubpathBuilder()
-    PG.start!(sb5; point = (2.0, 0.0, 0.0),
-                  outgoing_tangent = (0.0, 0.0, 1.0))
+    PG.start!(sb5, :inherit)
     PG.straight!(sb5; length = 1.0, meta = [PG.Nickname("Sub5 straight")])
     sb5 = PG.seal!(sb5)
 
@@ -223,22 +220,20 @@ function demo_path_geometry_pathbuilt(;
     PG.jumpto!(sb1; point = (0.0, 0.0, 0.2),
                incoming_tangent = (0.0, 0.0, 1.0))
 
-    # Subpath 2: starts at (0,0,0.2) tangent +z, quarter bend (axis_angle=0),
-    # so end position (R, 0, 0.2 + R) and end tangent +x.
+    # Subpath 2: inherits sb1's endpoint (0,0,0.2) tangent +z, quarter bend
+    # (axis_angle=0), so end position (R, 0, 0.2 + R) and end tangent +x.
     R2 = 0.05
     sb2 = PG.SubpathBuilder(meta = [PG.Nickname("Subpath 2: bend")])
-    PG.start!(sb2; point = (0.0, 0.0, 0.2),
-                  outgoing_tangent = (0.0, 0.0, 1.0))
+    PG.start!(sb2, :inherit)
     PG.bend!(sb2; radius = R2, angle = π / 2,
              meta = [PG.Nickname("90° bend")])
     PG.jumpto!(sb2; point = (R2, 0.0, 0.2 + R2),
                incoming_tangent = (1.0, 0.0, 0.0))
 
-    # Subpath 3: starts at (R2, 0, 0.2 + R2) tangent +x, helix in transverse
-    # plane (axis_angle=0). Seal at the helix's natural exit.
+    # Subpath 3: inherits sb2's endpoint (R2, 0, 0.2 + R2) tangent +x, helix in
+    # the transverse plane (axis_angle=0). Seal at the helix's natural exit.
     sb3 = PG.SubpathBuilder(meta = [PG.Nickname("Subpath 3: helix")])
-    PG.start!(sb3; point = (R2, 0.0, 0.2 + R2),
-                  outgoing_tangent = (1.0, 0.0, 0.0))
+    PG.start!(sb3, :inherit)
     PG.helix!(sb3; radius = 0.025, pitch = 0.02, turns = 1.5,
               axis_angle = 0.0, meta = [PG.Nickname("Helix")])
     sb3 = PG.seal!(sb3)

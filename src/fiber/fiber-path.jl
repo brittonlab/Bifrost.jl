@@ -181,6 +181,8 @@ function _resolve_thermal_subpath(sub::Subpath, cross_section::FiberCrossSection
         sub.jumpto_incoming_tangent, sub.jumpto_incoming_curvature,
         sub.jumpto_min_bend_radius, _meta_without(sub.jumpto_meta, :T_K),
         sub.jumpto_natural, sub.jumpto_natural_extra,
+        sub.inherit_start_point, sub.inherit_start_tangent,
+        sub.inherit_start_curvature,
     )
     return (resolved, jumpto_target_length)
 end
@@ -191,12 +193,17 @@ function _build_perturbed(sub::Subpath, cross_section::FiberCrossSection, T_ref_
 end
 
 function _build_perturbed(subs::Vector{Subpath}, cross_section::FiberCrossSection, T_ref_K)
-    builts = SubpathBuilt[
-        let (resolved, target) = _resolve_thermal_subpath(sub, cross_section, T_ref_K)
-            build(resolved; perturb = true, jumpto_target_length = target)
-        end
-        for sub in subs
-    ]
+    # Build sequentially so `:inherit` start fields resolve from the prior built
+    # (thermally expanded, perturbed) endpoint — keeping the chain connected under
+    # thermal expansion. Inherited starts must be resolved before thermal
+    # resolution, which itself probe-builds the Subpath standalone (issue #51).
+    isempty(subs) && throw(ArgumentError("PathBuilt: at least one Subpath required"))
+    builts = Vector{SubpathBuilt}(undef, length(subs))
+    for i in eachindex(subs)
+        sub = i == 1 ? subs[i] : _resolve_inherited_start(subs[i], builts[i-1])
+        (resolved, target) = _resolve_thermal_subpath(sub, cross_section, T_ref_K)
+        builts[i] = build(resolved; perturb = true, jumpto_target_length = target)
+    end
     return build(builts)
 end
 
