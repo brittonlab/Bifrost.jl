@@ -51,7 +51,10 @@ function propagate_test_state(paddles, input_state::Vector{ComplexF64})
         idx = min(searchsortedlast(breaks, Float64(s)), length(values))
         return values[idx]
     end
-    J, stats = propagate_piecewise(K, breaks; rtol = 1e-11, atol = 1e-13, h_init = 0.1)
+    J, stats = propagate_piecewise(
+        K, breaks;
+        params = SolverParams(rtol = 1e-11, atol = 1e-13, h_init = 0.1),
+    )
     return J * input_state, J, stats
 end
 

@@ -128,7 +128,7 @@ function demo_mcm_temperature_ptf(;
     modified_path = fiber_mcm.path  # thermal already applied at construction
     fiber_mod     = Fiber(modified_path; cross_section = _MCM_DEMO_XS, T_ref_K = T_K_particles)
     J_p, _        = propagate_fiber(fiber_mod; λ_m = _MCM_DEMO_λ_M,
-                                    rtol = 1e-5, atol = 1e-9, h_min = 1e-12)
+                                    params = SolverParams(rtol = 1e-5, atol = 1e-9, h_min = 1e-12))
     MonteCarloMeasurements.unsafe_comparisons(false)
 
     N = 50
@@ -265,7 +265,7 @@ function demo_mcm_temperature_ptf_scatter(;
                       T_ref_K       = T_K_particles)
 
     J_p, _ = propagate_fiber(fiber_mod; λ_m = _MCM_DEMO_λ_M,
-                             rtol = 1e-5, atol = 1e-9, h_min = 1e-12)
+                             params = SolverParams(rtol = 1e-5, atol = 1e-9, h_min = 1e-12))
     MonteCarloMeasurements.unsafe_comparisons(false)
 
     # Extract per-particle output state: apply J to [1,0] for each particle.

@@ -90,7 +90,7 @@ function _run_benchmarks(; scenario::Symbol = :propagate)
             # Benchmark: propagate_fiber only (fiber pre-built)
             fiber  = _bench_build_fiber(make_T)
             fn     = () -> propagate_fiber(fiber; λ_m = _MCM_DEMO_λ_M,
-                              rtol = 1e-5, atol = 1e-9, h_min = 1e-12)
+                              params = SolverParams(rtol = 1e-5, atol = 1e-9, h_min = 1e-12))
         else
             # Benchmark: fiber build (incl. :T_K thermal scaling) + propagate
             T_val  = make_T()
@@ -98,11 +98,11 @@ function _run_benchmarks(; scenario::Symbol = :propagate)
             ΔT_K   = T_K - _MCM_DEMO_T_REF_K
             fn     = () -> begin
                 # The build (with thermal scaling) happens here so the benchmark
-                # covers it, mirroring the old modify timing.
+                # covers fiber construction and propagation together.
                 f2 = Fiber(_mcm_demo_fiber(ΔT_K).path;
                            cross_section = _MCM_DEMO_XS, T_ref_K = T_K)
                 propagate_fiber(f2; λ_m = _MCM_DEMO_λ_M,
-                                rtol = 1e-5, atol = 1e-9, h_min = 1e-12)
+                                params = SolverParams(rtol = 1e-5, atol = 1e-9, h_min = 1e-12))
             end
         end
 
@@ -236,7 +236,7 @@ function demo_benchmark_mcm_propagate(;
 )
     desc = "MCM benchmark: propagate_fiber wall time across Float64, " *
            "Particles(2000), StaticParticles(50/100/200).  " *
-           "The reference fiber now includes spinning sensitivity in addition to " *
+           "The reference fiber includes spinning sensitivity in addition to " *
            "temperature dependence.  First-call includes JIT; steady-state is " *
            "post-JIT minimum."
 
@@ -269,7 +269,7 @@ function demo_benchmark_mcm_modify_propagate(;
 )
     desc = "MCM benchmark: modify + Fiber + propagate_fiber wall time across " *
            "Float64, Particles(2000), StaticParticles(50/100/200).  " *
-           "The reference fiber now includes spinning sensitivity in addition to " *
+           "The reference fiber includes spinning sensitivity in addition to " *
            "temperature dependence, and timing covers the full modify + " *
            "propagate pipeline."
 

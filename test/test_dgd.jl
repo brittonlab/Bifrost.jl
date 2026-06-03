@@ -30,7 +30,10 @@ function piecewise_constant_matrix(breaks::Vector{Float64}, values::Vector{Matri
 end
 
 function propagate_dgd_case(K, Komega, breaks; rtol = 1e-11, atol = 1e-13, h_init = 0.05)
-    J, G, stats = propagate_piecewise_sensitivity(K, Komega, breaks; rtol = rtol, atol = atol, h_init = h_init)
+    J, G, stats = propagate_piecewise_sensitivity(
+        K, Komega, breaks;
+        params = SolverParams(rtol = rtol, atol = atol, h_init = h_init),
+    )
     return J, G, stats
 end
 
@@ -199,8 +202,9 @@ end
         )
 
         delta_omega = 1e-5
-        J_plus, _ = propagate_piecewise(K_of_omega(delta_omega), breaks; rtol = 1e-10, atol = 1e-12, h_init = 0.02)
-        J_minus, _ = propagate_piecewise(K_of_omega(-delta_omega), breaks; rtol = 1e-10, atol = 1e-12, h_init = 0.02)
+        fd_params = SolverParams(rtol = 1e-10, atol = 1e-12, h_init = 0.02)
+        J_plus, _ = propagate_piecewise(K_of_omega(delta_omega), breaks; params = fd_params)
+        J_minus, _ = propagate_piecewise(K_of_omega(-delta_omega), breaks; params = fd_params)
         G_fd = (J_plus - J_minus) ./ (2 * delta_omega)
 
         @test opnorm(G_direct - G_fd) <= 1e-8
