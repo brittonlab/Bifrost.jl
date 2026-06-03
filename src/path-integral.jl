@@ -443,29 +443,72 @@ struct PropagatorStats
 end
 
 """
-    propagate_interval!(K, s0, s1, J0; rtol, atol, h_init, h_min, h_max,
-                        safety, growth_max, shrink_min)
+    SolverParams(; rtol, atol, h_init, h_max, h_min, safety, growth_max, shrink_min)
+
+Adaptive step-doubling controls for the `path-integral.jl` propagators.
+
+Pass a `SolverParams` value through the `params` keyword to set the tolerances,
+initial and maximum step sizes, minimum-step guard, and step-size update limits
+used by interval, piecewise, and fiber propagation.
+
+`h_init` and `h_max` default to `nothing`, meaning "derive from the interval":
+the initial step becomes `(s1 - s0) / 100` and the maximum step `s1 - s0`. Pass
+a `Float64` to override either one.
+
+All fields are `Float64` solver controls and never carry uncertainty, so this
+struct sits outside the MCM contract; `MonteCarloMeasurements.Particles` live
+only on the physical inputs.
+
+Default values:
+
+| Field        | Default   | Meaning                                  |
+| ------------ | --------- | ---------------------------------------- |
+| `rtol`       | `1e-9`    | relative tolerance                       |
+| `atol`       | `1e-12`   | absolute tolerance                       |
+| `h_init`     | `nothing` | initial step (`nothing` → `(s1-s0)/100`) |
+| `h_max`      | `nothing` | maximum step (`nothing` → `s1-s0`)       |
+| `h_min`      | `1e-12`   | minimum step (underflow guard)           |
+| `safety`     | `0.9`     | step-update safety factor                |
+| `growth_max` | `2.0`     | maximum step growth on accept            |
+| `shrink_min` | `0.2`     | minimum step shrink on reject            |
+"""
+Base.@kwdef struct SolverParams
+    rtol::Float64                  = 1e-9
+    atol::Float64                  = 1e-12
+    h_init::Union{Nothing,Float64} = nothing   # nothing → (s1 - s0) / 100
+    h_max::Union{Nothing,Float64}  = nothing   # nothing → s1 - s0
+    h_min::Float64                 = 1e-12
+    safety::Float64                = 0.9
+    growth_max::Float64            = 2.0
+    shrink_min::Float64            = 0.2
+end
+
+"""
+    propagate_interval!(K, s0, s1, J0; params = SolverParams())
 
 Propagate `dJ/ds = K(s) * J` over one smooth interval.
 
 The method uses exponential-midpoint step doubling with `phase_insensitive_error`.
-It returns `(J_final, stats)`, where `stats` is a `PropagatorStats` for the
-interval. The input `J0` is copied before stepping.
+Step controls and tolerances are carried by `params::SolverParams`. It returns
+`(J_final, stats)`, where `stats` is a `PropagatorStats` for the interval. The
+input `J0` is copied before stepping.
 """
 function propagate_interval!(
     K,
     s0::Float64,
     s1::Float64,
     J0::AbstractMatrix;
-    rtol::Float64 = 1e-9,
-    atol::Float64 = 1e-12,
-    h_init::Float64 = (s1 - s0) / 100,
-    h_min::Float64 = 1e-12,
-    h_max::Float64 = s1 - s0,
-    safety::Float64 = 0.9,
-    growth_max::Float64 = 2.0,
-    shrink_min::Float64 = 0.2
+    params::SolverParams = SolverParams()
 )
+    rtol = params.rtol
+    atol = params.atol
+    h_min = params.h_min
+    safety = params.safety
+    growth_max = params.growth_max
+    shrink_min = params.shrink_min
+    h_init = isnothing(params.h_init) ? (s1 - s0) / 100 : params.h_init
+    h_max = isnothing(params.h_max) ? (s1 - s0) : params.h_max
+
     s = s0
     J = copy(J0)
     h = min(h_init, s1 - s0)
@@ -521,14 +564,14 @@ function propagate_interval!(
 end
 
 """
-    propagate_interval_sensitivity!(K, Kω, s0, s1, J0; G0, rtol, atol, h_init,
-                                    h_min, h_max, safety, growth_max, shrink_min)
+    propagate_interval_sensitivity!(K, Kω, s0, s1, J0; G0, params = SolverParams())
 
 Propagate the coupled Jones and angular-frequency sensitivity system over one interval.
 
-The equations are `dJ/ds = K(s) * J` and `dG/ds = Kω(s) * J + K(s) * G`.
-The function returns `(J_final, G_final, stats)` and copies both initial matrices
-before stepping.
+The equations are `dJ/ds = K(s) * J` and `dG/ds = Kω(s) * J + K(s) * G`. Step
+controls and tolerances are carried by `params::SolverParams`. The function
+returns `(J_final, G_final, stats)` and copies both initial matrices before
+stepping.
 """
 function propagate_interval_sensitivity!(
     K,
@@ -537,15 +580,17 @@ function propagate_interval_sensitivity!(
     s1::Float64,
     J0::AbstractMatrix;
     G0::AbstractMatrix = zeros(eltype(J0), 2, 2),
-    rtol::Float64 = 1e-9,
-    atol::Float64 = 1e-12,
-    h_init::Float64 = (s1 - s0) / 100,
-    h_min::Float64 = 1e-12,
-    h_max::Float64 = s1 - s0,
-    safety::Float64 = 0.9,
-    growth_max::Float64 = 2.0,
-    shrink_min::Float64 = 0.2
+    params::SolverParams = SolverParams()
 )
+    rtol = params.rtol
+    atol = params.atol
+    h_min = params.h_min
+    safety = params.safety
+    growth_max = params.growth_max
+    shrink_min = params.shrink_min
+    h_init = isnothing(params.h_init) ? (s1 - s0) / 100 : params.h_init
+    h_max = isnothing(params.h_max) ? (s1 - s0) : params.h_max
+
     s = s0
     J = copy(J0)
     G = copy(G0)
@@ -604,13 +649,14 @@ end
 # ----------------------------
 
 """
-    propagate_piecewise(K, breaks; jumps = Dict(), J0 = I, verbose = true, kwargs...)
+    propagate_piecewise(K, breaks; jumps = Dict(), J0 = I, verbose = true,
+                        params = SolverParams())
 
 Propagate `dJ/ds = K(s) * J` across breakpoint-delimited smooth intervals.
 
 `breaks` must be sorted and defines intervals `[breaks[i], breaks[i + 1]]`.
 `jumps` may contain lumped Jones matrices applied immediately after reaching a
-breakpoint. Additional keywords are forwarded to `propagate_interval!`.
+breakpoint. `params::SolverParams` is forwarded to `propagate_interval!`.
 
 Return `(J_final, stats_per_interval)`.
 """
@@ -620,7 +666,7 @@ function propagate_piecewise(
     jumps::AbstractDict = Dict{Float64, Matrix{ComplexF64}}(),
     J0::AbstractMatrix = Matrix{ComplexF64}(I, 2, 2),
     verbose::Bool = true,
-    kwargs...
+    params::SolverParams = SolverParams()
 )
     @assert issorted(breaks)
     J = copy(J0)
@@ -633,7 +679,7 @@ function propagate_piecewise(
         sL = scalar_reduce(breaks[i])
         sR = scalar_reduce(breaks[i+1])
 
-        J, st = propagate_interval!(K, sL, sR, J; kwargs...)
+        J, st = propagate_interval!(K, sL, sR, J; params = params)
         push!(stats, st)
         s_done += sR - sL
 
@@ -656,38 +702,40 @@ function propagate_piecewise(
 end
 
 """
-    propagate_fiber(fiber; λ_m, jumps = Dict(), kwargs...)
+    propagate_fiber(fiber; λ_m, jumps = Dict(), params = SolverParams())
 
 Propagate a path-backed `Fiber` at operating wavelength `λ_m`.
 
 The local generator comes from `generator_K(fiber, λ_m)`, and interval boundaries
-come from `fiber_breakpoints(fiber)`. Additional keywords are forwarded to
+come from `fiber_breakpoints(fiber)`. `params::SolverParams` is forwarded to
 `propagate_piecewise`.
 """
 function propagate_fiber(
     f::Fiber;
     λ_m::Real,
     jumps::AbstractDict = Dict{Float64, Matrix{ComplexF64}}(),
-    kwargs...
+    verbose::Bool = true,
+    params::SolverParams = SolverParams()
 )
     return propagate_piecewise(
         generator_K(f, λ_m),
         fiber_breakpoints(f);
         jumps = jumps,
-        kwargs...,
+        verbose = verbose,
+        params = params,
     )
 end
 
 """
     propagate_piecewise_sensitivity(K, Kω, breaks; jumps = Dict(),
                                     jump_omegas = Dict(), J0 = I, G0 = 0,
-                                    verbose = true, kwargs...)
+                                    verbose = true, params = SolverParams())
 
 Propagate the coupled Jones and angular-frequency sensitivity system across intervals.
 
 The equations are `dJ/ds = K(s) * J` and `dG/ds = Kω(s) * J + K(s) * G`.
 `jumps` are lumped Jones matrices applied after breakpoints, and `jump_omegas`
-are their angular-frequency derivatives. Additional keywords are forwarded to
+are their angular-frequency derivatives. `params::SolverParams` is forwarded to
 `propagate_interval_sensitivity!`.
 
 Return `(J_final, G_final, stats_per_interval)`.
@@ -701,7 +749,7 @@ function propagate_piecewise_sensitivity(
     J0::AbstractMatrix = Matrix{ComplexF64}(I, 2, 2),
     G0::AbstractMatrix = zeros(eltype(J0), 2, 2),
     verbose::Bool = true,
-    kwargs...
+    params::SolverParams = SolverParams()
 )
     @assert issorted(breaks)
     J = copy(J0)
@@ -715,7 +763,9 @@ function propagate_piecewise_sensitivity(
         sL = scalar_reduce(breaks[i])
         sR = scalar_reduce(breaks[i+1])
 
-        J, G, st = propagate_interval_sensitivity!(K, Kω, sL, sR, J; G0 = G, kwargs...)
+        J, G, st = propagate_interval_sensitivity!(
+            K, Kω, sL, sR, J; G0 = G, params = params,
+        )
         push!(stats, st)
         s_done += sR - sL
 
@@ -744,13 +794,13 @@ end
 
 """
     propagate_fiber_sensitivity(fiber; λ_m, jumps = Dict(), jump_omegas = Dict(),
-                                kwargs...)
+                                verbose = true, params = SolverParams())
 
 Propagate a path-backed `Fiber` and its angular-frequency sensitivity.
 
 The local generators come from `generator_K(fiber, λ_m)` and
 `generator_Kω(fiber, λ_m)`, and interval boundaries come from
-`fiber_breakpoints(fiber)`. Additional keywords are forwarded to
+`fiber_breakpoints(fiber)`. `params::SolverParams` is forwarded to
 `propagate_piecewise_sensitivity`.
 """
 function propagate_fiber_sensitivity(
@@ -758,7 +808,8 @@ function propagate_fiber_sensitivity(
     λ_m::Real,
     jumps::AbstractDict = Dict{Float64, Matrix{ComplexF64}}(),
     jump_omegas::AbstractDict = Dict{Float64, Matrix{ComplexF64}}(),
-    kwargs...
+    verbose::Bool = true,
+    params::SolverParams = SolverParams()
 )
     return propagate_piecewise_sensitivity(
         generator_K(f, λ_m),
@@ -766,7 +817,8 @@ function propagate_fiber_sensitivity(
         fiber_breakpoints(f);
         jumps = jumps,
         jump_omegas = jump_omegas,
-        kwargs...
+        verbose = verbose,
+        params = params,
     )
 end
 

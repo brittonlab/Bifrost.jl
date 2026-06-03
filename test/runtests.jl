@@ -21,6 +21,7 @@ _run_test_file(joinpath(@__DIR__, "test_paddle_transfer.jl"))
 _run_test_file(joinpath(@__DIR__, "test_dgd.jl"))
 _run_test_file(joinpath(@__DIR__, "test_fiber_cross_section.jl"))
 _run_test_file(joinpath(@__DIR__, "test_path_integral.jl"))
+_run_test_file(joinpath(@__DIR__, "test_solver_convergence.jl"))
 _run_test_file(joinpath(@__DIR__, "cross-platform_tests.jl"))
 
 let passes = 0, fails = 0, errors = 0

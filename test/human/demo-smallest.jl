@@ -21,11 +21,7 @@ seal!(sb)
 
 fiber = Fiber(build(sb); cross_section = xs, T_ref_K = 297.15)
 
-J, stats = propagate_fiber(
-    fiber;
-    λ_m = 1550e-9,
-    verbose = false,
-)
+J, stats = propagate_fiber(fiber; λ_m = 1550e-9)
 
 println("J =")
 display(J)

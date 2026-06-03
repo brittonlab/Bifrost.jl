@@ -189,7 +189,10 @@ end
         J0 = Matrix{Complex{Particles{Float64, 2000}}}(I, 2, 2)
         # Promote the identity to the Particles eltype so eltype propagation is uniform.
         J0_det = Matrix{ComplexF64}(I, 2, 2)
-        J_out, stats = propagate_interval!(K, 0.0, L, J0_det; rtol = 1e-8, atol = 1e-10)
+        J_out, stats = propagate_interval!(
+            K, 0.0, L, J0_det;
+            params = SolverParams(rtol = 1e-8, atol = 1e-10),
+        )
         @test eltype(J_out) <: Complex{<:Particles}
         # Expected rotation by θ = τ·L:  [cos θ  -sin θ; sin θ  cos θ]
         θ_nom = τ_nom * L
@@ -216,8 +219,10 @@ end
         K = s -> [zT  -(τ + 0im); (τ + 0im)  zT]
         Kω = s -> zeros(ComplexF64, 2, 2)  # no frequency dispersion for pure spinning
         J0 = Matrix{ComplexF64}(I, 2, 2)
-        J_out, G_out, _ = propagate_interval_sensitivity!(K, Kω, 0.0, L, J0;
-                                                          rtol = 1e-8, atol = 1e-10)
+        J_out, G_out, _ = propagate_interval_sensitivity!(
+            K, Kω, 0.0, L, J0;
+            params = SolverParams(rtol = 1e-8, atol = 1e-10),
+        )
         @test eltype(J_out) <: Complex{<:Particles}
         @test eltype(G_out) <: Complex{<:Particles}
         # With Kω = 0 the group-delay operator G should be identically zero.
@@ -490,7 +495,7 @@ end
             bend!(sb; radius = 0.05 ± 0.005, angle = π/2,
                   meta = [Spinning(; rate = 1.0)])
         end
-        # Default endpoints used to crash on Float64(::Particles); now nominalize.
+        # Default endpoints use nominal arc length for an MCM-valued path.
         Ω = total_spinning(path)
         @test Ω isa Float64
         # Spinning rate * nominal arc length.
