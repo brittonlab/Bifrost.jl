@@ -8,7 +8,6 @@ This is a high-level schematic. Do not update it to reflect every file.
 ├── AGENTS.md                        [2]
 ├── ARCHITECTURE.md
 ├── README.md                        [3]
-├── TODO.md                          [17]
 ├── Project.toml
 ├── Manifest.toml
 ├── src                              [8]
@@ -28,9 +27,9 @@ This is a high-level schematic. Do not update it to reflect every file.
 - [2] Notes for tooling workflows.
 - [3] Primary project overview and scientific context.
 - [4L] Legacy Python implementation for birefringence simulation.
-- [7] Documentation, research references, and source material.
+- [7] Documenter.jl documentation 
 - [8] Active source tree 
-****- [9] Standalone material models and refractive-index behavior.
+- [9] Standalone material models and refractive-index behavior.
 - [10] Standalone path construction and differential geometry.
 - [11] Generic adaptive propagation for callable Jones generators.
 - [12] Cross-sectional fiber optics and local birefringence responses.
@@ -39,7 +38,6 @@ This is a high-level schematic. Do not update it to reflect every file.
 - [15] Runnable Julia demos; visual demos write HTML files to `output/`.
 - [16] Reserved Julia nonlinear namespace; legacy Raman and Brillouin Python
   scripts remain under `test/legacy-python/`.
-- [17] TODO list for humans. Starting TODO items requires user authorization.
 - [19] Julia tests.
 - [20] Output of demo methods and generated visual artifacts.
 - [21] Repo-local Python shim for juliacall. 
