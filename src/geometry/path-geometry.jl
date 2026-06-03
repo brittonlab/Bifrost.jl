@@ -1387,16 +1387,16 @@ function _resolve_pending_continuous_spinning(builts::Vector{SubpathBuilt})
         phi_end  = last_run.phi_0 + _integrate_rate(last_run.rate, 0.0, run_len)
 
         # Rebuild this Subpath's resolved_spinning list, replacing the first run's phi_0.
-        rt_old = b.resolved_spinning
-        rt_new = Vector{ResolvedSpinningRate}(undef, length(rt_old))
+        rs_old = b.resolved_spinning
+        rs_new = Vector{ResolvedSpinningRate}(undef, length(rs_old))
         # First run: inherit phi_end. Then propagate forward through subsequent
         # runs that were resolved with prev_phi_0 originating from the (NaN)
         # first run — re-run the phi_0 chain from this corrected start.
         prev_phi_0 = phi_end
         prev_run_length = 0.0
         prev_rate::Union{Float64, Function} = 0.0
-        for k in 1:length(rt_old)
-            r = rt_old[k]
+        for k in 1:length(rs_old)
+            r = rs_old[k]
             if k == 1
                 phi_0 = phi_end
             else
@@ -1412,7 +1412,7 @@ function _resolve_pending_continuous_spinning(builts::Vector{SubpathBuilt})
                 # walk the segments again below.
                 phi_0 = r.phi_0
             end
-            rt_new[k] = ResolvedSpinningRate(r.s_eff_start, r.s_eff_end, r.rate, phi_0)
+            rs_new[k] = ResolvedSpinningRate(r.s_eff_start, r.s_eff_end, r.rate, phi_0)
             prev_phi_0 = phi_0
             prev_run_length = r.s_eff_end - r.s_eff_start
             prev_rate = r.rate
@@ -1422,16 +1422,16 @@ function _resolve_pending_continuous_spinning(builts::Vector{SubpathBuilt})
         # runs that inherited from it, those would also have been computed with
         # prev_phi_0=NaN and need recomputation. Re-resolve from raw anchors with
         # phi_end as the seed.
-        if any(r -> isnan(r.phi_0), rt_old) && length(rt_old) >= 2
+        if any(r -> isnan(r.phi_0), rs_old) && length(rs_old) >= 2
             anchors = _collect_spinning_anchors(_all_placed_segs(b))
             # Recompute with first phi_0 = phi_end (forced is_continuous semantics)
             n_a = length(anchors)
-            rt_new = Vector{ResolvedSpinningRate}(undef, n_a)
+            rs_new = Vector{ResolvedSpinningRate}(undef, n_a)
             prev_phi_0 = phi_end
             prev_run_length = 0.0
             prev_rate = 0.0
             # s_end for the runs is the same as the original
-            s_end = isempty(rt_old) ? 0.0 : rt_old[end].s_eff_end
+            s_end = isempty(rs_old) ? 0.0 : rs_old[end].s_eff_end
             for k in 1:n_a
                 s_start_k, tw = anchors[k]
                 s_run_end = (k < n_a) ? anchors[k + 1][1] : s_end
@@ -1444,7 +1444,7 @@ function _resolve_pending_continuous_spinning(builts::Vector{SubpathBuilt})
                 else
                     phi_0 = tw.phi_0
                 end
-                rt_new[k] = ResolvedSpinningRate(s_start_k, s_run_end, tw.rate, phi_0)
+                rs_new[k] = ResolvedSpinningRate(s_start_k, s_run_end, tw.rate, phi_0)
                 prev_phi_0 = phi_0
                 prev_run_length = s_run_end - s_start_k
                 prev_rate = tw.rate
@@ -1452,7 +1452,7 @@ function _resolve_pending_continuous_spinning(builts::Vector{SubpathBuilt})
         end
 
         out[i] = SubpathBuilt(b.subpath, b.placed_segments, b.jumpto_quintic_connector,
-                              b.jumpto_placed, rt_new, false)
+                              b.jumpto_placed, rs_new, false)
     end
     return out
 end
