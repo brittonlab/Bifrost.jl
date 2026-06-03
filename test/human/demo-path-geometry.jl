@@ -176,8 +176,9 @@ function demo_path_geometry_jumps_min_radius(;
 
     # Subpath 4: starts at (3,0,1) heading -z, straight + interior JumpBy.
     # JumpBy delta is in the local frame; after the straight, local +z is
-    # global -z. So delta=(-1,0,0) (local) means -1 m along global +x.
-    # We'll seal this Subpath at the interior JumpBy's natural endpoint.
+    # global -z, so delta=(-1,0,0) (local) lands at (2,0,0) heading +z.
+    # Seal with an explicit jumpto! at that landing point so the endpoint is
+    # declared up front — Subpath 5 starts there directly, no probe build.
     sb4 = PG.SubpathBuilder()
     PG.start!(sb4; point = (3.0, 0.0, 1.0),
                   outgoing_tangent = (0.0, 0.0, -1.0))
@@ -186,21 +187,18 @@ function demo_path_geometry_jumps_min_radius(;
                tangent = (0.0, 0.0, -1.0),
                min_bend_radius = 0.1,
                meta = [PG.Nickname("Sub4 JumpBy")])
-    sb4 = PG.seal!(sb4)
+    PG.jumpto!(sb4; point = (2.0, 0.0, 0.0),
+               incoming_tangent = (0.0, 0.0, 1.0))
 
-    # Subpath 5: continues straight from sb4's natural endpoint.
+    # Subpath 5: continues straight from sb4's landing point (2,0,0), +z.
     sb5 = PG.SubpathBuilder()
-    sub4 = PG.Subpath(sb4)
-    b4_tmp = PG.build(sub4)
-    end_pos = collect(PG.end_point(b4_tmp))
-    end_tan = collect(PG.end_tangent(b4_tmp))
-    PG.start!(sb5; point = (end_pos[1], end_pos[2], end_pos[3]),
-                  outgoing_tangent = (end_tan[1], end_tan[2], end_tan[3]))
+    PG.start!(sb5; point = (2.0, 0.0, 0.0),
+                  outgoing_tangent = (0.0, 0.0, 1.0))
     PG.straight!(sb5; length = 1.0, meta = [PG.Nickname("Sub5 straight")])
     sb5 = PG.seal!(sb5)
 
     p = PG.build([PG.Subpath(sb1), PG.Subpath(sb2), PG.Subpath(sb3),
-                  sub4, PG.Subpath(sb5)])
+                  PG.Subpath(sb4), PG.Subpath(sb5)])
     println("PathBuilt arc length: ", PG.path_length(p), " m")
     plot_path = _plot_full(p; output, title, fidelity)
     println("Wrote ", plot_path)
