@@ -413,6 +413,149 @@ end
 end
 
 # -----------------------------------------------------------------------
+# :inherit start-state
+# -----------------------------------------------------------------------
+
+# Build the standard transverse-chord predecessor used by several inherit tests:
+# a straight up to (0,0,1) sealed by jumpto! landing at (1,0,1) heading -z.
+function _inherit_predecessor()
+    sb = SubpathBuilder()
+    start!(sb)
+    straight!(sb; length = 1.0)
+    jumpto!(sb; point = (1.0, 0.0, 1.0), incoming_tangent = (0.0, 0.0, -1.0),
+            min_bend_radius = 0.4)
+    return sb
+end
+
+@testset "inherit — :inherit reproduces hand-loaded coordinates" begin
+    # T-SIM-REGRESSION: start!(sb2, :inherit) must yield byte-identical geometry
+    # to hand-loading the predecessor endpoint (1,0,1) with tangent -z.
+    sb2h = SubpathBuilder()
+    start!(sb2h; point = (1.0, 0.0, 1.0), outgoing_tangent = (0.0, 0.0, -1.0))
+    straight!(sb2h; length = 1.0)
+    seal!(sb2h)
+    p_hand = build([Subpath(_inherit_predecessor()), Subpath(sb2h)])
+
+    sb2i = SubpathBuilder()
+    start!(sb2i, :inherit)
+    straight!(sb2i; length = 1.0)
+    seal!(sb2i)
+    p_inh = build([Subpath(_inherit_predecessor()), Subpath(sb2i)])
+
+    s_hi = Float64(_qc_nominalize(path_length(p_hand)))
+    for s in range(0.0, s_hi; length = 21)
+        @test position(p_hand, s) ≈ position(p_inh, s) atol = 1e-12
+        @test tangent(p_hand, s)  ≈ tangent(p_inh, s)  atol = 1e-12
+    end
+end
+
+@testset "inherit — per-field :inherit mixes with explicit values" begin
+    # T-SIM-REGRESSION: inherit point only, set tangent explicitly to the same
+    # value the predecessor exits with; result equals the all-inherit build.
+    sb2m = SubpathBuilder()
+    start!(sb2m; point = :inherit, outgoing_tangent = (0.0, 0.0, -1.0))
+    straight!(sb2m; length = 1.0)
+    seal!(sb2m)
+    p_mix = build([Subpath(_inherit_predecessor()), Subpath(sb2m)])
+
+    sb2i = SubpathBuilder()
+    start!(sb2i, :inherit)
+    straight!(sb2i; length = 1.0)
+    seal!(sb2i)
+    p_inh = build([Subpath(_inherit_predecessor()), Subpath(sb2i)])
+
+    s_hi = Float64(_qc_nominalize(path_length(p_inh)))
+    for s in range(0.0, s_hi; length = 11)
+        @test position(p_mix, s) ≈ position(p_inh, s) atol = 1e-12
+    end
+end
+
+@testset "inherit — tangent from chord-default predecessor" begin
+    # T-SIM-REGRESSION: predecessor jumpto! with incoming_tangent=nothing exits
+    # along the chord direction; :inherit must resolve that concrete tangent
+    # (querying the built geometry), not leave it `nothing`. Check the resolved
+    # start tangent directly via the resolver.
+    pred = SubpathBuilder()
+    start!(pred)
+    straight!(pred; length = 1.0)
+    jumpto!(pred; point = (0.5, 0.0, 1.5))    # no incoming_tangent → chord dir
+    pred_built = build(Subpath(pred))
+
+    sb2 = SubpathBuilder()
+    start!(sb2, :inherit)
+    straight!(sb2; length = 0.3)
+    seal!(sb2)
+    resolved = Bifrost.PathGeometry._resolve_inherited_start(Subpath(sb2), pred_built)
+    @test !resolved.inherit_start_tangent
+    @test collect(resolved.start_outgoing_tangent) ≈ collect(end_tangent(pred_built)) atol = 1e-9
+    # And the full join must build without error.
+    @test build([Subpath(pred), Subpath(sb2)]) isa PathBuilt
+end
+
+@testset "inherit — curvature inherits declared jumpto_incoming_curvature" begin
+    # T-SIM-REGRESSION: when the predecessor declares incoming_curvature, an
+    # :inherit start picks it up; otherwise it defaults to (0,0,0).
+    pred = SubpathBuilder()
+    start!(pred)
+    bend!(pred; radius = 0.5, angle = π / 2)
+    # End of a radius-0.5 quarter bend: declare a matching incoming curvature so
+    # the join is G2 and inheritance has a non-zero value to copy.
+    jumpto!(pred; point = (0.5, 0.0, 0.5), incoming_tangent = (1.0, 0.0, 0.0),
+            incoming_curvature = (0.0, 0.0, -2.0))
+    sb2 = SubpathBuilder()
+    start!(sb2, :inherit)
+    straight!(sb2; length = 0.2)
+    seal!(sb2)
+    resolved = Bifrost.PathGeometry._resolve_inherited_start(
+        Subpath(sb2), build(Subpath(pred)))
+    @test resolved.start_outgoing_curvature == (0.0, 0.0, -2.0)
+    @test !resolved.inherit_start_curvature
+end
+
+@testset "inherit — first Subpath with :inherit is rejected" begin
+    # T-GUARDRAIL: there is no predecessor to inherit from.
+    sb1 = SubpathBuilder()
+    start!(sb1, :inherit)
+    straight!(sb1; length = 1.0)
+    seal!(sb1)
+    sb2 = SubpathBuilder()
+    start!(sb2, :inherit)
+    straight!(sb2; length = 1.0)
+    seal!(sb2)
+    @test_throws ArgumentError build([Subpath(sb1), Subpath(sb2)])
+end
+
+@testset "inherit — standalone build of an inherit Subpath is rejected" begin
+    # T-GUARDRAIL: an unresolved :inherit Subpath cannot be placed alone.
+    sb = SubpathBuilder()
+    start!(sb, :inherit)
+    straight!(sb; length = 1.0)
+    seal!(sb)
+    @test_throws ArgumentError build(Subpath(sb))
+    @test_throws ArgumentError build(sb)
+end
+
+@testset "inherit — non-:inherit symbol is rejected" begin
+    # T-GUARDRAIL: only :inherit is accepted as a symbol.
+    sb = SubpathBuilder()
+    @test_throws ArgumentError start!(sb, :nope)
+    sb2 = SubpathBuilder()
+    @test_throws ArgumentError start!(sb2; point = :nope)
+end
+
+@testset "inherit — non-inherit Vector{Subpath} build is unchanged" begin
+    # T-SIM-REGRESSION: a hand-loaded multi-Subpath build (no :inherit) joins at
+    # the declared coordinates.
+    sb2 = SubpathBuilder()
+    start!(sb2; point = (1.0, 0.0, 1.0), outgoing_tangent = (0.0, 0.0, -1.0))
+    straight!(sb2; length = 1.0)
+    seal!(sb2)
+    p = build([Subpath(_inherit_predecessor()), Subpath(sb2)])
+    # Predecessor ends at (1,0,1) heading -z; a 1 m straight lands at (1,0,0).
+    @test end_point(p) ≈ [1.0, 0.0, 0.0] atol = 1e-8
+end
+
+# -----------------------------------------------------------------------
 # Subpath assembly and build
 # -----------------------------------------------------------------------
 

@@ -78,7 +78,7 @@ module FiberPath
     # (used by the fiber's thermal :T_K interpretation) and a couple of helpers
     # are underscore-prefixed and not exported.
     using ..PathGeometry: _scale_length_fields, _meta_without, _length_fields,
-                          _qc_nominalize
+                          _qc_nominalize, _resolve_inherited_start
     using ..FiberCS
     include("fiber/fiber-path.jl")
     import ..Bifrost: _export_public!
