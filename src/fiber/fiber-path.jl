@@ -180,6 +180,7 @@ function _resolve_thermal_subpath(sub::Subpath, cross_section::FiberCrossSection
         sub.start_outgoing_curvature, new_segments, sub.jumpto_point,
         sub.jumpto_incoming_tangent, sub.jumpto_incoming_curvature,
         sub.jumpto_min_bend_radius, _meta_without(sub.jumpto_meta, :T_K),
+        sub.jumpto_twist,
         sub.jumpto_natural, sub.jumpto_natural_extra,
         sub.spin_rate, sub._spin_phi_at_s0,
     )
