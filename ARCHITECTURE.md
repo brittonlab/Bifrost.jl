@@ -88,8 +88,8 @@ The fiber-specific layers combine those pieces:
      `build(::Vector{Subpath}) → PathBuilt` concatenates multiple independent
      subpaths under a shared global arc length.
    - `start!(builder, :inherit)` (or per-field `point=:inherit`, etc.) defers a
-     subpath's start state to the previous subpath's endpoint; the vector build
-     resolves it sequentially (issue #51). `:inherit` is rejected on the first
+     subpath's start state to the previous subpath's endpoint; `:inherit`
+     is rejected on the first
      subpath and on any standalone build (no predecessor). Hand-loaded start
      coordinates remain valid and are still validated by the conformity check.
    - `build(...; perturb=true)` applies the field-level `MCMadd`/`MCMmul` that
