@@ -243,14 +243,19 @@ end
           reference_bending_birefringence(fiber, λ, T; bend_radius_m = R) rtol = 1e-12
     @test axial_tension_birefringence(fiber, λ, T; bend_radius_m = R, axial_tension_N = tf) ≈
           reference_axial_tension_birefringence(fiber, λ, T; bend_radius_m = R, axial_tension_N = tf) rtol = 1e-12
-    # Pre-existing on origin/main: implementation and reference formula disagree.
-    @test_broken twisting_birefringence(fiber, λ, T; twist_rate_rad_per_m = tr) ≈
+    # Matches legacy `_calc_B_TWS`: Δβ = (1 + (n²/2)(p₁₁−p₁₂))·τ_m, including the
+    # leading geometric-rotation term that the prior implementation omitted.
+    @test twisting_birefringence(fiber, λ, T; twist_rate_rad_per_m = tr) ≈
           reference_twisting_birefringence(fiber, λ, T; twist_rate_rad_per_m = tr) rtol = 1e-12
 
+    # Magnitude convention: the cross-section returns the unsigned birefringence
+    # *magnitude* (ε and 1/ε describe the same ellipse rotated 90°), so swapping
+    # the axes leaves the magnitude unchanged. The antisymmetric sign/orientation
+    # is the fiber generator's job (ellipticity_axis_angle), applied downstream.
     @test core_noncircularity_birefringence(fiber, λ, T; axis_ratio = inv(ε)) ≈
-          -core_noncircularity_birefringence(fiber, λ, T; axis_ratio = ε) rtol = 1e-12
+          core_noncircularity_birefringence(fiber, λ, T; axis_ratio = ε) rtol = 1e-12
     @test asymmetric_thermal_stress_birefringence(fiber, λ, T; axis_ratio = inv(ε)) ≈
-          -asymmetric_thermal_stress_birefringence(fiber, λ, T; axis_ratio = ε) rtol = 1e-12
+          asymmetric_thermal_stress_birefringence(fiber, λ, T; axis_ratio = ε) rtol = 1e-12
 end
 
 @testset "StepIndexCrossSection guided and fluorinated edge cases" begin
