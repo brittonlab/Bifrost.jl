@@ -507,3 +507,72 @@ end
         MonteCarloMeasurements.unsafe_comparisons(false)
     end
 end
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ▓▓▓  twist / ellipticity / local_temperature (#3, #8) MCM compatibility  ▓▓▓
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# The per-segment mechanical-twist rate, the ellipticity fields, and the
+# :T_K-derived local temperature are all uncertainty-carrying slots. The phase
+# accumulators and local_temperature must propagate Particles (no nominalization,
+# no Float64 coercion) so the fiber generator lifts them into the Jones generator.
+
+@testset "MCM :: twist rate propagates Particles through phase + generator" begin
+    MonteCarloMeasurements.unsafe_comparisons(true)
+    try
+        xs = StepIndexCrossSection(
+            SilicaGermaniaGlass(0.036), SilicaGermaniaGlass(0.0), 8.2e-6, 125e-6)
+        τ = 4.0 ± 0.2
+        sb = SubpathBuilder(); start!(sb)
+        straight!(sb; length = 1.0, twist = τ)
+        seal!(sb)
+        f = Fiber(sb; cross_section = xs, T_ref_K = 297.15)
+
+        @test twist_rate(f.path, 0.5) isa Particles
+        @test twist_phase(f.path, 0.5) isa Particles
+        @test pstd(twist_phase(f.path, 0.5)) > 0.0
+        # Mechanical twist drives the circular generator ⇒ Particles eltype.
+        Kval = generator_K(f, 1550e-9)(0.5)
+        @test eltype(Kval) <: Complex{<:Particles}
+    finally
+        MonteCarloMeasurements.unsafe_comparisons(false)
+    end
+end
+
+@testset "MCM :: local_temperature lifts MCMadd(:T_K) Particles" begin
+    MonteCarloMeasurements.unsafe_comparisons(true)
+    try
+        xs = StepIndexCrossSection(
+            SilicaGermaniaGlass(0.036), SilicaGermaniaGlass(0.0), 8.2e-6, 125e-6)
+        ΔT = 0.0 ± 2.0
+        sb = SubpathBuilder(); start!(sb)
+        straight!(sb; length = 1.0, meta = [MCMadd(:T_K, ΔT)])
+        seal!(sb)
+        f = Fiber(sb; cross_section = xs, T_ref_K = 297.15)
+
+        T_loc = local_temperature(f, 0.1)
+        @test T_loc isa Particles
+        @test pmean(T_loc) ≈ 297.15 rtol = 1e-9
+        @test pstd(T_loc) > 0.0
+    finally
+        MonteCarloMeasurements.unsafe_comparisons(false)
+    end
+end
+
+@testset "MCM :: ellipticity fields lift Particles into the generator" begin
+    MonteCarloMeasurements.unsafe_comparisons(true)
+    try
+        xs = StepIndexCrossSection(
+            SilicaGermaniaGlass(0.036), SilicaGermaniaGlass(0.0), 8.2e-6, 125e-6;
+            ellipticity_axis_ratio = 1.05 ± 0.005, ellipticity_axis_angle = 0.2)
+        sb = SubpathBuilder(); start!(sb)
+        straight!(sb; length = 1.0)
+        seal!(sb)
+        f = Fiber(sb; cross_section = xs, T_ref_K = 297.15)
+        Kval = generator_K(f, 1550e-9)(0.5)
+        @test size(Kval) == (2, 2)
+        @test eltype(Kval) <: Complex{<:Particles}
+    finally
+        MonteCarloMeasurements.unsafe_comparisons(false)
+    end
+end
