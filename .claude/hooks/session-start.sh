@@ -47,9 +47,15 @@ juliaup default 1.11 || true
 
 # ----------------------------------------------------------------------
 # 2. Instantiate the Julia project (downloads all package dependencies).
-#    Pkg.instantiate resolves against the checked-in Manifest.toml, so it
-#    is reproducible and benefits from the cached container layer.
+#    The checked-in Manifest.toml can drift out of sync with Project.toml
+#    (a stale project_hash makes Pkg.instantiate fail with errors like
+#    "failed to find source of parent package"). To keep the session robust
+#    against that drift, delete the manifest and let Pkg resolve a fresh,
+#    self-consistent one against Project.toml before instantiating. The
+#    deletion is local to the ephemeral container, so the committed
+#    Manifest.toml is untouched.
 # ----------------------------------------------------------------------
+rm -f "$PROJECT_DIR/Manifest.toml"
 julia --project="$PROJECT_DIR" -e 'using Pkg; Pkg.instantiate()'
 
 # ----------------------------------------------------------------------
