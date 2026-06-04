@@ -1,0 +1,3 @@
+[deps]
+Bifrost = "94b252b5-e259-4c09-a257-2d20bce7d594"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"

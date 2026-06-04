@@ -45,6 +45,17 @@ fi
 juliaup add 1.11 || true
 juliaup default 1.11 || true
 
+# Persist the toolchain on PATH for the rest of the session NOW, before any
+# step that could fail. The harness applies CLAUDE_ENV_FILE to every tool
+# shell, including non-interactive ones where ~/.bashrc returns early at its
+# "[ -z "$PS1" ] && return" guard and so never reaches juliaup's PATH block.
+# Doing this early guarantees `julia` is on PATH even if a later step (e.g.
+# Pkg.instantiate) errors out under `set -e`.
+if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+  echo "export PATH=\"$JULIAUP_DIR/bin:\$HOME/.local/bin:\$PATH\"" \
+    >> "$CLAUDE_ENV_FILE"
+fi
+
 # ----------------------------------------------------------------------
 # 2. Instantiate the Julia project (downloads all package dependencies).
 #    Pkg.instantiate resolves against the checked-in Manifest.toml, so it
@@ -114,9 +125,6 @@ if ! command -v gh >/dev/null 2>&1; then
 fi
 
 # ----------------------------------------------------------------------
-# 5. Persist toolchain on PATH for the rest of the session.
+# 5. PATH persistence already happened right after the Julia install above
+#    (so it survives a later failure under `set -e`). Nothing to do here.
 # ----------------------------------------------------------------------
-if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
-  echo "export PATH=\"$JULIAUP_DIR/bin:\$HOME/.local/bin:\$PATH\"" \
-    >> "$CLAUDE_ENV_FILE"
-fi

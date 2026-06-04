@@ -187,5 +187,6 @@ scattering.
 - Modules, methods, and structs should have inline documentation following Julia norms.
   Write for package users and current behavior; avoid development history, migration
   notes, and references to retired APIs or design choices.
-- Obey the rule JuliaIndexFromLength. Use eachindex() not length() for iterating over 
-  vectors/tensors in loops. 
+- Use `skills/julia-docstrings` for Julia docstring creation, revision, and audits.
+- Obey the rule JuliaIndexFromLength. Use eachindex() not length() for iterating over
+  vectors/tensors in loops.
