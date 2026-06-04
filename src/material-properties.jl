@@ -104,6 +104,39 @@ end
 #
 #################################################
 
+raw"""
+The Sellmeier equation states ``n^2 = 1 + \sum_{i=1}^n B_i\lambda^2/(\lambda^2 - C_i^2)`` where
+``B_i`` and ``C_i`` are strength and wavelength properties of each resonance used in the
+calculation. Below, "term" refers to one term of the above sum. Every term must be specified
+with a B and a C coefficient.
+
+The behaviors of the refractive index with temperature and doping are modeled in many different
+ways for different materials. We have included a few common ones below.
+
+    - If temperature variation is modeled with changing Sellmeier coefficients, one can use
+      TemperaturePolynomial:
+      ```
+      x = SellemeierTerm(
+          TemperaturePolynomial((a, b, c, ...)),
+          TemperaturePolynomial((d, e, f, ...))
+      )
+      ```
+      This produces a Sellmeier term where B varies as a + bT + cT^2 + ... and C varies as 
+      d + eT + fT^2...
+"""
+struct SellmeierTerm{TB, TC}
+    B_law::TB
+    C_law::TC
+end
+
+evaluate(term::SellmeierTerm, temperature_like) = (term.B_law(temperature_like), term.C_law(temperature_like))
+
+
+
+
+
+
+
 struct TemperaturePolynomial
     coeffs::Tuple{Vararg{Float64}}
     TemperaturePolynomial(coeffs::Tuple{Vararg{<:Real}}) = new(map(Float64, coeffs))
@@ -128,12 +161,11 @@ end
 
 (law::SellmeierQuadraticMolarLaw)(x) = law.quadratic * x^2 + law.linear * x
 
-struct SellmeierTerm{TB, TC}
-    B_law::TB
-    C_law::TC
-end
 
-evaluate(term::SellmeierTerm, temperature_like) = (term.B_law(temperature_like), term.C_law(temperature_like))
+
+
+
+
 
 struct SellmeierCorrectionTerm
     ΔB_law::SellmeierQuadraticMolarLaw
