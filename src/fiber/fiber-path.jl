@@ -78,29 +78,36 @@ function bend_components(path::Union{SubpathBuilt, PathBuilt}, s::Real)
     return (kx = κ, ky = z, k2 = κ * κ)
 end
 
-struct Fiber{P,T,S}
+struct Fiber{P,T,S,L}
     path::P
     cross_section::FiberCrossSection
     T_ref_K::T
     s_start::S
     s_end::S
+    # Per-segment local temperature derived from `:T_K` (fiber-only): `nothing`
+    # when no segment carries `:T_K` (then `local_temperature ≡ T_ref_K`), else a
+    # `(breaks, vals)` pair giving the temperature on each placed segment in
+    # global arc-length order. See `local_temperature`.
+    local_T::L
 end
 
 function Fiber(
     path::Union{SubpathBuilt, PathBuilt};
     cross_section::FiberCrossSection,
     T_ref_K = DEFAULT_T_REF_K,
+    local_T = nothing,
 )
     s_start_val = 0.0
     s_end_val   = Float64(_qc_nominalize(arc_length(path)))
     s_start, s_end = promote(s_start_val, s_end_val)
     @assert s_end > s_start "Fiber requires s_end > s_start"
-    return Fiber{typeof(path),typeof(T_ref_K),typeof(s_start)}(
+    return Fiber{typeof(path),typeof(T_ref_K),typeof(s_start),typeof(local_T)}(
         path,
         cross_section,
         T_ref_K,
         s_start,
         s_end,
+        local_T,
     )
 end
 
@@ -145,8 +152,10 @@ end
 # segment's length-fields by τ and strip its `:T_K`. If the terminal `jumpto!`
 # connector carries `:T_K`, also compute its thermal target arc length (issue
 # #33): the nominal connector length L0 scaled by τ_seal, re-solved to the fixed
-# endpoint by `build`. Returns the resolved Subpath and that target length (or
-# `nothing`).
+# endpoint by `build`. Returns the resolved Subpath, that target length (or
+# `nothing`), and the per-placed-segment ΔT excursions in placed order (interior
+# segments then terminal connector) — `nothing` when nothing is thermal — so the
+# fiber can record each segment's local temperature `T_ref_K + ΔT`.
 function _resolve_thermal_subpath(sub::Subpath, cross_section::FiberCrossSection, T_ref_K)
     _validate_seal_meta(sub)   # reject unsupported MCM on the terminal connector
     seal_ΔT     = _seal_delta_T(sub)
@@ -154,7 +163,12 @@ function _resolve_thermal_subpath(sub::Subpath, cross_section::FiberCrossSection
 
     # Skip cte (and any thermal work) entirely when nothing is thermal, so a
     # non-thermal fiber on a cladding with no defined CTE still builds.
-    (interior_TK || seal_ΔT !== nothing) || return (sub, nothing)
+    (interior_TK || seal_ΔT !== nothing) || return (sub, nothing, nothing)
+
+    # Per-placed-segment ΔT, aligned with the built placed segments (interior in
+    # authored order, then the terminal connector).
+    deltaT = Any[_segment_delta_T(seg) for seg in sub.segments]
+    push!(deltaT, seal_ΔT)
 
     α_lin = cte(cross_section.cladding_material, T_ref_K)
     new_segments = AbstractPathSegment[
@@ -184,12 +198,41 @@ function _resolve_thermal_subpath(sub::Subpath, cross_section::FiberCrossSection
         sub.jumpto_natural, sub.jumpto_natural_extra,
         sub.spin_rate, sub._spin_phi_at_s0,
     )
-    return (resolved, jumpto_target_length)
+    return (resolved, jumpto_target_length, deltaT)
+end
+
+# Assemble the per-segment local-temperature table from a list of
+# `(SubpathBuilt, global_offset)` pairs and the matching per-Subpath ΔT vectors
+# (each `nothing` or aligned with that Subpath's placed segments). Returns
+# `nothing` when no Subpath is thermal (so `local_temperature ≡ T_ref_K`), else a
+# `(breaks, vals)` pair: `breaks[i]` is the global arc length at the end of
+# placed segment `i`, `vals[i]` its local temperature. `vals` keeps each entry
+# as-stored (no coercion) so a `Particles` ΔT propagates.
+function _build_local_T(pairs, deltaTs, T_ref_K)
+    any(!isnothing, deltaTs) || return nothing
+    breaks = Float64[]
+    vals = Any[]
+    for k in eachindex(pairs)
+        b, off = pairs[k]
+        dT = deltaTs[k]
+        placed = _all_placed_segs(b)
+        for j in eachindex(placed)
+            ps = placed[j]
+            seg_end = off + Float64(_qc_nominalize(ps.s_offset_eff)) +
+                            Float64(_qc_nominalize(arc_length(ps.segment)))
+            δ = dT === nothing ? nothing : dT[j]
+            push!(breaks, seg_end)
+            push!(vals, δ === nothing ? T_ref_K : T_ref_K + δ)
+        end
+    end
+    return (breaks, vals)
 end
 
 function _build_perturbed(sub::Subpath, cross_section::FiberCrossSection, T_ref_K)
-    resolved, jumpto_target_length = _resolve_thermal_subpath(sub, cross_section, T_ref_K)
-    return build(resolved; perturb = true, jumpto_target_length = jumpto_target_length)
+    resolved, target, deltaT = _resolve_thermal_subpath(sub, cross_section, T_ref_K)
+    built = build(resolved; perturb = true, jumpto_target_length = target)
+    local_T = _build_local_T(((built, 0.0),), (deltaT,), T_ref_K)
+    return built, local_T
 end
 
 function _build_perturbed(subs::Vector{Subpath}, cross_section::FiberCrossSection, T_ref_K)
@@ -197,13 +240,20 @@ function _build_perturbed(subs::Vector{Subpath}, cross_section::FiberCrossSectio
     # Build in order so `spin_rate = :inherit` resolves against the prior
     # thermal+perturbed built Subpath before this one is built.
     builts = Vector{SubpathBuilt}(undef, length(subs))
+    deltaTs = Vector{Any}(undef, length(subs))
     for i in eachindex(subs)
         sub = i == 1 ? subs[i] :
               PathGeometry._resolve_inherited_spin(subs[i], builts[i-1])
-        resolved, target = _resolve_thermal_subpath(sub, cross_section, T_ref_K)
+        resolved, target, dT = _resolve_thermal_subpath(sub, cross_section, T_ref_K)
         builts[i] = build(resolved; perturb = true, jumpto_target_length = target)
+        deltaTs[i] = dT
     end
-    return build(builts)
+    path = build(builts)
+    offs = s_offsets(path)
+    pairs = Tuple{SubpathBuilt,Float64}[(path.subpaths[i], offs[i])
+                                        for i in eachindex(path.subpaths)]
+    local_T = _build_local_T(pairs, deltaTs, T_ref_K)
+    return path, local_T
 end
 
 """
@@ -224,23 +274,44 @@ still landing at the fixed `jumpto_point`. The geometry is built exactly once.
 Fiber(spec::SubpathBuilder; cross_section::FiberCrossSection, T_ref_K = DEFAULT_T_REF_K) =
     Fiber(Subpath(spec); cross_section = cross_section, T_ref_K = T_ref_K)
 
-Fiber(spec::Subpath; cross_section::FiberCrossSection, T_ref_K = DEFAULT_T_REF_K) =
-    Fiber(_build_perturbed(spec, cross_section, T_ref_K);
-          cross_section = cross_section, T_ref_K = T_ref_K)
+function Fiber(spec::Subpath; cross_section::FiberCrossSection, T_ref_K = DEFAULT_T_REF_K)
+    built, local_T = _build_perturbed(spec, cross_section, T_ref_K)
+    return Fiber(built; cross_section = cross_section, T_ref_K = T_ref_K, local_T = local_T)
+end
 
-Fiber(spec::Vector{Subpath}; cross_section::FiberCrossSection, T_ref_K = DEFAULT_T_REF_K) =
-    Fiber(_build_perturbed(spec, cross_section, T_ref_K);
-          cross_section = cross_section, T_ref_K = T_ref_K)
+function Fiber(spec::Vector{Subpath}; cross_section::FiberCrossSection,
+               T_ref_K = DEFAULT_T_REF_K)
+    built, local_T = _build_perturbed(spec, cross_section, T_ref_K)
+    return Fiber(built; cross_section = cross_section, T_ref_K = T_ref_K, local_T = local_T)
+end
 
 Fiber(spec::Vector{SubpathBuilder}; cross_section::FiberCrossSection,
       T_ref_K = DEFAULT_T_REF_K) =
     Fiber(Subpath[Subpath(b) for b in spec];
           cross_section = cross_section, T_ref_K = T_ref_K)
 
-frame_rotation_rate(path::Union{SubpathBuilt, PathBuilt}, s::Real) =
-    geometric_torsion(path, s) + spinning_rate(path, s)
-
 fiber_path(f::Fiber) = f.path
+
+"""
+    local_temperature(f::Fiber, s) -> T
+
+Local temperature (K) at fiber arc length `s`: `T_ref_K + ΔT` for the placed
+segment containing `s`, where `ΔT` is that segment's `:T_K` excursion. A fiber
+with no `:T_K` returns `T_ref_K` everywhere. The cross-section birefringences
+are evaluated at this temperature (asymmetric thermal stress ∝ `|T_soft − T|`,
+and the indices shift with `T`), so a `:T_K` segment's optical response — not
+only its length — reflects the excursion. `ΔT` may be `Particles`; the returned
+value carries it into the MCM-safe cross-section `T_K` slot.
+"""
+function local_temperature(f::Fiber, s::Real)
+    lt = f.local_T
+    lt === nothing && return f.T_ref_K
+    breaks, vals = lt
+    @inbounds for i in eachindex(breaks)
+        s <= breaks[i] + 1e-9 && return vals[i]
+    end
+    return vals[end]
+end
 
 # ----------------------------
 # Generator K(s) and Curvature Kω(s)
@@ -273,28 +344,31 @@ circular_birefringence_generator(Δβc) = [
      0.5 * Δβc    zero(Δβc)
 ]
 
-function bend_generator_K(f::Fiber, s::Real, λ_m::Real)
-    curv = bend_components(f.path, s)
-    if curv.k2 == zero(curv.k2)
-        return zero_generator()
-    end
+# Orientation of the bend (curvature-direction) birefringence axis in the
+# parallel-transport (Bishop) propagation frame. The Frenet curvature direction
+# rotates relative to the Bishop frame at the geometric torsion rate, so its
+# angle is the accumulated `∫₀ˢ τ_g` (zero for any planar path, recovering the
+# previous fixed `(κ,0)` behaviour). Returned as `(cos 2φ, sin 2φ)`.
+function _bend_axis_c2s2(f::Fiber, s::Real)
+    φ = torsion_phase(f.path, s)
+    return (cos(2 * φ), sin(2 * φ))
+end
 
-    T = f.T_ref_K
-    R = inv(sqrt(curv.k2))
+function bend_generator_K(f::Fiber, s::Real, λ_m::Real)
+    κ = curvature(f.path, s)
+    κ == zero(κ) && return zero_generator()
+    T = local_temperature(f, s)
+    R = inv(κ)
     Δβb = bending_birefringence(f.cross_section, λ_m, T; bend_radius_m = R)
-    c2φ = (curv.kx * curv.kx - curv.ky * curv.ky) / curv.k2
-    s2φ = (2 * curv.kx * curv.ky) / curv.k2
+    c2φ, s2φ = _bend_axis_c2s2(f, s)
     return linear_birefringence_generator(Δβb, c2φ, s2φ)
 end
 
 function bend_generator_Kω(f::Fiber, s::Real, λ_m::Real)
-    curv = bend_components(f.path, s)
-    if curv.k2 == zero(curv.k2)
-        return zero_generator()
-    end
-
-    T = f.T_ref_K
-    R = inv(sqrt(curv.k2))
+    κ = curvature(f.path, s)
+    κ == zero(κ) && return zero_generator()
+    T = local_temperature(f, s)
+    R = inv(κ)
     Δβbω = bending_birefringence(
         WithDerivative(),
         f.cross_section,
@@ -302,29 +376,66 @@ function bend_generator_Kω(f::Fiber, s::Real, λ_m::Real)
         T;
         bend_radius_m = R
     ).dω
-    c2φ = (curv.kx * curv.kx - curv.ky * curv.ky) / curv.k2
-    s2φ = (2 * curv.kx * curv.ky) / curv.k2
+    c2φ, s2φ = _bend_axis_c2s2(f, s)
     return linear_birefringence_generator(Δβbω, c2φ, s2φ)
 end
 
-function spinning_generator_K(f::Fiber, s::Real, λ_m::Real)
-    tau = frame_rotation_rate(f.path, s)
-    T = f.T_ref_K
-    Δβt = twisting_birefringence(f.cross_section, λ_m, T; twist_rate_rad_per_m = tau)
-    return circular_birefringence_generator(Δβt)
+# Mechanical twist (τ_m) is the *only* source of circular birefringence
+# (photoelastic optical activity). Geometric torsion and material spin rotate
+# linear axes instead and are handled by the bend and ellipticity generators.
+function twist_generator_K(f::Fiber, s::Real, λ_m::Real)
+    τm = twist_rate(f.path, s)
+    τm == zero(τm) && return zero_generator()
+    T = local_temperature(f, s)
+    Δβc = twisting_birefringence(f.cross_section, λ_m, T; twist_rate_rad_per_m = τm)
+    return circular_birefringence_generator(Δβc)
 end
 
-function spinning_generator_Kω(f::Fiber, s::Real, λ_m::Real)
-    tau = frame_rotation_rate(f.path, s)
-    T = f.T_ref_K
-    Δβtω = twisting_birefringence(
+function twist_generator_Kω(f::Fiber, s::Real, λ_m::Real)
+    τm = twist_rate(f.path, s)
+    τm == zero(τm) && return zero_generator()
+    T = local_temperature(f, s)
+    Δβcω = twisting_birefringence(
         WithDerivative(),
         f.cross_section,
         λ_m,
         T;
-        twist_rate_rad_per_m = tau
+        twist_rate_rad_per_m = τm
     ).dω
-    return circular_birefringence_generator(Δβtω)
+    return circular_birefringence_generator(Δβcω)
+end
+
+# Orientation of the intrinsic-linear (core ellipticity + asymmetric thermal
+# stress) birefringence axes in the Bishop frame: the frozen ellipse angle plus
+# the material rotation from spin and mechanical twist. `(cos 2φ, sin 2φ)`.
+function _intrinsic_axis_c2s2(f::Fiber, s::Real)
+    φ = f.cross_section.ellipticity_axis_angle +
+        spin_phase(f.path, s) + twist_phase(f.path, s)
+    return (cos(2 * φ), sin(2 * φ))
+end
+
+# Core ellipticity and asymmetric thermal stress share the ellipse eigen-axes,
+# so their magnitudes add before the (single) linear generator. A circular core
+# (axis ratio 1) contributes nothing — guarded so a circular fiber pays no cost
+# and is bit-for-bit unchanged from the pre-ellipticity model.
+function ellipticity_generator_K(f::Fiber, s::Real, λ_m::Real)
+    xs = f.cross_section
+    xs.ellipticity_axis_ratio == one(xs.ellipticity_axis_ratio) && return zero_generator()
+    T = local_temperature(f, s)
+    Δβ = core_noncircularity_birefringence(xs, λ_m, T) +
+         asymmetric_thermal_stress_birefringence(xs, λ_m, T)
+    c2φ, s2φ = _intrinsic_axis_c2s2(f, s)
+    return linear_birefringence_generator(Δβ, c2φ, s2φ)
+end
+
+function ellipticity_generator_Kω(f::Fiber, s::Real, λ_m::Real)
+    xs = f.cross_section
+    xs.ellipticity_axis_ratio == one(xs.ellipticity_axis_ratio) && return zero_generator()
+    T = local_temperature(f, s)
+    Δβω = core_noncircularity_birefringence(WithDerivative(), xs, λ_m, T).dω +
+          asymmetric_thermal_stress_birefringence(WithDerivative(), xs, λ_m, T).dω
+    c2φ, s2φ = _intrinsic_axis_c2s2(f, s)
+    return linear_birefringence_generator(Δβω, c2φ, s2φ)
 end
 
 fiber_breakpoints(f::Fiber) = breakpoints(f.path)
@@ -365,15 +476,17 @@ generator_Kω(f::Fiber, λ_m::Real) = generator_Kω(f, f.cross_section, λ_m)
 
 function generator_K(f::Fiber, xs::StepIndexCrossSection, λ_m::Real)
     return function (s::Real)
-        return bend_generator_K(f, s, λ_m) +
-               spinning_generator_K(f, s, λ_m)
+        return bend_generator_K(f, s, λ_m) +        # linear: bending / tension
+               twist_generator_K(f, s, λ_m) +       # circular: mechanical twist
+               ellipticity_generator_K(f, s, λ_m)   # linear: ellipticity + stress
     end
 end
 
 function generator_Kω(f::Fiber, xs::StepIndexCrossSection, λ_m::Real)
     return function (s::Real)
         return bend_generator_Kω(f, s, λ_m) +
-               spinning_generator_Kω(f, s, λ_m)
+               twist_generator_Kω(f, s, λ_m) +
+               ellipticity_generator_Kω(f, s, λ_m)
     end
 end
 
@@ -400,13 +513,4 @@ function bend_geometry(f::Fiber, s::Real)
     end
 
     return (Rb = inv(sqrt(k2)), theta_b = atan(ky, kx), kx = kx, ky = ky, k2 = k2)
-end
-
-# Extend the PathGeometry.spinning_rate generic with a Fiber method rather than
-# defining a separate FiberPath.spinning_rate. The two layers query the same
-# conceptual quantity at different binding points; sharing one generic avoids a
-# name collision when both submodules are re-exported by `using Bifrost`. For a
-# Fiber this is the frame rotation rate (geometric torsion + path spinning).
-function PathGeometry.spinning_rate(f::Fiber, s::Real)
-    return frame_rotation_rate(f.path, s)
 end
