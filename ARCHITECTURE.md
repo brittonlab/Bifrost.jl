@@ -70,7 +70,7 @@ The fiber-specific layers combine those pieces:
 
 | File | How it extends the standalone pieces |
 | --- | --- |
-| `fiber-cross-section.jl` | Adds step-index fiber optics and birefringence responses. |
+| `fiber-cross-section/` | Adds step-index fiber optics and birefringence responses (`cross-section.jl` base + concrete cross sections). |
 | `fiber-path.jl` | Binds path geometry to a cross section and assembles bend/spinning `K` and `Kω`. |
 
 ## Layered Design
@@ -104,7 +104,8 @@ The fiber-specific layers combine those pieces:
    - Encodes intrinsic optical material properties.
    - Provides spectral responses and derivatives needed by DGD calculations.
 
-2. **Cross-section layer** (`fiber-cross-section.jl`)
+2. **Cross-section layer** (`fiber-cross-section/cross-section.jl` and concrete
+   cross sections in `fiber-cross-section/`)
 
    - Encodes transverse step-index fiber geometry.
    - Converts material properties into guided-index, dispersion, nonlinearity,

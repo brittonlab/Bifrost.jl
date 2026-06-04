@@ -116,8 +116,8 @@ Do not break these without explicit user discussion:
   raw matrix difference. This is intentional.
 - **Function-valued inputs**: Physical profiles (bend radius, twist rate, temperature,
   axis angle) must be callable at arbitrary `s`, not just on a fixed grid.
-- **MCM compatibility**: `material-properties.jl`, `fiber-cross-section.jl`,
-  `path-geometry.jl`, and `path-integral.jl` accept
+- **MCM compatibility**: `material-properties.jl`, the `fiber-cross-section/`
+  files, `path-geometry.jl`, and `path-integral.jl` accept
   `MonteCarloMeasurements.Particles` on the uncertain inputs (`T_K`,
   bend/twist/tension/axis-ratio properties, segment shrinkage, and the
   per-entry eltype of the Jones matrices `J` and sensitivity `G`). Keep
@@ -136,8 +136,8 @@ Do not break these without explicit user discussion:
   - `output_dgd_2x2` is the MCM-friendly DGD extractor (closed form, no
     `eigvals`); `output_dgd` still uses `eigvals` and is Float64-only.
   - MCM prohibits conditionals anywhere that needs to propagate Particles. 
-    Here this includes most methods in material-properties.jl, fiber-cross-section.jl,
-    path-geometry.jl, fiber-path.jl, fiber-path-modify.jl, path-integral.jl.
+    Here this includes most methods in material-properties.jl, the
+    fiber-cross-section/ files, path-geometry.jl, fiber-path.jl, path-integral.jl.
 - **python wrapper**: A Python wrapper for `Bifrost.jl` is supplied in `src/wrapper.py`. The spirit 
     for this wrapper is that Python is the workspace and Julia modules are guest libraries. No Julia
     methods should be used in th python environment except those explicitly exposed via

@@ -99,7 +99,7 @@ The fiber-specific layers combine those pieces:
 
 | File | How it extends the standalone pieces |
 | --- | --- |
-| `fiber-cross-section.jl` | Together with files in fiber-cross-sections directory, adds step-index fiber optics and birefringence responses. |
+| `fiber-cross-section/cross-section.jl` | Together with the other files in the `fiber-cross-section/` directory, adds step-index fiber optics and birefringence responses. |
 | `fiber-path.jl` | Binds path geometry to a cross section and assembles bend/twist `K` and `Kω`. |
 
 ## Current Model
@@ -235,7 +235,7 @@ K(s,\omega)=K_{\mathrm{bend}}(s,\omega)+K_{\mathrm{twist}}(s,\omega).
 
 The bending contribution comes from path curvature. For a local bend radius
 `R(s)`, the implemented perturbation uses the bending birefringence response
-from `src/fiber/fiber-cross-section.jl`; in the simplest stress model the
+from `src/fiber-cross-section/cross-section.jl`; in the simplest stress model the
 magnitude scales like `1/R(s)^2`.
 
 The twist contribution uses the total frame twist rate:
@@ -352,7 +352,7 @@ Several files are written to lift through
 `MonteCarloMeasurements.Particles`:
 
 - `src/material-properties.jl` and `materials/` files
-- `src/fiber/fiber-cross-section.jl` and `fiber-cross-sections/` files
+- `src/fiber-cross-section/cross-section.jl` and other `fiber-cross-section/` files
 - `src/geometry/path-geometry.jl`
 - `src/fiber/fiber-path.jl`
 - `src/fiber/fiber-path-modify.jl`
@@ -430,7 +430,7 @@ outside the current model.
 
 - `src/material-properties.jl` and `src/materials/`: material refractive index,
   thermo-optic behavior, CTE, and nonlinear index helpers.
-- `src/fiber/fiber-cross-section.jl` and `src/fiber-cross-sections/`: step-index
+- `src/fiber-cross-section/cross-section.jl` and `src/fiber-cross-section/`: step-index
   cross-section quantities, guided index, dispersion, nonlinear coefficient, and
   perturbative birefringence responses.
 - `src/geometry/path-geometry.jl`: path authoring, placement, differential
