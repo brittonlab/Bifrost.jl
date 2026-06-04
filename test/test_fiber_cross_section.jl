@@ -243,14 +243,50 @@ end
           reference_bending_birefringence(fiber, λ, T; bend_radius_m = R) rtol = 1e-12
     @test axial_tension_birefringence(fiber, λ, T; bend_radius_m = R, axial_tension_N = tf) ≈
           reference_axial_tension_birefringence(fiber, λ, T; bend_radius_m = R, axial_tension_N = tf) rtol = 1e-12
-    # Pre-existing on origin/main: implementation and reference formula disagree.
-    @test_broken twisting_birefringence(fiber, λ, T; twist_rate_rad_per_m = tr) ≈
+    # T-SIM-REGRESSION: twisting birefringence now matches the intended
+    # photoelastic circular-birefringence form (twist-phase-c).
+    @test twisting_birefringence(fiber, λ, T; twist_rate_rad_per_m = tr) ≈
           reference_twisting_birefringence(fiber, λ, T; twist_rate_rad_per_m = tr) rtol = 1e-12
 
+    # T-PHYSICS: the cross-section now returns an unsigned birefringence
+    # *magnitude*; an axis ratio and its inverse describe the same ellipse
+    # rotated 90°, so they give *equal* magnitude (the generator supplies the
+    # orthogonal orientation), not a sign flip.
     @test core_noncircularity_birefringence(fiber, λ, T; axis_ratio = inv(ε)) ≈
-          -core_noncircularity_birefringence(fiber, λ, T; axis_ratio = ε) rtol = 1e-12
+          core_noncircularity_birefringence(fiber, λ, T; axis_ratio = ε) rtol = 1e-12
     @test asymmetric_thermal_stress_birefringence(fiber, λ, T; axis_ratio = inv(ε)) ≈
-          -asymmetric_thermal_stress_birefringence(fiber, λ, T; axis_ratio = ε) rtol = 1e-12
+          asymmetric_thermal_stress_birefringence(fiber, λ, T; axis_ratio = ε) rtol = 1e-12
+end
+
+@testset "StepIndexCrossSection ellipticity fields" begin
+    λ = 1550e-9
+    T = 297.15
+    ε = 1.01
+    φ = π / 5
+
+    # T-GUARDRAIL: default cross section is circular (ratio 1) ⇒ the
+    # field-driven ellipticity birefringences vanish.
+    circular = SMF_LIKE_FIBER
+    @test circular.ellipticity_axis_ratio == 1.0
+    @test circular.ellipticity_axis_angle == 0.0
+    @test core_noncircularity_birefringence(circular, λ, T) == 0.0
+    @test asymmetric_thermal_stress_birefringence(circular, λ, T) == 0.0
+
+    # The stored ratio drives the magnitude identically to an explicit override.
+    elliptical = StepIndexCrossSection(
+        SilicaGermaniaGlass(0.036), SilicaGermaniaGlass(0.0), 8.2e-6, 125e-6;
+        ellipticity_axis_ratio = ε, ellipticity_axis_angle = φ)
+    @test elliptical.ellipticity_axis_ratio == ε
+    @test elliptical.ellipticity_axis_angle == φ
+    @test core_noncircularity_birefringence(elliptical, λ, T) ≈
+          core_noncircularity_birefringence(elliptical, λ, T; axis_ratio = ε) rtol = 1e-14
+    @test asymmetric_thermal_stress_birefringence(elliptical, λ, T) ≈
+          asymmetric_thermal_stress_birefringence(elliptical, λ, T; axis_ratio = ε) rtol = 1e-14
+
+    # T-GUARDRAIL: a non-positive axis ratio is rejected at construction.
+    @test_throws ArgumentError StepIndexCrossSection(
+        SilicaGermaniaGlass(0.036), SilicaGermaniaGlass(0.0), 8.2e-6, 125e-6;
+        ellipticity_axis_ratio = 0.0)
 end
 
 @testset "StepIndexCrossSection guided and fluorinated edge cases" begin
