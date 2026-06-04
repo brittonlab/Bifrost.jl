@@ -19,6 +19,7 @@ const DEMO_INDEX_DEMO_FILES = [
 #    "demo3mcm.jl",
 #    "demo3benchmark.jl",
     "demo-path-geometry.jl",
+    "demo-fiber-padles.jl",
 ]
 
 const DEMO_INDEX_SECTION_REGISTRY = Dict(
@@ -27,6 +28,12 @@ const DEMO_INDEX_SECTION_REGISTRY = Dict(
         entry_fn_name = :demo_path_geometry_entries,
         group_titles_name = nothing,
         group_titles = Dict{String, String}(),
+    ),
+    "demo-fiber-padles.jl" => (
+        title = "Fiber polarization-paddle demos",
+        entry_fn_name = :demo_fiber_paddles_entries,
+        group_titles_name = nothing,
+        group_titles = Dict("paddles" => "Fiber polarization paddles"),
     ),
     "demo1.jl" => (
         title = "Modify + diagnostics demos",
