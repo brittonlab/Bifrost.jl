@@ -24,6 +24,17 @@
 # shared builder helpers. Code duplication across variants is intentional
 # per AGENTS.md §5 (Visual Tests): clarity over abstraction.
 
+# Direct library dependencies so this file loads standalone regardless of the
+# index's include order (it no longer free-rides on demo1's `using`).
+using LinearAlgebra
+using MonteCarloMeasurements
+using Bifrost
+using Bifrost.Plots
+using Bifrost.Plots.PlotRuntime
+using Bifrost.PathGeometry: _qc_nominalize
+
+# The 2D/3D scene renderers and `_sample_segment_xyz` live in demo1.jl, not in
+# Bifrost — pull them in if this file is loaded before demo1.
 if !isdefined(Main, :_sample_segment_xyz)
     include(joinpath(@__DIR__, "demo1.jl"))
 end
