@@ -1,30 +1,34 @@
 """
 path-geometry-plot.jl
 
-Interactive Plotly HTML for a [`Path`](path-geometry.jl): 3D centerline, a draggable cursor
+Interactive Plotly HTML for a `SubpathBuilt`: 3D centerline, a draggable cursor
 driven by horizontal mouse position, a movable transverse square (normal–binormal plane),
 short tangent/normal/binormal axes at the cursor, and optional per-segment nickname labels when
-authoring segments with a `nickname` string.
+authoring segments with a `Nickname` meta.
 
-This file depends on `path-geometry.jl` (via the nested `PathGeometry` module), fiber
-metadata labels, and the Plotly CDN.
+This file depends only on the `PathGeometry` submodule and the Plotly CDN. It is loaded as
+part of the `Bifrost.Plots` submodule and references its sibling `PathGeometry` via `..`.
 
 # Usage
 
-    include("path-geometry-plot.jl")
+    using Bifrost.Plots
 
-    spec = PathGeometry.PathSpecBuilder()
-    PathGeometry.straight!(spec; length = 0.2)
-    PathGeometry.bend!(spec; radius = 0.4, angle = π / 2)
-    path = PathGeometry.build(spec)
-    write_path_geometry_plot3d(path, path.spec.s_start, path.s_end; title = "Demo", fidelity = 1.0, output = "path.html")
+    sb = PathGeometry.SubpathBuilder()
+    PathGeometry.start!(sb)
+    PathGeometry.straight!(sb; length = 0.2)
+    PathGeometry.bend!(sb; radius = 0.4, angle = π / 2)
+    PathGeometry.jumpto!(sb; point = (0.0, 0.0, 0.6))
+    b = PathGeometry.build(sb)
+    write_path_geometry_plot3d(b, 0.0, PathGeometry.s_end(b); title = "Demo",
+                               fidelity = 1.0, output = "path.html")
 """
 
 using LinearAlgebra
 
 # Reuse the canonical Bifrost.PathGeometry submodule rather than re-including
-# path-geometry.jl here. This file is loaded inside `Bifrost.Plots`, which
-# can see its sibling submodules via `..`.
+# path-geometry.jl here. This file is loaded inside `Bifrost.Plots`, which can
+# see its sibling submodules via `..`. The `PathGeometry.X` qualified references
+# below resolve against that submodule.
 using ..PathGeometry
 
 # ---------------------------------------------------------------------------
@@ -53,8 +57,8 @@ function _expand(ps::PathGeometry.PathSample)
     bz       = [smpl.binormal[3]          for smpl in ps.samples]
     kappa    = [smpl.curvature            for smpl in ps.samples]
     tau_geom = [smpl.geometric_torsion    for smpl in ps.samples]
-    tau_mat  = [smpl.material_twist       for smpl in ps.samples]
-    return (; s, x, y, z, tx, ty, tz, nx, ny, nz, bx, by, bz, kappa, tau_geom, tau_mat)
+    tau_spin  = [smpl.spinning_rate       for smpl in ps.samples]
+    return (; s, x, y, z, tx, ty, tz, nx, ny, nz, bx, by, bz, kappa, tau_geom, tau_spin)
 end
 
 # ---------------------------------------------------------------------------
@@ -90,43 +94,184 @@ function _js_string_array(xs::AbstractVector{<:AbstractString})
 end
 
 
+# -----------------------------------------------------------------------
+# Type-specific helpers: collect segment-boundary marker positions and
+# segment nickname labels for a SubpathBuilt or PathBuilt within
+# [s1f, s2f]. Returned as plain Float64/String vectors ready for HTML
+# embedding.
+# -----------------------------------------------------------------------
+
+function _collect_segment_boundaries(path::PathGeometry.SubpathBuilt,
+                                     s1f::Float64, s2f::Float64)
+    seg_bx = Float64[]; seg_by = Float64[]; seg_bz = Float64[]
+    seg_bound_hover = String[]
+    placed = path.placed_segments
+    if length(placed) >= 2
+        for i in 2:length(placed)
+            sj = Float64(PathGeometry._qc_nominalize(placed[i].s_offset_eff))
+            (sj < s1f || sj > s2f) && continue
+            p = PathGeometry.position(path, sj)
+            push!(seg_bx, p[1]); push!(seg_by, p[2]); push!(seg_bz, p[3])
+            push!(seg_bound_hover,
+                  "Segment boundary<br>s = $(sj) m<br>x, y, z = $(p[1]), $(p[2]), $(p[3])")
+        end
+    end
+    sj_t = Float64(PathGeometry._qc_nominalize(path.jumpto_placed.s_offset_eff))
+    if sj_t >= s1f && sj_t <= s2f
+        p = PathGeometry.position(path, sj_t)
+        push!(seg_bx, p[1]); push!(seg_by, p[2]); push!(seg_bz, p[3])
+        push!(seg_bound_hover,
+              "Terminal connector start<br>s = $(sj_t) m<br>x, y, z = $(p[1]), $(p[2]), $(p[3])")
+    end
+    return (; seg_bx, seg_by, seg_bz, seg_bound_hover)
+end
+
+function _collect_segment_boundaries(path::PathGeometry.PathBuilt,
+                                     s1f::Float64, s2f::Float64)
+    seg_bx = Float64[]; seg_by = Float64[]; seg_bz = Float64[]
+    seg_bound_hover = String[]
+    offs = PathGeometry.s_offsets(path)
+    n = length(path.subpaths)
+
+    for (i, sp) in enumerate(path.subpaths)
+        sp_off = offs[i]
+        # Interior segment joins inside Subpath i.
+        placed = sp.placed_segments
+        if length(placed) >= 2
+            for k in 2:length(placed)
+                sj = sp_off + Float64(PathGeometry._qc_nominalize(placed[k].s_offset_eff))
+                (sj < s1f || sj > s2f) && continue
+                p = PathGeometry.position(path, sj)
+                push!(seg_bx, p[1]); push!(seg_by, p[2]); push!(seg_bz, p[3])
+                push!(seg_bound_hover,
+                      "Subpath $i segment join<br>s = $(sj) m<br>x, y, z = $(p[1]), $(p[2]), $(p[3])")
+            end
+        end
+        # Terminal connector start of Subpath i.
+        sj_t = sp_off +
+            Float64(PathGeometry._qc_nominalize(sp.jumpto_placed.s_offset_eff))
+        if sj_t >= s1f && sj_t <= s2f
+            p = PathGeometry.position(path, sj_t)
+            push!(seg_bx, p[1]); push!(seg_by, p[2]); push!(seg_bz, p[3])
+            push!(seg_bound_hover,
+                  "Subpath $i terminal connector start<br>s = $(sj_t) m<br>x, y, z = $(p[1]), $(p[2]), $(p[3])")
+        end
+    end
+    # Subpath-to-Subpath boundary markers (start of subpath i+1 = end of subpath i).
+    if n >= 2
+        for i in 2:n
+            sj = offs[i]
+            (sj < s1f || sj > s2f) && continue
+            p = PathGeometry.position(path, sj)
+            push!(seg_bx, p[1]); push!(seg_by, p[2]); push!(seg_bz, p[3])
+            push!(seg_bound_hover,
+                  "Subpath $(i-1) → $i boundary<br>s = $(sj) m<br>x, y, z = $(p[1]), $(p[2]), $(p[3])")
+        end
+    end
+    return (; seg_bx, seg_by, seg_bz, seg_bound_hover)
+end
+
+function _collect_segment_labels(path::PathGeometry.SubpathBuilt,
+                                 s1f::Float64, s2f::Float64, nudge::Float64)
+    label_x = Float64[]; label_y = Float64[]; label_z = Float64[]
+    label_strs = String[]
+    placed = path.placed_segments
+    for ps in vcat(placed, PathGeometry.PlacedSegment[path.jumpto_placed])
+        nick = PathGeometry.segment_nickname(ps.segment)
+        isnothing(nick) && continue
+        s_lo = Float64(PathGeometry._qc_nominalize(ps.s_offset_eff))
+        s_hi = s_lo + Float64(PathGeometry._qc_nominalize(
+            PathGeometry.arc_length(ps.segment)))
+        s_a = max(s_lo, s1f)
+        s_b = min(s_hi, s2f)
+        s_a >= s_b - 1e-15 && continue
+        s_mid = (s_a + s_b) / 2
+        fr = PathGeometry.frame(path, s_mid)
+        r = collect(fr.position); N = collect(fr.normal)
+        nn = norm(N)
+        if nn >= 1e-12
+            N ./= nn
+            r .+= nudge .* N
+        end
+        push!(label_x, r[1]); push!(label_y, r[2]); push!(label_z, r[3])
+        push!(label_strs, nick)
+    end
+    return (; label_x, label_y, label_z, label_strs)
+end
+
+function _collect_segment_labels(path::PathGeometry.PathBuilt,
+                                 s1f::Float64, s2f::Float64, nudge::Float64)
+    label_x = Float64[]; label_y = Float64[]; label_z = Float64[]
+    label_strs = String[]
+    offs = PathGeometry.s_offsets(path)
+    for (i, sp) in enumerate(path.subpaths)
+        sp_off = offs[i]
+        for ps in vcat(sp.placed_segments,
+                       PathGeometry.PlacedSegment[sp.jumpto_placed])
+            nick = PathGeometry.segment_nickname(ps.segment)
+            isnothing(nick) && continue
+            s_lo = sp_off +
+                Float64(PathGeometry._qc_nominalize(ps.s_offset_eff))
+            s_hi = s_lo + Float64(PathGeometry._qc_nominalize(
+                PathGeometry.arc_length(ps.segment)))
+            s_a = max(s_lo, s1f)
+            s_b = min(s_hi, s2f)
+            s_a >= s_b - 1e-15 && continue
+            s_mid = (s_a + s_b) / 2
+            fr = PathGeometry.frame(path, s_mid)
+            r = collect(fr.position); N = collect(fr.normal)
+            nn = norm(N)
+            if nn >= 1e-12
+                N ./= nn
+                r .+= nudge .* N
+            end
+            push!(label_x, r[1]); push!(label_y, r[2]); push!(label_z, r[3])
+            push!(label_strs, nick)
+        end
+    end
+    return (; label_x, label_y, label_z, label_strs)
+end
+
 """
-    write_path_geometry_plot3d(path::PathGeometry.Path, s1, s2; fidelity, output, title, plane_extent_frac, axis_extent_frac, segment_label_nudge_frac, twist_n_quad)
+    write_path_geometry_plot3d(path, s1, s2; fidelity = 3.0, output, title, kwargs...)
 
-Write a standalone Plotly HTML file. Horizontal mouse position (without a mouse button pressed)
-scrubs arc length: left-to-right maps linearly in ``s`` over the plotted ``[s_1, s_2]`` interval
-(not linearly in sample index). The cursor snaps to the nearest polyline sample. The transverse
-plane and frame axes update accordingly.
+Write a standalone interactive Plotly HTML file visualizing `path` (a
+`PathGeometry.SubpathBuilt` or `PathGeometry.PathBuilt`) over the arc-length interval
+`[s1, s2]`, and return the output path.
 
-Keywords `plane_extent_frac` and `axis_extent_frac` scale the half-width of the movable square
-and the length of the **T**, **N**, **B** segments relative to the axis-aligned bounding box
-diagonal of the path (before padding).
+Horizontal mouse position (with no button pressed) scrubs arc length: left-to-right maps
+linearly in `s` over the plotted `[s1, s2]` interval (not linearly in sample index). The
+cursor snaps to the nearest polyline sample; the transverse normal–binormal plane and the
+T/N/B frame axes update accordingly. The scene uses Plotly `aspectmode: "cube"` so one
+meter maps to the same on-screen length on every axis, and the axis ranges are fixed at
+generation time (from `PathGeometry.bounding_box`, padded) so scrubbing does not re-fit the
+view.
 
-The main 3D scene axis ranges are fixed at generation time from
-[`PathGeometry.bounding_box`](path-geometry.jl), expanded to keep the transverse square and
-**T**/**N**/**B** axes in view. The scene uses Plotly `aspectmode: "cube"` so one meter along x, y,
-and z maps to the same on-screen length. After each scrub update, the same ranges are re-applied
-with `Plotly.relayout` so Plotly does not re-fit the scene to the moving mesh.
+Open-circle markers mark effective arc-length joins between authored segments that fall
+within `[s1, s2]`. Each authored segment carrying a `Nickname` meta gets a 3D text label at
+its midpoint arc length, nudged along the principal normal. A red arrow in the local N̂–B̂
+plane points along `cos(Φ) N̂ + sin(Φ) B̂`, where `Φ` is `PathGeometry.total_spinning` from
+`s1` to the cursor arc length.
 
-Open-circle markers are drawn at effective arc-length joins between authored segments (interior
-segment boundaries) that fall within `[s1, s2]`.
+# Arguments
 
-Segments may carry an optional `nickname` string (see [`PathGeometry.straight!`](path-geometry.jl),
-`bend!`, …). For each named segment that overlaps `[s1, s2]`, a 3D text label is drawn at the
-midpoint arc length, offset slightly along the principal normal so the anchor lies in the local
-osculating plane. `segment_label_nudge_frac` scales that offset relative to the scene bounding-box
-diagonal.
+- `path`: a built `PathGeometry.SubpathBuilt` or `PathGeometry.PathBuilt`.
+- `s1`, `s2`: arc-length bounds (m) of the plotted interval.
 
-A red arrow in the local **N̂**–**B̂** plane at the cursor points along
-cos(Φ) N̂ + sin(Φ) B̂, where Φ is [`PathGeometry.total_material_twist`](path-geometry.jl) from `s1`
-to the cursor arc length (same effective-``s`` as the plot), using `twist_n_quad` for overlay
-quadrature.
+# Keywords
 
-Keyword `twist_n_quad` is passed to `total_material_twist` when building Φ at each sample index
-(default 128).
+- `fidelity`: sampling-density multiplier passed to `PathGeometry.sample_path` (default 3.0).
+- `output`: output HTML file path (default `"path_geometry_3d.html"`).
+- `title`: plot title.
+- `plane_extent_frac`, `axis_extent_frac`: half-width of the transverse square and the
+  length of the T/N/B segments, as fractions of the bounding-box diagonal.
+- `segment_label_nudge_frac`: normal offset of nickname labels, as a fraction of the
+  bounding-box diagonal.
+- `spinning_n_quad`: quadrature point count passed to `total_spinning` for the Φ overlay
+  (default 128).
 """
 function write_path_geometry_plot3d(
-    path::PathGeometry.PathSpecCached,
+    path::Union{PathGeometry.SubpathBuilt, PathGeometry.PathBuilt},
     s1::Real,
     s2::Real;
     fidelity::Float64 = 3.0,
@@ -135,7 +280,7 @@ function write_path_geometry_plot3d(
     plane_extent_frac::Float64 = 0.08,
     axis_extent_frac::Float64 = 0.06,
     segment_label_nudge_frac::Float64 = 0.035,
-    twist_n_quad::Int = 128,
+    spinning_n_quad::Int = 128,
 )
     path_sample = PathGeometry.sample_path(path, s1, s2; fidelity = fidelity)
     samples = _expand(path_sample)
@@ -161,66 +306,30 @@ function write_path_geometry_plot3d(
 
     s1f = Float64(s1)
     s2f = Float64(s2)
-    seg_bx = Float64[]
-    seg_by = Float64[]
-    seg_bz = Float64[]
-    seg_bound_hover = String[]
-    placed = path.placed_segments
-    if length(placed) >= 2
-        for i in 2:length(placed)
-            sj = placed[i].s_offset_eff
-            if sj < s1f || sj > s2f
-                continue
-            end
-            p = PathGeometry.position(path, sj)
-            push!(seg_bx, p[1])
-            push!(seg_by, p[2])
-            push!(seg_bz, p[3])
-            push!(
-                seg_bound_hover,
-                "Segment boundary<br>s = $(sj) m<br>x, y, z = $(p[1]), $(p[2]), $(p[3])"
-            )
-        end
-    end
-
-    label_x = Float64[]
-    label_y = Float64[]
-    label_z = Float64[]
-    label_strs = String[]
     nudge = Float64(segment_label_nudge_frac) * diag
-    for ps in placed
-        nick = segment_nickname(ps.segment)
-        isnothing(nick) && continue
-        s_lo = ps.s_offset_eff
-        s_hi = s_lo + PathGeometry.arc_length(ps.segment)
-        s_a = max(s_lo, s1f)
-        s_b = min(s_hi, s2f)
-        s_a >= s_b - 1e-15 && continue
-        s_mid = (s_a + s_b) / 2
-        fr = PathGeometry.frame(path, s_mid)
-        r = collect(fr.position)
-        N = collect(fr.normal)
-        nn = norm(N)
-        if nn >= 1e-12
-            N ./= nn
-            r .+= nudge .* N
-        end
-        push!(label_x, r[1])
-        push!(label_y, r[2])
-        push!(label_z, r[3])
-        push!(label_strs, nick)
-    end
+    bnd = _collect_segment_boundaries(path, s1f, s2f)
+    seg_bx = bnd.seg_bx; seg_by = bnd.seg_by; seg_bz = bnd.seg_bz
+    seg_bound_hover = bnd.seg_bound_hover
+    lbl = _collect_segment_labels(path, s1f, s2f, nudge)
+    label_x = lbl.label_x; label_y = lbl.label_y; label_z = lbl.label_z
+    label_strs = lbl.label_strs
 
     title_html = replace(replace(title, "&" => "&amp;"), "<" => "&lt;")
 
     s_samples = Vector{Float64}(samples.s)
-    # TODO: twist refactor — total_material_twist is currently a stub.
-    integrated_tau_mat = zeros(Float64, length(s_samples))
+    # Φ(s) = ∫_{s1}^{s} τ_spin(s') ds' for the red ∫τ_spin overlay arrow.
+    integrated_tau_spin = [
+        s <= s1f ? 0.0 :
+            Float64(PathGeometry.total_spinning(
+                path; s_start = s1f, s_end = s, rtol = 1e-6))
+        for s in s_samples
+    ]
 
     html = """
     <!--
       Main 3D plot (legend names match Plotly traces):
-      - path: centerline polyline; thin black line.
+      - path: centerline polyline; faint gray line; small markers along the curve colored by
+        arc length s (Turbo colorscale).
       - segment joins: open circles at effective arc-length boundaries between authored
         segments (within the plotted s interval).
       - start / end: filled markers at the first and last sample points of the plotted
@@ -231,7 +340,7 @@ function write_path_geometry_plot3d(
       - T̂: orange segment, unit tangent at the cursor.
       - N̂: blue segment, principal normal at the cursor.
       - B̂: green segment, binormal T̂×N̂ at the cursor.
-      - ∫τ_mat: red arrow in the N̂–B̂ plane at the cursor; Φ = total_material_twist(path; s_start
+      - ∫τ_spin: red arrow in the N̂–B̂ plane at the cursor; Φ = total_spinning(path; s_start
         = plot start, s_end = cursor) (same length scale as T̂/N̂/B̂ axes).
       - segment labels (optional): 3D text for each authored segment that has a nickname, when
         that segment overlaps the plotted s-interval.
@@ -308,8 +417,8 @@ function write_path_geometry_plot3d(
         const bz = $(_js_array(samples.bz));
         const kappa = $(_js_array(samples.kappa));
         const tauGeom = $(_js_array(samples.tau_geom));
-        const tauMat = $(_js_array(samples.tau_mat));
-        const integratedTwist = $(_js_array(integrated_tau_mat));
+        const tauSpin = $(_js_array(samples.tau_spin));
+        const integratedTau = $(_js_array(integrated_tau_spin));
         const planeHalf = $(_js_real(plane_half));
         const axisLen = $(_js_real(axis_len));
 
@@ -399,8 +508,8 @@ function write_path_geometry_plot3d(
           };
         }
 
-        function twistArrowInNBPlane(i) {
-          const phi = integratedTwist[i];
+        function spinArrowInNBPlane(i) {
+          const phi = integratedTau[i];
           const r = [xs[i], ys[i], zs[i]];
           const N = [nx[i], ny[i], nz[i]];
           const B = [bx[i], by[i], bz[i]];
@@ -417,14 +526,22 @@ function write_path_geometry_plot3d(
 
         const pathTrace = {
           type: "scatter3d",
-          mode: "lines",
+          mode: "lines+markers",
           x: xs,
           y: ys,
           z: zs,
           hoverinfo: "skip",
           line: {
-            width: 1.5,
-            color: "#000000"
+            width: 4,
+            color: "rgba(30, 30, 30, 0.25)"
+          },
+          marker: {
+            size: 3.5,
+            color: ss,
+            colorscale: "Turbo",
+            cmin: ss[0],
+            cmax: ss[ss.length - 1],
+            showscale: false
           },
           name: "path"
         };
@@ -530,8 +647,8 @@ function write_path_geometry_plot3d(
           name: "B̂"
         };
 
-        const tw0 = twistArrowInNBPlane(0);
-        const traceTwistInt = {
+        const tw0 = spinArrowInNBPlane(0);
+        const traceTauInt = {
           type: "scatter3d",
           mode: "lines+markers",
           x: tw0.x,
@@ -545,7 +662,7 @@ function write_path_geometry_plot3d(
             line: { width: 1, color: "#7f0000" }
           },
           hoverinfo: "skip",
-          name: "∫τ_mat ds"
+          name: "∫τ_spin ds"
         };
 
         const layout = {
@@ -563,7 +680,7 @@ function write_path_geometry_plot3d(
           }
         };
 
-        const plotTraces = [pathTrace, segmentBoundaryTrace, startTrace, endTrace, cursorTrace, planeTrace, traceT, traceN, traceB, traceTwistInt];
+        const plotTraces = [pathTrace, segmentBoundaryTrace, startTrace, endTrace, cursorTrace, planeTrace, traceT, traceN, traceB, traceTauInt];
         if (labelX.length > 0) {
           plotTraces.push({
             type: "scatter3d",
@@ -588,14 +705,14 @@ function write_path_geometry_plot3d(
         let activeIndex = 0;
 
         function formatStatus(index) {
-          const deg = integratedTwist[index] * (180 / Math.PI);
+          const deg = integratedTau[index] * (180 / Math.PI);
           return [
             "Arc length s = " + ss[index].toFixed(5) + " m",
             "x, y, z = " + xs[index].toFixed(4) + ", " + ys[index].toFixed(4) + ", " + zs[index].toFixed(4) + " m",
             "κ = " + kappa[index].toExponential(4) + " 1/m",
             "τ_geom = " + tauGeom[index].toExponential(4) + " rad/m",
-            "τ_mat  = " + tauMat[index].toExponential(4) + " rad/m",
-            "∫τ_mat ds = " + integratedTwist[index].toFixed(5) + " rad (" + deg.toFixed(2) + "°)"
+            "τ_spin  = " + tauSpin[index].toExponential(4) + " rad/m",
+            "∫τ_spin ds = " + integratedTau[index].toFixed(5) + " rad (" + deg.toFixed(2) + "°)"
           ].join("\\n");
         }
 
@@ -634,7 +751,7 @@ function write_path_geometry_plot3d(
             z: [ax.B.z]
           }, [8]));
           p = chain(p, () => {
-            const tw = twistArrowInNBPlane(activeIndex);
+            const tw = spinArrowInNBPlane(activeIndex);
             return Plotly.restyle("plot", {
               x: [tw.x],
               y: [tw.y],

@@ -28,12 +28,12 @@ module MaterialProperties
     using LinearAlgebra
     using Printf
     include("material-properties.jl")
-    
+
     include("material/silica.jl")
     include("material/germania.jl")
     include("material/silica-germania.jl")
     include("material/silica-fluorinated.jl")
-    
+
     import ..Bifrost: _export_public!
     _export_public!(@__MODULE__)
 end
@@ -44,12 +44,16 @@ module PathGeometry
     # `using Bifrost.PathGeometry` keep `position(::PathSpecCached, ...)`
     # working alongside other Base methods.
     import Base: position
-    # path-geometry.jl already includes path-geometry-connector.jl internally.
+    # path-geometry.jl includes path-geometry-connector.jl AND
+    # path-geometry-meta.jl internally (the Subpath constructors reference
+    # MCMadd/MCMmul for validation, so meta must load as part of the geometry
+    # layer). We therefore do NOT include path-geometry-meta.jl separately here —
+    # that would double-define Nickname/MCMadd/MCMmul.
     include("geometry/path-geometry.jl")
-    # fiber-path-meta.jl only defines concrete AbstractMeta subtypes
-    # (Nickname, MCMadd, MCMmul) plus segment_nickname — it's path-level
-    # metadata, not fiber-specific, despite the legacy filename.
-    include("fiber/fiber-path-meta.jl")
+    # Material-agnostic perturbation mechanism used by build(...; perturb=true)
+    # and by consuming layers (the fiber) for isotropic scaling. Included after
+    # path-geometry.jl so its segment types and meta vocabulary are in scope.
+    include("geometry/path-geometry-perturb.jl")
     import ..Bifrost: _export_public!
     _export_public!(@__MODULE__)
 end
@@ -70,14 +74,13 @@ module FiberPath
     using LinearAlgebra
     using ..MaterialProperties
     using ..PathGeometry
-    # Internal cross-module references used by modify(): these live in
-    # PathGeometry and are not exported (underscore-prefixed).
-    using ..PathGeometry: _resolve_at_placement, _resolve_twists,
-                          _build_quintic_connector, _safe_normalize,
-                          _qc_nominalize
+    # Internal cross-module references. The geometry-layer perturbation mechanism
+    # (used by the fiber's thermal :T_K interpretation) and a couple of helpers
+    # are underscore-prefixed and not exported.
+    using ..PathGeometry: _scale_length_fields, _meta_without, _length_fields,
+                          _qc_nominalize, _resolve_inherited_start
     using ..FiberCS
     include("fiber/fiber-path.jl")
-    include("fiber/fiber-path-modify.jl")
     import ..Bifrost: _export_public!
     _export_public!(@__MODULE__)
 end

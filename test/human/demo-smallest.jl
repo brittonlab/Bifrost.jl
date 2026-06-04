@@ -1,5 +1,4 @@
 using Bifrost
-using Bifrost.Plots
 
 xs = StepIndexCrossSection(
     SilicaGermaniaGlass(0.036),
@@ -10,25 +9,21 @@ xs = StepIndexCrossSection(
     model_number = "SMF-like",
 )
 
-spec = PathSpecBuilder()
-straight!(spec; length = 0.5, meta = [Nickname("lead-in")])
-bend!(spec; radius = 0.01, angle = pi / 2, meta = [Nickname("90 deg bend")])
-straight!(spec; length = 0.5, meta = [Nickname("lead-out")])
+# Single Subpath: lead-in straight + 90° bend (axis_angle=0) + lead-out straight.
+# After the quarter bend on +z at R=0.05, the local frame's +z aligns with the
+# global +x axis, so the lead-out straight runs along +x.
+# seal! ends the Subpath at its natural exit with no terminal connector bending.
+sb = SubpathBuilder(); start!(sb)
+straight!(sb; length = 0.5, meta = [Nickname("lead-in")])
+bend!(sb;     radius = 0.05, angle = π / 2, meta = [Nickname("90 deg bend")])
+straight!(sb; length = 0.5, meta = [Nickname("lead-out")])
+seal!(sb)
 
-path = build(spec)
-fiber = Fiber(path; cross_section = xs, T_ref_K = 297.15)
+fiber = Fiber(build(sb); cross_section = xs, T_ref_K = 297.15)
 
-J, stats = propagate_fiber(fiber; λ_m = 1550e-9, rtol = 1e-9, verbose = false)
+J, stats = propagate_fiber(fiber; λ_m = 1550e-9)
 
 println("J =")
 display(J)
+println()
 println("intervals = ", length(stats))
-
-# plot_path = write_path_geometry_plot3d(
-#     path,
-#     path.spec.s_start,
-#     path.s_end;
-#     output = joinpath(@__DIR__, "..", "..", "output", "demo-smallest.html"),
-#     title = "demo-smallest path",
-# )
-# println("Wrote path plot to: ", plot_path)

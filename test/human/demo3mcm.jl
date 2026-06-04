@@ -1,15 +1,15 @@
 # =====================================================================
-# demo4mcm.jl — MCM temperature-dependent PTF demos
+# demo3mcm.jl — MCM temperature-dependent PTF demos
 # =====================================================================
 #
 # Two demonstrations of temperature sensitivity on a multi-segment fiber:
 #
-#   * demo_mcm_temperature_ptf        — StaticParticles(20), single propagation,
+#   * demo_mcm_temperature_ptf        — StaticParticles(50), single propagation,
 #                                       Stokes parameters and polarisation angle vs T
-#   * demo_mcm_temperature_ptf_scatter — Particles(40), single propagation,
+#   * demo_mcm_temperature_ptf_scatter — Particles(2000), single propagation,
 #                                       Poincaré equatorial scatter
 #
-# `demo4mcm_all()` runs both and writes `output/demo4mcm.html`.
+# `demo3mcm_all()` runs both and writes `output/demo-index.html`.
 #
 # This file expects to be `include`d after demo2.jl is in scope (it
 # reuses `_sample_segment_xyz` and the path-builder API).
@@ -54,7 +54,7 @@ end
 #
 # Two plots are written:
 #   1. mcm-temperature-ptf.html  — Stokes (S1,S2,S3) and DLP vs temperature
-#      from a StaticParticles(20) run (T_nom=30°C ± 5°C).
+#      from a StaticParticles(50) run (T_nom=30°C ± 5°C).
 #   2. mcm-temperature-ptf-scatter.html — DLP vs temperature from a single
 #      MCM Particles run (T_nom=30°C ± 5°C), showing the ensemble scatter.
 
@@ -68,9 +68,6 @@ const _MCM_DEMO_T_REF_K = 303.15   # 30°C reference temperature (= design point
 const _MCM_DEMO_λ_M     = 1550e-9
 const _MCM_DEMO_T_NOM_C = 30.0     # nominal operating temperature (°C)
 const _MCM_DEMO_T_SIG_C = 5.0      # ±5°C uncertainty (1σ)
-const _MCM_DEMO_STATIC_N = 20
-const _MCM_DEMO_PARTICLES_N = 40
-const _MCM_DEMO_RTOL = 1e-6
 
 # turns chosen so Δβ(30°C)·L = odd multiple of π (mid-fringe):
 # k=887 → (2·887+1)·π / (|Δβ(30°C)| · arc_per_turn) ≈ 10001.892
@@ -79,19 +76,27 @@ const _MCM_DEMO_HELIX1_TURNS = 10001.892069208387
 # Build the 5-segment fiber spec.  `ΔT_K` is the temperature offset applied
 # to the first helix via MCMadd(:T_K, ΔT_K); pass 0.0 for the baseline.
 function _mcm_demo_fiber(ΔT_K)
-    spec = PathSpecBuilder()
-    # Sinusoidal twist: amplitude 1 rad/m, period 10 m, starts here and runs
-    # to end of fiber (no subsequent Twist annotation resets it).
+    spec = SubpathBuilder()
+    start!(spec)
+    # Sinusoidal spinning: amplitude 1 rad/m, period 10 m, starts here and runs
+    # to end of fiber (no subsequent Spinning annotation resets it).
     straight!(spec; length = 5.0,
-              meta = AbstractMeta[Twist(; rate = s -> sin(2π * s / 100.0))])
+              meta = AbstractMeta[
+                  Nickname("lead-in"),
+                  Spinning(; rate = s -> sin(2π * s / 100.0)),
+              ])
     helix!(spec; radius = 0.025, pitch = 0.05, turns = _MCM_DEMO_HELIX1_TURNS,
            axis_angle = 0.0,
-           meta = AbstractMeta[MCMadd(:T_K, ΔT_K)])
-    straight!(spec; length = 5.0)
-    helix!(spec; radius = 0.025, pitch = 0.05, turns = 10000.0, axis_angle = 0.0)
-    straight!(spec; length = 5.0)
-    path = build(spec)
-    return Fiber(path; cross_section = _MCM_DEMO_XS, T_ref_K = _MCM_DEMO_T_REF_K)
+           meta = AbstractMeta[Nickname("temperature-sensitive helix"),
+                               MCMadd(:T_K, ΔT_K)])
+    straight!(spec; length = 5.0, meta = [Nickname("spacer")])
+    helix!(spec; radius = 0.025, pitch = 0.05, turns = 10000.0,
+           axis_angle = 0.0, meta = [Nickname("reference helix")])
+    straight!(spec; length = 5.0, meta = [Nickname("lead-out")])
+    seal!(spec)
+    # Fiber(builder) applies the :T_K thermal scaling (via the cladding CTE at
+    # T_ref) during the single build; no separate modify step.
+    return Fiber(spec; cross_section = _MCM_DEMO_XS, T_ref_K = _MCM_DEMO_T_REF_K)
 end
 
 # Apply a 2×2 Jones matrix to a normalised input state [1,0] and return
@@ -110,37 +115,32 @@ end
 """
     demo_mcm_temperature_ptf(; output_dir = …)
 
-StaticParticles(20) temperature run: S1, S2, S3, and degree of linear
+StaticParticles(50) temperature run: S1, S2, S3, and degree of linear
 polarization (DLP) vs temperature for the MCM demo fiber.
-Single propagation with T ~ N(30°C, 5°C), 20 particles.
+Single propagation with T ~ N(30°C, 5°C), 50 particles.
 """
 function demo_mcm_temperature_ptf(;
     output_dir::AbstractString = joinpath(@__DIR__, "..", "..", "output"),
 )
     desc = "MCM temperature demo: DLP and Stokes parameters vs temperature " *
-           "(StaticParticles(20), T = 30°C ± 5°C (1σ), single propagation) for a 5-segment fiber " *
+           "(StaticParticles(50), T = 30°C ± 5°C (1σ), single propagation) for a 5-segment fiber " *
            "with MCMadd(:T_K, ΔT) on the first large helix."
 
     MonteCarloMeasurements.unsafe_comparisons(true)
-    T_C_particles = StaticParticles(
-        _MCM_DEMO_STATIC_N,
-        Normal(Float64(_MCM_DEMO_T_NOM_C), Float64(_MCM_DEMO_T_SIG_C)),
-    )
+    T_C_particles  = StaticParticles(50, Normal(Float64(_MCM_DEMO_T_NOM_C), Float64(_MCM_DEMO_T_SIG_C)))
     T_K_particles  = T_C_particles + 273.15
     ΔT_K_particles = T_K_particles - _MCM_DEMO_T_REF_K
 
     fiber_mcm     = _mcm_demo_fiber(ΔT_K_particles)
-    modified_path = modify(fiber_mcm)
+    modified_path = fiber_mcm.path  # thermal already applied at construction
     fiber_mod     = Fiber(modified_path; cross_section = _MCM_DEMO_XS, T_ref_K = T_K_particles)
     J_p, _        = propagate_fiber(
         fiber_mod;
         λ_m = _MCM_DEMO_λ_M,
-        rtol = _MCM_DEMO_RTOL,
-        verbose = false,
     )
     MonteCarloMeasurements.unsafe_comparisons(false)
 
-    N = _MCM_DEMO_STATIC_N
+    N = 50
     T_C_samples = T_C_particles.particles
     s1_p = zeros(N); s2_p = zeros(N); s3_p = zeros(N)
     dlp_p = zeros(N); angle_p = zeros(N)
@@ -162,7 +162,7 @@ function demo_mcm_temperature_ptf(;
 
     html = """<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
-<title>MCM temperature PTF — StaticParticles(20)</title>
+<title>MCM temperature PTF — StaticParticles(50)</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
 html,body{margin:0;padding:20px;background:#111;color:#eee;font-family:sans-serif;}
@@ -172,7 +172,7 @@ h2{color:#aaa;font-size:1.1em;margin:0 0 8px 0;}
 </style>
 </head>
 <body>
-<h2>MCM demo — temperature-dependent PTF (StaticParticles($(_MCM_DEMO_STATIC_N)), T = $(_MCM_DEMO_T_NOM_C)°C ± $(_MCM_DEMO_T_SIG_C)°C, λ = 1550 nm)</h2>
+<h2>MCM demo — temperature-dependent PTF (StaticParticles(50), T = $(_MCM_DEMO_T_NOM_C)°C ± $(_MCM_DEMO_T_SIG_C)°C, λ = 1550 nm)</h2>
 <p style="color:#888;font-size:0.9em;margin:0 0 12px 0;">
   Each point is one Monte-Carlo particle. Colour encodes temperature. N = $(N) particles.
   Fiber: straight 5 m → helix (D=0.05 m, ~10002 turns, p=0.05 m, T-sensitive) → straight 5 m →
@@ -262,15 +262,12 @@ function demo_mcm_temperature_ptf_scatter(;
            "Particles run with T = 30°C ± 5°C (1σ) on the first large helix."
 
     MonteCarloMeasurements.unsafe_comparisons(true)
-    T_C_particles = Particles(
-        _MCM_DEMO_PARTICLES_N,
-        Normal(Float64(_MCM_DEMO_T_NOM_C), Float64(_MCM_DEMO_T_SIG_C)),
-    )
+    T_C_particles  = _MCM_DEMO_T_NOM_C ± _MCM_DEMO_T_SIG_C  # Particles{Float64,2000}
     T_K_particles  = T_C_particles + 273.15
     ΔT_K_particles = T_K_particles - _MCM_DEMO_T_REF_K
 
     fiber_mcm = _mcm_demo_fiber(ΔT_K_particles)
-    modified_path = modify(fiber_mcm)
+    modified_path = fiber_mcm.path  # thermal already applied at construction
     # T_ref_K = Particles so material birefringence is also uncertain.
     fiber_mod = Fiber(modified_path;
                       cross_section = _MCM_DEMO_XS,
@@ -279,8 +276,6 @@ function demo_mcm_temperature_ptf_scatter(;
     J_p, _ = propagate_fiber(
         fiber_mod;
         λ_m = _MCM_DEMO_λ_M,
-        rtol = _MCM_DEMO_RTOL,
-        verbose = false,
     )
     MonteCarloMeasurements.unsafe_comparisons(false)
 
@@ -387,92 +382,42 @@ Plotly.newPlot('poincare_scatter',
 end
 
 # =====================================================================
-# Index page (demo4mcm.html)
+# Monolithic index entries
 # =====================================================================
 
-const DEMO4MCM_INDEX = [
+const DEMO3MCM_INDEX = [
     (group = "MCM", fn = demo_mcm_temperature_ptf,         kwargs = (;)),
     (group = "MCM", fn = demo_mcm_temperature_ptf_scatter, kwargs = (;)),
 ]
 
 """
-    demo4mcm_all(; index_output)
+    demo3mcm_all(; index_output)
 
-Run every demo in `DEMO4MCM_INDEX` and write `demo4mcm.html`.
+Run every demo in `DEMO3MCM_INDEX` and write `demo-index.html`.
 """
-function demo4mcm_all(;
-    index_output::AbstractString = joinpath(@__DIR__, "..", "..", "output", "demo4mcm.html"),
-)
+function demo3mcm_entries()
     entries = Tuple{String, String, String, String}[]
 
-    for d in DEMO4MCM_INDEX
-        println("[ demo4mcm ] $(d.fn)")
+    for d in DEMO3MCM_INDEX
+        println("[ demo3mcm ] $(d.fn)")
         result = d.fn(; d.kwargs...)
-        desc_inline = (result isa NamedTuple && haskey(result, :desc)) ?
-                      String(result.desc) : ""
-        desc_entry  = hasproperty(d, :desc) ? d.desc : ""
-        desc        = isempty(desc_inline) ? desc_entry : desc_inline
-
-        paths = result isa NamedTuple ? values(result) : (result,)
-        for v in paths
-            if v isa AbstractString && endswith(v, ".html")
-                push!(entries, (d.group, basename(v), v, desc))
-            end
+        desc = _demo_result_desc(result, d)
+        for path in _demo_html_paths(result)
+            push!(entries, (d.group, basename(path), path, desc))
         end
     end
+    return entries
+end
 
-    open(index_output, "w") do io
-        println(io, """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BIFROST MCM temperature PTF demos</title>
-  <style>
-    body { font-family: sans-serif; max-width: 800px; margin: 2em auto; color: #222; }
-    h1   { font-size: 1.5em; border-bottom: 1px solid #ccc; padding-bottom: 0.3em; }
-    h2   { font-size: 1.15em; margin-top: 1.8em; color: #1a6; }
-    ul   { padding-left: 1.2em; }
-    li   { margin: 1em 0; }
-    a    { font-weight: bold; color: #1a6; }
-    p.desc { margin: 0.3em 0 0 0; color: #555; font-size: 0.95em; }
-    nav.index-nav { font-size: 0.85em; margin-bottom: 1em; color: #888; }
-    nav.index-nav a { font-weight: normal; color: #1a6; margin-right: 0.8em; }
-  </style>
-</head>
-<body>
-  <nav class="index-nav">
-    <a href="demo1.html">demo1</a>
-    <a href="demo2.html">demo2</a>
-    <a href="demo4mcm.html">demo4mcm</a>
-    <a href="demo3benchmark.html">demo3benchmark</a>
-  </nav>
-  <h1>BIFROST MCM temperature PTF demos</h1>""")
-
-        seen_groups = String[]
-        for (g, _, _, _) in entries
-            g in seen_groups || push!(seen_groups, g)
-        end
-        for g in seen_groups
-            println(io, "  <h2>MCM / temperature-dependent PTF</h2>")
-            println(io, "  <ul>")
-            for (eg, title, path, desc) in entries
-                eg == g || continue
-                println(io, "    <li>")
-                println(io, "      <a href=\"$(path)\">$(title)</a>")
-                println(io, "      <p class=\"desc\">$(desc)</p>")
-                println(io, "    </li>")
-            end
-            println(io, "  </ul>")
-        end
-        println(io, """</body>
-</html>""")
-    end
-
-    println("Wrote demo4mcm index to: ", index_output)
-    return index_output
+function demo3mcm_all(; index_output::AbstractString = DEMO_MONOLITHIC_INDEX_OUTPUT)
+    return _write_demo_index(
+        [(title = "MCM temperature PTF demos",
+          entries = demo3mcm_entries(),
+          group_titles = Dict("MCM" => "MCM / temperature-dependent PTF"))];
+        index_output,
+    )
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    demo4mcm_all()
+    demo3mcm_all()
 end

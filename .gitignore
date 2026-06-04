@@ -3,7 +3,7 @@
 fiberinput_paddles_3d.html
 .DS_Store
 output/
-__pycache__
+__pycache__/
 *.pyc
 
 # Documenter.jl build artifacts

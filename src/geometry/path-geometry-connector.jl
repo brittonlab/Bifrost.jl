@@ -2,7 +2,7 @@
 path-geometry-connector.jl
 
 QuinticConnector{T<:Real}: parametric quintic Hermite curve used as the resolved
-form of `JumpBy` / `JumpTo`.
+form of a `JumpBy` segment and of the terminal `jumpto!` seal.
 
 Matches position + tangent direction + curvature vector at both endpoints (G2).
 A single positive scalar λ (handle scale) supplies the parameter-speed degree of
@@ -56,15 +56,25 @@ const _QC_GAUSS4_WEIGHTS = ( 0.3478548451374538,  0.6521451548625461,
 # ---------------------------------------------------------------------------
 
 """
-    QuinticConnector{T<:Real}
+    QuinticConnector{T<:Real} <: AbstractPathSegment
 
-Resolved form of `JumpBy` / `JumpTo`. Quintic Hermite curve
+Resolved form of a [`JumpBy`](@ref) segment and of the terminal `jumpto!` seal: a
+quintic Hermite curve
 
-    r(u) = a₀ + a₁ u + a₂ u² + a₃ u³ + a₄ u⁴ + a₅ u⁵,   u ∈ [0,1]
+```
+r(u) = a₀ + a₁ u + a₂ u² + a₃ u³ + a₄ u⁴ + a₅ u⁵,   u ∈ [0,1]
+```
 
-in 3D, with row `i` of `a` storing the coefficient of `uⁱ⁻¹`. `lambda` is the
-chosen handle scale (Float64 — must be deterministic under MCM inputs).
-`s_table[i]` is the arc length from `u=0` to `u = (i-1)/(n-1)`.
+in 3D that matches position, tangent direction, and curvature vector at both endpoints
+(G2 continuity). Implements the [`AbstractPathSegment`](@ref) local-geometry interface.
+
+# Fields
+
+- `a`: `6 × 3` coefficient matrix; row `i` stores the coefficient of `uⁱ⁻¹`.
+- `lambda`: chosen handle scale (`Float64` — must be deterministic under MCM inputs).
+- `s_table`: arc-length lookup, where `s_table[i]` is the arc length from `u = 0` to
+  `u = (i-1)/(n-1)`.
+- `meta`: per-segment annotation bag (see [`AbstractMeta`](@ref)).
 """
 struct QuinticConnector{T<:Real} <: AbstractPathSegment
     a       :: Matrix{T}     # 6 × 3
@@ -73,6 +83,16 @@ struct QuinticConnector{T<:Real} <: AbstractPathSegment
     meta    :: Vector{AbstractMeta}
 end
 
+"""
+    QuinticConnector(a, lambda, s_table; meta = AbstractMeta[])
+
+Construct a [`QuinticConnector`](@ref) from a precomputed coefficient matrix `a`, handle
+scale `lambda`, and arc-length table `s_table`.
+
+Coerces `lambda` to `Float64` and wraps `meta` in an `AbstractMeta` vector. Callers
+normally obtain `a`/`s_table` from the internal connector builders rather than calling
+this directly.
+"""
 QuinticConnector(a::Matrix{T}, lambda::Real, s_table::AbstractVector{T};
                  meta = AbstractMeta[]) where {T<:Real} =
     QuinticConnector{T}(a, Float64(lambda), Vector{T}(s_table),
@@ -387,15 +407,46 @@ function _qc_project_perp(K::AbstractVector, t::AbstractVector)
 end
 
 # ---------------------------------------------------------------------------
+# Straight / zero-length terminal connector (natural seal)
+# ---------------------------------------------------------------------------
+
+"""
+    _build_straight_connector(extra, T; meta = AbstractMeta[]) → QuinticConnector{T}
+
+Build a terminal connector that travels straight along the local tangent ẑ for
+`extra` meters, with no bending. Used by `seal!` (natural seal) to terminate a
+Subpath at its natural exit without invoking the quintic solver, whose
+coincident-endpoint solve is ill-conditioned.
+
+`extra == 0` yields a true zero-length connector (all coefficients zero); its
+query path is degenerate-safe in `QuinticConnector` (zero speed maps to the
+local ẑ tangent). `extra > 0` yields an exact straight line `r(u) = (0,0,extra·u)`
+with a linear arc-length table.
+
+`meta` is the seal's annotation bag (e.g. a `Spinning` placed on `seal!`); it is
+stored on the connector so it participates in spinning resolution like any other
+segment's meta.
+"""
+function _build_straight_connector(extra::Real, ::Type{T};
+                                   meta::AbstractVector{<:AbstractMeta} = AbstractMeta[]) where {T<:Real}
+    L = T(extra)
+    a = zeros(T, 6, 3)
+    a[2, 3] = L                       # r(u) = (0, 0, L·u): linear in ẑ
+    s_table = T[zero(T), L]           # straight ⇒ two table points suffice
+    return QuinticConnector(a, 1.0, s_table; meta = meta)
+end
+
+# ---------------------------------------------------------------------------
 # Build a connector with optional min_bend_radius (λ search)
 # ---------------------------------------------------------------------------
 
 """
     _build_quintic_connector(p1_local, t_hat_out, K0_local, K1_local;
-                             min_bend_radius, target_arc_length,
+                             min_bend_radius, target_path_length,
                              n_table, meta) → QuinticConnector
 
-Construct a `QuinticConnector` from `JumpBy` / `JumpTo` resolve data.
+Construct a `QuinticConnector` from a Subpath terminal-jumpto resolve or a
+`JumpBy` resolve.
 
 `t_hat_in` is the local-frame ẑ = (0,0,1). `K0_local` is the prior segment's
 terminal curvature vector projected into the new segment's local frame.
@@ -404,21 +455,26 @@ are silently re-projected onto the plane perpendicular to their tangent.
 
 If `min_bend_radius` is set, performs an exponential-bracket / bisection
 search over the handle scale λ until the sampled peak curvature falls below
-`1/min_bend_radius`. If `target_arc_length` is set, instead searches λ until
-the connector's arc length matches the target — used by `modify(fiber)` to
-honor `:T_K` thermal expansion on a `JumpTo` whose endpoint is a lab-frame
-invariant. The two constraints can be combined: when both are set, λ is
-chosen by the arc-length search and the result is validated against
-`min_bend_radius`. All branching uses nominalized scalars so the chosen λ
-is deterministic under MCM inputs; the final coefficients carry the original
-`T` element type.
+`1/min_bend_radius`. 
+
+If `target_path_length` is set, instead searches λ
+until the connector's arc length matches the target — supplied via
+`build(...; jumpto_target_length=…)` (a consuming layer, the fiber, uses it to
+thermally expand the terminal connector, issue #33) while the endpoint stays a
+lab-frame invariant.
+
+The two constraints can be
+combined: when both are set, λ is chosen by the arc-length search and the
+result is validated against `min_bend_radius`. All branching uses
+nominalized scalars so the chosen λ is deterministic under MCM inputs; the
+final coefficients carry the original `T` element type.
 """
 function _build_quintic_connector(p1_local::AbstractVector,
                                   t_hat_out::AbstractVector,
                                   K0_local::AbstractVector,
                                   K1_local::AbstractVector;
                                   min_bend_radius::Union{Nothing, Real} = nothing,
-                                  target_arc_length::Union{Nothing, Real} = nothing,
+                                  target_path_length::Union{Nothing, Real} = nothing,
                                   n_table::Int = 256,
                                   n_check::Int = 128,
                                   growth::Float64 = 1.5,
@@ -444,10 +500,10 @@ function _build_quintic_connector(p1_local::AbstractVector,
         K0n = sqrt(Float64(_qc_nominalize(K0_perp[1]^2 + K0_perp[2]^2 + K0_perp[3]^2)))
         K1n = sqrt(Float64(_qc_nominalize(K1_perp[1]^2 + K1_perp[2]^2 + K1_perp[3]^2)))
         K0n > κ_limit + curvature_tol && throw(ArgumentError(
-            "JumpBy/JumpTo: incoming endpoint curvature ($(round(K0n;digits=3)) m⁻¹) " *
+            "connector: incoming endpoint curvature ($(round(K0n;digits=3)) m⁻¹) " *
             "exceeds 1/min_bend_radius ($(round(κ_limit;digits=3)) m⁻¹)"))
         K1n > κ_limit + curvature_tol && throw(ArgumentError(
-            "JumpBy/JumpTo: outgoing endpoint curvature ($(round(K1n;digits=3)) m⁻¹) " *
+            "connector: outgoing endpoint curvature ($(round(K1n;digits=3)) m⁻¹) " *
             "exceeds 1/min_bend_radius ($(round(κ_limit;digits=3)) m⁻¹)"))
     end
 
@@ -458,14 +514,14 @@ function _build_quintic_connector(p1_local::AbstractVector,
     # in arc length over the typical range (chord-aligned baseline upward). If
     # both target and min_bend_radius are set, pick λ by arc length and verify
     # peak curvature post-hoc.
-    if !isnothing(target_arc_length)
-        target = Float64(_qc_nominalize(target_arc_length))
+    if !isnothing(target_path_length)
+        target = Float64(_qc_nominalize(target_path_length))
         target > 0.0 || throw(ArgumentError(
-            "target_arc_length must be positive; got $(target)"))
+            "target_path_length must be positive; got $(target)"))
         chord_nom = sqrt(Float64(_qc_nominalize(
             p1_local[1]^2 + p1_local[2]^2 + p1_local[3]^2)))
         target < chord_nom * (1 - rel_tol) && throw(ArgumentError(
-            "target arc length infeasible: target=$(target) m is shorter " *
+            "target path length infeasible: target=$(target) m is shorter " *
             "than chord ($(round(chord_nom;digits=6)) m)"))
 
         arc_at = function (λv)
@@ -494,7 +550,7 @@ function _build_quintic_connector(p1_local::AbstractVector,
                 λ_lo = λ_hi
             end
             found || throw(ArgumentError(
-                "target arc length infeasible: arc length did not reach " *
+                "target path length infeasible: arc length did not reach " *
                 "$(target) m within λ=$(round(λ_hi;digits=3))"))
         else
             # Shrink λ until arc length ≤ target.
@@ -510,7 +566,7 @@ function _build_quintic_connector(p1_local::AbstractVector,
                 λ_hi = λ_lo
             end
             found || throw(ArgumentError(
-                "target arc length infeasible: arc length did not shrink to " *
+                "target path length infeasible: arc length did not shrink to " *
                 "$(target) m down to λ=$(round(λ_lo;digits=6))"))
         end
 
@@ -533,7 +589,7 @@ function _build_quintic_connector(p1_local::AbstractVector,
         if isfinite(κ_limit)
             κ_final = _qc_peak_curvature(coeffs_final; n_check = n_check)
             κ_final > κ_limit + curvature_tol && throw(ArgumentError(
-                "target_arc_length=$(target) m and min_bend_radius=$(R_min) m " *
+                "target_path_length=$(target) m and min_bend_radius=$(R_min) m " *
                 "are jointly infeasible: peak curvature " *
                 "$(round(κ_final;digits=3)) m⁻¹ exceeds 1/R_min=" *
                 "$(round(κ_limit;digits=3)) m⁻¹"))
@@ -572,7 +628,7 @@ function _build_quintic_connector(p1_local::AbstractVector,
         λ_lo = λ_hi
     end
     found || throw(ArgumentError(
-        "JumpBy/JumpTo: min_bend_radius=$(R_min) m infeasible; could not bring " *
+        "connector: min_bend_radius=$(R_min) m infeasible; could not bring " *
         "peak curvature below $(round(κ_limit;digits=3)) m⁻¹ within λ=$(round(λ_hi;digits=3))."))
 
     # Bisect for tighter λ.

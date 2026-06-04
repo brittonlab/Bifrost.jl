@@ -2,6 +2,8 @@ using Test
 using LinearAlgebra
 using QuadGK
 using Bifrost
+using Bifrost.PathGeometry: _build_quintic_connector, _qc_build_table, _qc_coefficients, _qc_eval, _qc_eval_d1, _qc_eval_d2, _qc_peak_curvature, _qc_speed, _qc_t_from_s, _qc_nominalize
+
 
 # -----------------------------------------------------------------------
 # Helpers used across multiple test sets in this file

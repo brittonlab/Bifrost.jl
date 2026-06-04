@@ -40,7 +40,7 @@ The permittivity tensor has contributions from every birefringence mechanism ava
 \epsilon = \bar{\epsilon} + i\epsilon_c \left( \begin{array}{cc} 0 & -1 \\ 1 & 0 \end{array} \right) + \epsilon_i \left( \begin{array}{cc} \cos 2\xi z & \sin 2\xi z \\ \sin 2\xi z & -\cos 2\xi z \end{array} \right).
 ```
 
-Here $\bar{\epsilon} = \bar{n}^2$ is the average permittivity, $\epsilon_c$ is the circular birefringence, and $\epsilon_i$ is the intrinsic linear birefringence, which is rotating with the spinning of the fiber at spin rate $\xi = 2\pi/L_s$, with $L_s$ the spin pitch.
+Here $\bar{\epsilon} = \bar{n}^2$ is the average permittivity, $\epsilon_c$ is the circular birefringence, and $\epsilon_i$ is the intrinsic linear birefringence, which is rotating with the spinning of the fiber at spin rate $\xi$. Writing $\xi = 2\pi/L_s$ with a single spin pitch $L_s$ is the constant-rate special case used here for clarity. In general the spin rate is an arbitrary function of arc length, $\xi = \xi(z)$, and the implementation treats it that way: `ResolvedSpinningRate.rate` in `src/geometry/path-geometry.jl` is a `Union{Float64, Function}`, and the run integrator (`_integrate_rate`) takes the analytic branch for a constant rate and adaptive Gauss–Kronrod quadrature for a function rate. Replace $2\xi z$ below with $2\int_0^z \xi(z')\,dz'$ for the function-valued case.
 
 This is a only starting point because the choice of the $N,B$ frame doesn't really mean anything. Without the curvature of bending, the direction of the normal vector is arbitrary. In this case, the normal vector direction is evidently set by the fact that the first component of the Jones vector here is along the slow axis and the second component is along the fast axis. Thus the normal vector is set along the slow axis at $z=0$ (and doesn't rotate with the spinning). That's a loose constraint because we sort of don't care about these overall rotations for our problems where we'll be sending in light of all polarizations. 
 
@@ -67,12 +67,13 @@ J_{\mathrm{total}}=\prod_i J_i,
 
 with matrix order matching the order light encounters along the fiber. That
 approach is simple, but it is difficult to attach a meaningful error bound when
-linear birefringence, twist, and other non-commuting terms vary along the path.
+linear birefringence, spinning, and other non-commuting terms vary along the
+path.
 
 The Julia implementation instead assembles a local generator:
 
 ```math
-K(s,\omega)=K_{\mathrm{bend}}(s,\omega)+K_{\mathrm{twist}}(s,\omega).
+K(s,\omega)=K_{\mathrm{bend}}(s,\omega)+K_{\mathrm{spin}}(s,\omega).
 ```
 
 The bending contribution comes from path curvature. For a local bend radius
@@ -80,20 +81,20 @@ The bending contribution comes from path curvature. For a local bend radius
 from `src/fiber/fiber-cross-section.jl`; in the simplest stress model the
 magnitude scales like `1/R(s)^2`.
 
-The twist contribution uses the total frame twist rate:
+The spinning contribution uses the total frame rotation rate:
 
 ```math
-\tau_{\mathrm{path}}(s)=\tau_{\mathrm{geom}}(s)+\tau_{\mathrm{material}}(s).
+\tau_{\mathrm{path}}(s)=\tau_{\mathrm{geom}}(s)+\Omega(s).
 ```
 
 Here `geometric_torsion(path, s)` comes from the centerline, while
-`material_twist(path, s)` comes from resolved `Twist` metadata.
+`spinning_rate(path, s)` comes from resolved `Spinning` metadata.
 
 The same decomposition exists for the frequency derivative:
 
 ```math
 K_\omega(s,\omega)
-=K_{\mathrm{bend},\omega}(s,\omega)+K_{\mathrm{twist},\omega}(s,\omega).
+=K_{\mathrm{bend},\omega}(s,\omega)+K_{\mathrm{spin},\omega}(s,\omega).
 ```
 
 That keeps ordinary Jones propagation and DGD sensitivity propagation aligned:
@@ -128,7 +129,7 @@ Path breakpoints come from the built path:
 fiber_breakpoints(fiber) = breakpoints(fiber.path)
 ```
 
-Those breakpoints include path segment boundaries and resolved twist-run
+Those breakpoints include path segment boundaries and resolved spinning-run
 boundaries. `propagate_fiber` calls `propagate_piecewise`, which integrates
 independently over each smooth interval.
 

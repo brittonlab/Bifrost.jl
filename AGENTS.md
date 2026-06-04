@@ -183,5 +183,10 @@ scattering.
 
 - When citing literature only use sources that you can verify in a library catalogue or
   database.
-- Markdown, comments and code must line wrap at 100 characters.
+- Markdown, comments and code must line wrap at 92 characters.
+- Modules, methods, and structs should have inline documentation following Julia norms.
+  Write for package users and current behavior; avoid development history, migration
+  notes, and references to retired APIs or design choices.
 - Use `skills/julia-docstrings` for Julia docstring creation, revision, and audits.
+- Obey the rule JuliaIndexFromLength. Use eachindex() not length() for iterating over
+  vectors/tensors in loops.

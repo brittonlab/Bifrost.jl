@@ -3,6 +3,7 @@ using LinearAlgebra
 using Random
 using Bifrost
 
+
 # Verify the closed-form 4×4 block-upper-triangular exp against LinearAlgebra.exp.
 # For A = [M Mω; 0 M] we should have exp(A) = [E F; 0 E] with E = exp(M).
 # See docstring of exp_block_upper_triangular_2x2 for the Frechet-derivative closed form.

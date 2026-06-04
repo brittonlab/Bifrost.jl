@@ -15,17 +15,141 @@
 #     surrounding fixed segments drawn in green.
 #
 # `demo2_all()` runs every demo in `DEMO2_INDEX` and writes
-# `output/demo2.html` with the groups under separate headings.
+# `output/demo-index.html` with the groups under separate headings.
 #
 # This file expects to be `include`d after demo1.jl is in scope (it
 # reuses `_sample_segment_xyz` and the path-builder API).
 #
-# Each demo function builds its path inline using PathSpecBuilder — no
-# shared builder helpers. Code duplication across variants is intentional
+# Each demo function builds its path inline with SubpathBuilder-compatible
+# calls. Code duplication across variants is intentional
 # per AGENTS.md §5 (Visual Tests): clarity over abstraction.
 
 if !isdefined(Main, :_sample_segment_xyz)
     include(joinpath(@__DIR__, "demo1.jl"))
+end
+
+# The sequence helper below adds methods to the SubpathBuilder authoring verbs
+# for a demo-only receiver type. Import the functions from Bifrost so these
+# definitions extend the real generics rather than shadow them with new
+# `Main`-local functions.
+import Bifrost: straight!, bend!, helix!, catenary!, jumpby!, jumpto!, build
+
+# ---------------------------------------------------------------------
+# Demo sequence helper: a `jumpto!` seals the current SubpathBuilder and starts
+# the next one at the same point and incoming tangent, so the examples can show
+# multi-Subpath paths without manually repeating the boundary state each time.
+# ---------------------------------------------------------------------
+
+mutable struct _PathSequence
+    subpaths::Vector{SubpathBuilder}
+    current::Union{SubpathBuilder, Nothing}
+end
+
+function _path_sequence()
+    sb = SubpathBuilder(); start!(sb)
+    return _PathSequence(SubpathBuilder[], sb)
+end
+
+# Forward interior-segment builders to the current Subpath.
+function straight!(p::_PathSequence; kwargs...)
+    @assert !isnothing(p.current) "path sequence already finalized"
+    straight!(p.current; kwargs...)
+    return p
+end
+function bend!(p::_PathSequence; kwargs...)
+    @assert !isnothing(p.current) "path sequence already finalized"
+    bend!(p.current; kwargs...)
+    return p
+end
+function helix!(p::_PathSequence; kwargs...)
+    @assert !isnothing(p.current) "path sequence already finalized"
+    helix!(p.current; kwargs...)
+    return p
+end
+function catenary!(p::_PathSequence; kwargs...)
+    @assert !isnothing(p.current) "path sequence already finalized"
+    catenary!(p.current; kwargs...)
+    return p
+end
+function jumpby!(p::_PathSequence; kwargs...)
+    @assert !isnothing(p.current) "path sequence already finalized"
+    jumpby!(p.current; kwargs...)
+    return p
+end
+
+# `jumpto!` seals the current Subpath and starts a new one.
+function jumpto!(p::_PathSequence;
+                 point,
+                 incoming_tangent = nothing,
+                 incoming_curvature = nothing,
+                 min_bend_radius = nothing,
+                 meta = AbstractMeta[])
+    @assert !isnothing(p.current) "path sequence already finalized"
+
+    jumpto!(p.current;
+        point                = point,
+        incoming_tangent     = incoming_tangent,
+        incoming_curvature   = incoming_curvature,
+        min_bend_radius      = min_bend_radius,
+        meta                 = meta,
+    )
+
+    # Use the user-supplied point exactly for the next Subpath's start_point so
+    # the conformity check passes despite the connector solver's finite
+    # tolerance (~1e-6 rel).
+    pt_tup = (Float64(point[1]), Float64(point[2]), Float64(point[3]))
+
+    # For the start tangent: if the user supplied an explicit incoming tangent,
+    # use that. Otherwise trial-build to read the connector exit tangent.
+    sealed_built = build(p.current)
+    out_tan = if isnothing(incoming_tangent)
+        end_tan_global = collect(end_tangent(sealed_built))
+        (Float64(end_tan_global[1]),
+         Float64(end_tan_global[2]),
+         Float64(end_tan_global[3]))
+    else
+        (Float64(incoming_tangent[1]),
+         Float64(incoming_tangent[2]),
+         Float64(incoming_tangent[3]))
+    end
+
+    push!(p.subpaths, p.current)
+
+    next = SubpathBuilder()
+    out_curv = isnothing(incoming_curvature) ?
+        (0.0, 0.0, 0.0) :
+        (Float64(incoming_curvature[1]),
+         Float64(incoming_curvature[2]),
+         Float64(incoming_curvature[3]))
+    start!(next;
+        point              = pt_tup,
+        outgoing_tangent   = out_tan,
+        outgoing_curvature = out_curv,
+    )
+    p.current = next
+    return p
+end
+
+function _sequence_builders!(p::_PathSequence)
+    @assert !isnothing(p.current) "path sequence already finalized"
+    if !isempty(p.current.segments)
+        seal!(p.current)
+        push!(p.subpaths, p.current)
+    end
+    p.current = nothing  # mark finalized
+
+    if isempty(p.subpaths)
+        error("_sequence_builders!: no segments authored")
+    end
+    return p.subpaths
+end
+
+# build(::_PathSequence): seal the trailing Subpath at its natural exit (if
+# it has any segments), then assemble. Returns SubpathBuilt for one Subpath
+# or PathBuilt for many.
+function build(p::_PathSequence)
+    builders = _sequence_builders!(p)
+    return length(builders) == 1 ? build(only(builders)) : build(builders)
 end
 
 # =====================================================================
@@ -39,7 +163,7 @@ end
 # ---------------------------------------------------------------------
 #
 # All paths in this demo set lie in the y = 0 plane (we only ever use
-# axis_angle = 0 and never set y-components in delta/destination), so
+# axis_angle = 0 and never set y-components in delta/point), so
 # the natural 2D projection is (x, z). The SVG is emitted directly —
 # no JS, no external dependency.
 
@@ -47,7 +171,8 @@ end
 # (xs, zs, is_red) tuples — one per segment.
 function _sample_path_2d(path, red_indices::Vector{Int})
     rows = Tuple{Vector{Float64}, Vector{Float64}, Bool}[]
-    for i in 1:length(path.placed_segments)
+    n = length(_all_placed(path))
+    for i in 1:n
         s = _sample_segment_xyz(path, i)
         push!(rows, (s.x, s.z, i in red_indices))
     end
@@ -83,7 +208,7 @@ function _jump_row_svg(output::AbstractString, title::AbstractString;
             xmin = min(xmin, minimum(xs2)); xmax = max(xmax, maximum(xs2))
             zmin = min(zmin, minimum(zs));  zmax = max(zmax, maximum(zs))
         end
-        p0 = position(path, path.spec.s_start)
+        p0 = position(path, 0.0)
         push!(starts, (Float64(p0[1]) + dx, Float64(p0[3])))
         # Label sits just above each variant.
         x_label = dx
@@ -188,37 +313,77 @@ end
 # `red` is optional and lists which atomic segments to colour red; with
 # the default `Int[]` everything draws in the single non-red colour.
 function _path(f::Function; red::Vector{Int} = Int[])
-    spec = PathSpecBuilder()
+    spec = _path_sequence()
     f(spec)
     return (build(spec), red)
 end
 
-# Build a path one segment at a time, stopping at the first segment whose
+# Build a path one builder call at a time, trapping the first call whose
 # `build()` throws. Returns `(partial_path_or_nothing, n_built, error_or_nothing)`.
 # Used by `min_bend_radius` demos to display a partial path with the
-# infeasible segment missing.
+# infeasible step missing.
 #
-# `f(spec)` should call atomic builders (straight!, bend!, jumpby!, etc.).
-# Each call must append exactly one segment to `spec.segments`; we trial-
-# build after every append and roll back the last segment if it fails.
+# Each `f(probe)` invocation should call atomic builders. We replay the call
+# log step-by-step, building a fresh proxy each iteration and stopping at
+# the first failure.
 function _build_with_failure(f::Function)
-    probe_spec = PathSpecBuilder()
-    f(probe_spec)
-    declared = copy(probe_spec.segments)
+    # Record builder calls via a recorder proxy.
+    recorded = Vector{Tuple{Symbol, Tuple, Dict{Symbol, Any}}}()
+    rec = _RecorderProxy(recorded)
+    f(rec)
 
-    spec = PathSpecBuilder()
+    n = length(recorded)
     last_good = nothing
-    for (i, seg) in enumerate(declared)
-        push!(spec.segments, seg)
+    last_n = 0
+    for i in 1:n
+        # Replay the first i calls.
+        spec = _path_sequence()
+        ok = true
+        local err
+        for j in 1:i
+            (sym, args, kw) = recorded[j]
+            try
+                _replay_call(spec, sym, args, kw)
+            catch e
+                ok = false
+                err = e
+                break
+            end
+        end
+        if !ok
+            return (last_good, last_n, err)
+        end
         try
             last_good = build(spec)
+            last_n = i
         catch e
-            pop!(spec.segments)  # discard the failing segment
-            partial = isempty(spec.segments) ? nothing : build(spec)
-            return (partial, i - 1, e)
+            return (last_good, last_n, e)
         end
     end
-    return (last_good, length(declared), nothing)
+    return (last_good, n, nothing)
+end
+
+# Recorder proxy: captures (symbol, args, kwargs) for each builder call.
+mutable struct _RecorderProxy
+    log::Vector{Tuple{Symbol, Tuple, Dict{Symbol, Any}}}
+end
+straight!(p::_RecorderProxy; kwargs...) = (push!(p.log, (:straight, (), Dict{Symbol,Any}(kwargs))); p)
+bend!(p::_RecorderProxy; kwargs...)     = (push!(p.log, (:bend,     (), Dict{Symbol,Any}(kwargs))); p)
+helix!(p::_RecorderProxy; kwargs...)    = (push!(p.log, (:helix,    (), Dict{Symbol,Any}(kwargs))); p)
+catenary!(p::_RecorderProxy; kwargs...) = (push!(p.log, (:catenary, (), Dict{Symbol,Any}(kwargs))); p)
+jumpby!(p::_RecorderProxy; kwargs...)   = (push!(p.log, (:jumpby,   (), Dict{Symbol,Any}(kwargs))); p)
+jumpto!(p::_RecorderProxy; kwargs...)   = (push!(p.log, (:jumpto,   (), Dict{Symbol,Any}(kwargs))); p)
+
+function _replay_call(spec::_PathSequence, sym::Symbol, args::Tuple, kw::Dict{Symbol, Any})
+    f = sym === :straight ? straight! :
+        sym === :bend     ? bend! :
+        sym === :helix    ? helix! :
+        sym === :catenary ? catenary! :
+        sym === :jumpby   ? jumpby! :
+        sym === :jumpto   ? jumpto! :
+        error("unknown builder symbol $sym")
+    f(spec; kw...)
+    return spec
 end
 
 # =====================================================================
@@ -255,31 +420,31 @@ function demo_jumpby_2d_tangent_out(;
     )
 end
 
-function demo_jumpto_2d_destination(;
+function demo_jumpto_2d_point(;
     output_dir::AbstractString = joinpath(@__DIR__, "..", "..", "output"),
 )
     return _jump_row_svg(
-        joinpath(output_dir, "jumpto-2d-destination.html"),
-        "2D — JumpTo(destination=(x, 0, 1.5)): transverse sweep";
+        joinpath(output_dir, "jumpto-2d-point.html"),
+        "2D — JumpTo(point=(x, 0, 1.5)): transverse sweep";
         variants = [
             ("x = 0.0", () -> _path() do spec
                 straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.0, 0.0, 1.5))
+                jumpto!(spec;   point = (0.0, 0.0, 1.5))
                 straight!(spec; length      = 1.0)
             end),
             ("x = 0.3", () -> _path() do spec
                 straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.3, 0.0, 1.5))
+                jumpto!(spec;   point = (0.3, 0.0, 1.5))
                 straight!(spec; length      = 1.0)
             end),
             ("x = 0.6", () -> _path() do spec
                 straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.6, 0.0, 1.5))
+                jumpto!(spec;   point = (0.6, 0.0, 1.5))
                 straight!(spec; length      = 1.0)
             end),
             ("x = 1.0", () -> _path() do spec
                 straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (1.0, 0.0, 1.5))
+                jumpto!(spec;   point = (1.0, 0.0, 1.5))
                 straight!(spec; length      = 1.0)
             end),
         ],
@@ -292,24 +457,24 @@ function demo_jumpto_2d_tangent_global(;
 )
     return _jump_row_svg(
         joinpath(output_dir, "jumpto-2d-tangent-global.html"),
-        "2D — JumpTo: outgoing tangent (GLOBAL frame)";
+        "2D — JumpTo: incoming tangent (global frame)";
         variants = [
-            ("t = (+1,0,0)", () -> _path() do spec
+            ("incoming_tangent = (+1,0,0)", () -> _path() do spec
                 straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.5, 0.0, 1.5),
-                                tangent     = (1.0, 0.0, 0.0))
-                straight!(spec; length      = 1.0)
-            end),
-            ("t = (0,0,+1)", () -> _path() do spec
-                straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.5, 0.0, 1.5),
-                                tangent     = (0.0, 0.0, 1.0))
+                jumpto!(spec;   point = (0.5, 0.0, 1.5),
+                                incoming_tangent     = (1.0, 0.0, 0.0))
                 straight!(spec; length      = 1.0)
             end),
-            ("t = (-1,0,1)/√2", () -> _path() do spec
+            ("incoming_tangent = (0,0,+1)", () -> _path() do spec
                 straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.5, 0.0, 1.5),
-                                tangent     = (-1/sqrt(2), 0.0, 1/sqrt(2)))
+                jumpto!(spec;   point = (0.5, 0.0, 1.5),
+                                incoming_tangent     = (0.0, 0.0, 1.0))
+                straight!(spec; length      = 1.0)
+            end),
+            ("incoming_tangent = (-1,0,1)/√2", () -> _path() do spec
+                straight!(spec; length      = 1.0)
+                jumpto!(spec;   point = (0.5, 0.0, 1.5),
+                                incoming_tangent     = (-1/sqrt(2), 0.0, 1/sqrt(2)))
                 straight!(spec; length      = 1.0)
             end),
         ],
@@ -326,16 +491,16 @@ function demo_jumpto_2d_routing(;
         variants = [
             ("composite", () -> _path(red = [2, 4, 6]) do spec
                 straight!(spec; length          = 1.0)
-                jumpto!(spec;   destination     = (1.0, 0.0, 1.0),
-                                tangent         = (0.0, 0.0, -1.0),
+                jumpto!(spec;   point     = (1.0, 0.0, 1.0),
+                                incoming_tangent         = (0.0, 0.0, -1.0),
                                 min_bend_radius = 0.1)
                 straight!(spec; length          = 1.0)
-                jumpto!(spec;   destination     = (2.0, 0.0, 0.0),
-                                tangent         = (0.0, 0.0, 1.0),
+                jumpto!(spec;   point     = (2.0, 0.0, 0.0),
+                                incoming_tangent         = (0.0, 0.0, 1.0),
                                 min_bend_radius = 0.1)
                 straight!(spec; length          = 1.0)
-                jumpto!(spec;   destination     = (3.0, 0.0, 1.0),
-                                tangent         = (0.0, 0.0, -1.0),
+                jumpto!(spec;   point     = (3.0, 0.0, 1.0),
+                                incoming_tangent         = (0.0, 0.0, -1.0),
                                 min_bend_radius = 0.1)
             end),
         ],
@@ -363,13 +528,13 @@ function demo_jumpto_2d_min_radius(;
     for mbr in (0.10, 0.30, 0.49, 0.51, 0.70)
         partial, n_built, err = _build_with_failure() do spec
             straight!(spec; length = 1.0)
-            jumpto!(spec;   destination     = (1.0, 0.0, 1.0),
-                            tangent         = (0.0, 0.0, -1.0),
+            jumpto!(spec;   point     = (1.0, 0.0, 1.0),
+                            incoming_tangent         = (0.0, 0.0, -1.0),
                             min_bend_radius = mbr)
             straight!(spec; length = 1.0)
         end
         partial === nothing && continue
-        red   = length(partial.placed_segments) >= 2 ? [2] : Int[]
+        red   = length(_all_placed(partial)) >= 2 ? [2] : Int[]
         label = err === nothing ?
                 "mbr = $(mbr)" :
                 "mbr = $(mbr) (infeasible — $(n_built)/3 built)"
@@ -395,12 +560,12 @@ end
 #   1. S-curve + JumpBy: no anchor — a `:radius` perturbation on the
 #      bends shifts every downstream position; the endpoint drifts.
 #   2. S-curve + JumpTo: same s-curve geometry as (1), but the JumpTo
-#      destination is a lab-frame invariant. The s-curve interior swings
+#      point is a lab-frame invariant. The s-curve interior swings
 #      visibly while the connector absorbs the slack and the final
 #      endpoint stays pinned.
 #   3. Helix + JumpTo + `:T_K`: thermal expansion on the helix on top of
 #      a radius perturbation. The connector arc length tracks
-#      `τ·baseline` while the destination stays pinned (TD001
+#      `τ·baseline` while the point stays pinned (TD001
 #      length-constrained resolve).
 
 const _DEMO2_MODIFY_XS = StepIndexCrossSection(
@@ -414,8 +579,8 @@ const _DEMO2_T_REF = 297.15
 # Sample (x, z) per placed segment. Returns Vector{NamedTuple}, one entry
 # per segment with `.x` and `.z` arrays.
 function _demo2_path_segments_xz(path)
-    return [_sample_segment_xyz(path, i)
-            for i in 1:length(path.placed_segments)]
+    segs = _all_placed(path)
+    return [_sample_segment_xyz(path, i) for i in eachindex(segs)]
 end
 
 # Render baseline (black) and modified (red) overlay on a light background.
@@ -544,7 +709,7 @@ function demo_modify_jumpby_drift_2d(;
                  "entire downstream trajectory drifts and the endpoint " *
                  "visibly separates from the baseline."
 
-    spec = PathSpecBuilder()
+    spec = _path_sequence()
     straight!(spec; length = 0.3)
     bend!(spec; radius = 0.5, angle = π/2, axis_angle = 0.0)
     bend!(spec; radius = 0.5, angle = π/2, axis_angle = π)
@@ -553,7 +718,7 @@ function demo_modify_jumpby_drift_2d(;
     straight!(spec; length = 1)
     baseline = build(spec)
 
-    spec = PathSpecBuilder()
+    spec = _path_sequence()
     straight!(spec; length = 0.3)
     bend!(spec; radius = 0.5, angle = π/2, axis_angle = 0.0,
           meta = [MCMmul(:radius, 1.25)])
@@ -562,8 +727,8 @@ function demo_modify_jumpby_drift_2d(;
     straight!(spec; length = 0.3)
     jumpby!(spec; delta = (0.0, 0.0, 0.8))
     straight!(spec; length = 1)
-    modified = modify(Fiber(build(spec);
-        cross_section = _DEMO2_MODIFY_XS, T_ref_K = _DEMO2_T_REF))
+    modified = Fiber(_sequence_builders!(spec);
+        cross_section = _DEMO2_MODIFY_XS, T_ref_K = _DEMO2_T_REF).path
 
     out = joinpath(output_dir, "modify-jumpby-drift-2d.html")
     path = _modify_overlay_svg(out, desc_short;
@@ -585,9 +750,9 @@ function demo_modify_jumpto_anchor_2d(;
                  "same scale of `:radius` perturbation on the bends " *
                  "causes the s-curve interior to swing wide — the " *
                  "connector chord changes — but the endpoint stays " *
-                 "pinned at the JumpTo destination."
+                 "pinned at the JumpTo point."
 
-    spec = PathSpecBuilder()
+    spec = _path_sequence()
     straight!(spec; length = 0.3)
     bend!(spec; radius = 0.5, angle = π/2, axis_angle = 0.0)
     bend!(spec; radius = 0.5, angle = π/2, axis_angle = π)
@@ -595,26 +760,26 @@ function demo_modify_jumpto_anchor_2d(;
     pre_baseline = build(spec)
     pre_pos      = end_point(pre_baseline)
     dz           = 4.000 - path_length(pre_baseline)
-    destination  = (pre_pos[1], pre_pos[2], pre_pos[3] + dz)
+    point  = (pre_pos[1], pre_pos[2], pre_pos[3] + dz)
 
-    spec = PathSpecBuilder()
+    spec = _path_sequence()
     straight!(spec; length = 0.3)
     bend!(spec; radius = 0.5, angle = π/2, axis_angle = 0.0)
     bend!(spec; radius = 0.5, angle = π/2, axis_angle = π)
     straight!(spec; length = 0.3)
-    jumpto!(spec; destination = destination)
+    jumpto!(spec; point = point)
     baseline = build(spec)
 
-    spec = PathSpecBuilder()
+    spec = _path_sequence()
     straight!(spec; length = 0.3)
     bend!(spec; radius = 0.5, angle = π/2, axis_angle = 0.0,
           meta = [MCMmul(:radius, 1.5)])
     bend!(spec; radius = 0.5, angle = π/2, axis_angle = π,
           meta = [MCMmul(:radius, 1.5)])
     straight!(spec; length = 0.3)
-    jumpto!(spec; destination = destination)
-    modified = modify(Fiber(build(spec);
-        cross_section = _DEMO2_MODIFY_XS, T_ref_K = _DEMO2_T_REF))
+    jumpto!(spec; point = point)
+    modified = Fiber(_sequence_builders!(spec);
+        cross_section = _DEMO2_MODIFY_XS, T_ref_K = _DEMO2_T_REF).path
 
     out = joinpath(output_dir, "modify-jumpto-anchor-2d.html")
     path = _modify_overlay_svg(out, desc_short;
@@ -630,58 +795,37 @@ end
 function demo_modify_jumpto_anchor_thermal_2d(;
     output_dir::AbstractString = joinpath(@__DIR__, "..", "..", "output"),
 )
-    desc_short = "Meta + :T_K on helix + JumpTo: connector arc tracks τ·baseline"
-    desc_long  = "Helix + JumpTo with `:T_K` and `:radius` on the helix. " *
-                 "With the JumpTo anchor active, the connector's arc " *
-                 "length is constrained to `τ·baseline_L` while its " *
-                 "endpoints stay pinned (TD001 length-constrained " *
-                 "resolve)."
+    desc_short = "Meta + :T_K + JumpTo carrying :T_K: connector thermally expands (issue #33)"
+    desc_long  = "Lead-in straight with `:T_K`, sealed by a transverse " *
+                 "JumpTo that also carries `:T_K`. Per issue #33 the terminal " *
+                 "connector thermally expands (its arc length scales by τ) " *
+                 "while still landing at the fixed point, so the whole " *
+                 "Subpath grows by τ and the extra length shows up as " *
+                 "connector curvature."
 
-    # initial curve with no meta ΔT
-    spec = PathSpecBuilder()
-    straight!(spec; length = 1)
-    bend!(spec; radius = 0.5, angle = π/2, axis_angle = 0.0)
-    bend!(spec; radius = 0.5, angle = π/2, axis_angle = π)
-    straight!(spec; length = 1)
-    baseline = build(spec)
-    baseline_length = path_length(baseline)
-    baseline_end = end_point(baseline)
+    α_lin = cte(_DEMO2_MODIFY_XS.cladding_material, _DEMO2_T_REF)
+    # 5% length perturbation. The transverse-chord geometry has plenty of
+    # connector slack so this stays feasible.
+    ΔT = 0.05 / α_lin
+    mdt = [MCMadd(:T_K, ΔT)]
 
-    α_lin   = cte(_DEMO2_MODIFY_XS.cladding_material, _DEMO2_T_REF)
-    ΔT_5pct = 0.05 / α_lin
-    mdt = [MCMadd(:T_K, ΔT_5pct)]
+    # Geometry: a 0.5 m straight followed by a transverse JumpTo to
+    # (1.0, 0, 0.5) with outgoing tangent (1, 0, 0). The connector is
+    # ~1.6 m long for a chord of ~1.0 m → ~60% slack to absorb expansion.
+    point = (1.0, 0.0, 0.5)
 
-    # warm curve with ΔT
-    spec = PathSpecBuilder()
-    straight!(spec; length = 1, meta = mdt)
-    bend!(spec; radius = 0.5, angle = π/2, axis_angle = 0.0, meta = mdt)
-    bend!(spec; radius = 0.5, angle = π/2, axis_angle = π, meta = mdt)
-    straight!(spec; length = 1, meta = mdt)
-    warm = build(spec)
-    warm_length = path_length(warm)
-    warm_end = end_point(warm)
-
-    # warm curve with ΔT with connstrained JumpTo
-    spec = PathSpecBuilder()
-    straight!(spec; length = 1, meta = mdt)
-    bend!(spec; radius = 0.5, angle = π/2, axis_angle = 0.0, meta = mdt)
-    bend!(spec; radius = 0.5, angle = π/2, axis_angle = π, meta = mdt)
-    jumpto!(spec;
-        destination = warm_end,
-        tangent = (0.0, 0.0, 1.0),
-        min_bend_radius = 1e-3,
-        meta = mdt,
-    )
-    warm = build(spec)
-    warm_length = path_length(warm)
-    warm_end = end_point(warm)
-
-
-    
-
+    spec = _path_sequence()
     straight!(spec; length = 0.5)
-    modified = modify(Fiber(build(spec);
-        cross_section = _DEMO2_MODIFY_XS, T_ref_K = _DEMO2_T_REF))
+    jumpto!(spec; point = point,
+            incoming_tangent = (1.0, 0.0, 0.0))
+    baseline = build(spec)
+
+    spec = _path_sequence()
+    straight!(spec; length = 0.5, meta = mdt)
+    jumpto!(spec; point = point,
+            incoming_tangent = (1.0, 0.0, 0.0), meta = mdt)
+    modified = Fiber(_sequence_builders!(spec);
+        cross_section = _DEMO2_MODIFY_XS, T_ref_K = _DEMO2_T_REF).path
 
     out = joinpath(output_dir, "modify-jumpto-anchor-thermal-2d.html")
     path = _modify_overlay_svg(out, desc_short;
@@ -716,7 +860,7 @@ function _jump_row_html(output::AbstractString, title::AbstractString;
         path, red_spec = build_fn()
         red_indices = red_spec isa Integer ? Int[red_spec] : Int.(collect(red_spec))
         dx = (k - 1) * variant_spacing
-        n_segs = length(path.placed_segments)
+        n_segs = length(_all_placed(path))
         for i in 1:n_segs
             s     = _sample_segment_xyz(path, i)
             xs    = s.x .+ dx
@@ -734,7 +878,7 @@ function _jump_row_html(output::AbstractString, title::AbstractString;
   showlegend: $(i == 1)
 }""")
         end
-        p0 = position(path, path.spec.s_start)
+        p0 = position(path, 0.0)
         push!(start_xs, Float64(p0[1]) + dx)
         push!(start_ys, Float64(p0[2]))
         push!(start_zs, Float64(p0[3]))
@@ -814,21 +958,21 @@ function demo_jumpby_delta_axial(;
         "JumpBy(delta=(0,0,d)) — axial sweep";
         variants = [
             ("d = 0.3", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length = 1.0)
                 jumpby!(spec;   delta  = (0.0, 0.0, 0.3))
                 straight!(spec; length = 1.0)
                 (build(spec), 2)
             end),
             ("d = 0.6", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length = 1.0)
                 jumpby!(spec;   delta  = (0.0, 0.0, 0.6))
                 straight!(spec; length = 1.0)
                 (build(spec), 2)
             end),
             ("d = 1.0", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length = 1.0)
                 jumpby!(spec;   delta  = (0.0, 0.0, 1.0))
                 straight!(spec; length = 1.0)
@@ -847,21 +991,21 @@ function demo_jumpby_delta_transverse(;
         "JumpBy(delta=(d,0,0.5)) — transverse sweep";
         variants = [
             ("d = 0.0", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length = 1.0)
                 jumpby!(spec;   delta  = (0.0, 0.0, 0.5))
                 straight!(spec; length = 1.0)
                 (build(spec), 2)
             end),
             ("d = 0.2", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length = 1.0)
                 jumpby!(spec;   delta  = (0.2, 0.0, 0.5))
                 straight!(spec; length = 1.0)
                 (build(spec), 2)
             end),
             ("d = 0.5", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length = 1.0)
                 jumpby!(spec;   delta  = (0.5, 0.0, 0.5))
                 straight!(spec; length = 1.0)
@@ -880,7 +1024,7 @@ function demo_jumpby_tangent_out(;
         "JumpBy — outgoing tangent (local frame)";
         variants = [
             ("tangent = (+1,0,1)/√2", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length  = 1.0)
                 jumpby!(spec;   delta   = (0.4, 0.0, 0.4),
                                 tangent = (1/sqrt(2), 0.0, 1/sqrt(2)))
@@ -888,7 +1032,7 @@ function demo_jumpby_tangent_out(;
                 (build(spec), 2)
             end),
             ("tangent = (0,0,1)", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length  = 1.0)
                 jumpby!(spec;   delta   = (0.4, 0.0, 0.4),
                                 tangent = (0.0, 0.0, 1.0))
@@ -896,7 +1040,7 @@ function demo_jumpby_tangent_out(;
                 (build(spec), 2)
             end),
             ("tangent = (-1,0,1)/√2", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length  = 1.0)
                 jumpby!(spec;   delta   = (0.4, 0.0, 0.4),
                                 tangent = (-1/sqrt(2), 0.0, 1/sqrt(2)))
@@ -916,7 +1060,7 @@ function demo_jumpby_curvature_out(;
         "JumpBy — outgoing curvature (G2 knob, local frame)";
         variants = [
             ("κ_out = 0", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length = 1.0)
                 jumpby!(spec;   delta         = (0.5, 0.0, 0.5),
                                 tangent       = (1.0, 0.0, 1.0) ./ sqrt(2),
@@ -925,7 +1069,7 @@ function demo_jumpby_curvature_out(;
                 (build(spec), 2)
             end),
             ("κ_out = (0,+2,0)", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length = 1.0)
                 jumpby!(spec;   delta         = (0.5, 0.0, 0.5),
                                 tangent       = (1.0, 0.0, 1.0) ./ sqrt(2),
@@ -934,7 +1078,7 @@ function demo_jumpby_curvature_out(;
                 (build(spec), 2)
             end),
             ("κ_out = (0,-2,0)", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length = 1.0)
                 jumpby!(spec;   delta         = (0.5, 0.0, 0.5),
                                 tangent       = (1.0, 0.0, 1.0) ./ sqrt(2),
@@ -947,31 +1091,31 @@ function demo_jumpby_curvature_out(;
     )
 end
 
-function demo_jumpto_destination(;
+function demo_jumpto_point(;
     output_dir::AbstractString = joinpath(@__DIR__, "..", "..", "output"),
 )
     return _jump_row_html(
-        joinpath(output_dir, "jumpto-destination.html"),
-        "JumpTo(destination=(0,0,z)) — axial sweep";
+        joinpath(output_dir, "jumpto-point.html"),
+        "JumpTo(point=(0,0,z)) — axial sweep";
         variants = [
             ("z = 1.3", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.0, 0.0, 1.3))
+                jumpto!(spec;   point = (0.0, 0.0, 1.3))
                 straight!(spec; length      = 1.0)
                 (build(spec), 2)
             end),
             ("z = 1.6", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.0, 0.0, 1.6))
+                jumpto!(spec;   point = (0.0, 0.0, 1.6))
                 straight!(spec; length      = 1.0)
                 (build(spec), 2)
             end),
             ("z = 2.0", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.0, 0.0, 2.0))
+                jumpto!(spec;   point = (0.0, 0.0, 2.0))
                 straight!(spec; length      = 1.0)
                 (build(spec), 2)
             end),
@@ -980,31 +1124,31 @@ function demo_jumpto_destination(;
     )
 end
 
-function demo_jumpto_destination_transverse(;
+function demo_jumpto_point_transverse(;
     output_dir::AbstractString = joinpath(@__DIR__, "..", "..", "output"),
 )
     return _jump_row_html(
-        joinpath(output_dir, "jumpto-destination-transverse.html"),
-        "JumpTo(destination=(x,0,1.5)) — transverse sweep";
+        joinpath(output_dir, "jumpto-point-transverse.html"),
+        "JumpTo(point=(x,0,1.5)) — transverse sweep";
         variants = [
             ("x = 0.0", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.0, 0.0, 1.5))
+                jumpto!(spec;   point = (0.0, 0.0, 1.5))
                 straight!(spec; length      = 1.0)
                 (build(spec), 2)
             end),
             ("x = 0.3", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.3, 0.0, 1.5))
+                jumpto!(spec;   point = (0.3, 0.0, 1.5))
                 straight!(spec; length      = 1.0)
                 (build(spec), 2)
             end),
             ("x = 0.6", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.6, 0.0, 1.5))
+                jumpto!(spec;   point = (0.6, 0.0, 1.5))
                 straight!(spec; length      = 1.0)
                 (build(spec), 2)
             end),
@@ -1018,29 +1162,29 @@ function demo_jumpto_tangent_global(;
 )
     return _jump_row_html(
         joinpath(output_dir, "jumpto-tangent-global.html"),
-        "JumpTo — outgoing tangent (GLOBAL frame)";
+        "JumpTo — incoming tangent (global frame)";
         variants = [
-            ("tangent = (+1,0,0)", () -> begin
-                spec = PathSpecBuilder()
+            ("incoming_tangent = (+1,0,0)", () -> begin
+                spec = _path_sequence()
                 straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.5, 0.0, 1.5),
-                                tangent     = (1.0, 0.0, 0.0))
-                straight!(spec; length      = 1.0)
-                (build(spec), 2)
-            end),
-            ("tangent = (0,0,+1)", () -> begin
-                spec = PathSpecBuilder()
-                straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.5, 0.0, 1.5),
-                                tangent     = (0.0, 0.0, 1.0))
+                jumpto!(spec;   point = (0.5, 0.0, 1.5),
+                                incoming_tangent     = (1.0, 0.0, 0.0))
                 straight!(spec; length      = 1.0)
                 (build(spec), 2)
             end),
-            ("tangent = (-1,0,1)/√2", () -> begin
-                spec = PathSpecBuilder()
+            ("incoming_tangent = (0,0,+1)", () -> begin
+                spec = _path_sequence()
                 straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.5, 0.0, 1.5),
-                                tangent     = (-1/sqrt(2), 0.0, 1/sqrt(2)))
+                jumpto!(spec;   point = (0.5, 0.0, 1.5),
+                                incoming_tangent     = (0.0, 0.0, 1.0))
+                straight!(spec; length      = 1.0)
+                (build(spec), 2)
+            end),
+            ("incoming_tangent = (-1,0,1)/√2", () -> begin
+                spec = _path_sequence()
+                straight!(spec; length      = 1.0)
+                jumpto!(spec;   point = (0.5, 0.0, 1.5),
+                                incoming_tangent     = (-1/sqrt(2), 0.0, 1/sqrt(2)))
                 straight!(spec; length      = 1.0)
                 (build(spec), 2)
             end),
@@ -1054,32 +1198,32 @@ function demo_jumpto_curvature_global(;
 )
     return _jump_row_html(
         joinpath(output_dir, "jumpto-curvature-global.html"),
-        "JumpTo — outgoing curvature (GLOBAL frame)";
+        "JumpTo — incoming curvature (global frame)";
         variants = [
-            ("κ_out = 0", () -> begin
-                spec = PathSpecBuilder()
+            ("κ_in = 0", () -> begin
+                spec = _path_sequence()
                 straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.5, 0.0, 1.5),
-                                tangent     = (0.0, 0.0, 1.0),
-                                curvature_out = (0.0, 0.0, 0.0))
-                straight!(spec; length      = 1.0)
-                (build(spec), 2)
-            end),
-            ("κ_out = (10,0,0)", () -> begin
-                spec = PathSpecBuilder()
-                straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.5, 0.0, 1.5),
-                                tangent     = (0.0, 0.0, 1.0),
-                                curvature_out = (10.0, 0.0, 0.0))
+                jumpto!(spec;   point = (0.5, 0.0, 1.5),
+                                incoming_tangent     = (0.0, 0.0, 1.0),
+                                incoming_curvature = (0.0, 0.0, 0.0))
                 straight!(spec; length      = 1.0)
                 (build(spec), 2)
             end),
-            ("κ_out = (-10,0,0)", () -> begin
-                spec = PathSpecBuilder()
+            ("κ_in = (10,0,0)", () -> begin
+                spec = _path_sequence()
                 straight!(spec; length      = 1.0)
-                jumpto!(spec;   destination = (0.5, 0.0, 1.5),
-                                tangent     = (0.0, 0.0, 1.0),
-                                curvature_out = (-10.0, 0.0, 0.0))
+                jumpto!(spec;   point = (0.5, 0.0, 1.5),
+                                incoming_tangent     = (0.0, 0.0, 1.0),
+                                incoming_curvature = (10.0, 0.0, 0.0))
+                straight!(spec; length      = 1.0)
+                (build(spec), 2)
+            end),
+            ("κ_in = (-10,0,0)", () -> begin
+                spec = _path_sequence()
+                straight!(spec; length      = 1.0)
+                jumpto!(spec;   point = (0.5, 0.0, 1.5),
+                                incoming_tangent     = (0.0, 0.0, 1.0),
+                                incoming_curvature = (-10.0, 0.0, 0.0))
                 straight!(spec; length      = 1.0)
                 (build(spec), 2)
             end),
@@ -1097,7 +1241,7 @@ function demo_jumpby_after_bend(;
         "JumpBy after 90° bend — delta in ROTATED local frame";
         variants = [
             ("delta = (0,0,0.5)", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length     = 1.0)
                 bend!(spec;     radius     = 0.5, angle = π/2, axis_angle = 0.0)
                 jumpby!(spec;   delta      = (0.0, 0.0, 0.5))
@@ -1105,7 +1249,7 @@ function demo_jumpby_after_bend(;
                 (build(spec), 3)
             end),
             ("delta = (0.3,0,0.5)", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length     = 1.0)
                 bend!(spec;     radius     = 0.5, angle = π/2, axis_angle = 0.0)
                 jumpby!(spec;   delta      = (0.3, 0.0, 0.5))
@@ -1113,7 +1257,7 @@ function demo_jumpby_after_bend(;
                 (build(spec), 3)
             end),
             ("delta = (-0.3,0,0.5)", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length     = 1.0)
                 bend!(spec;     radius     = 0.5, angle = π/2, axis_angle = 0.0)
                 jumpby!(spec;   delta      = (-0.3, 0.0, 0.5))
@@ -1131,29 +1275,29 @@ function demo_jumpto_after_bend(;
 )
     return _jump_row_html(
         joinpath(output_dir, "jumpto-after-bend.html"),
-        "JumpTo after 90° bend — destination in GLOBAL frame";
+        "JumpTo after 90° bend — point in GLOBAL frame";
         variants = [
             ("dest = (1.0, 0, 1.5)", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length      = 1.0)
                 bend!(spec;     radius      = 0.5, angle = π/2, axis_angle = 0.0)
-                jumpto!(spec;   destination = (1.0, 0.0, 1.5))
+                jumpto!(spec;   point = (1.0, 0.0, 1.5))
                 straight!(spec; length      = 1.0)
                 (build(spec), 3)
             end),
             ("dest = (1.3, 0, 1.5)", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length      = 1.0)
                 bend!(spec;     radius      = 0.5, angle = π/2, axis_angle = 0.0)
-                jumpto!(spec;   destination = (1.3, 0.0, 1.5))
+                jumpto!(spec;   point = (1.3, 0.0, 1.5))
                 straight!(spec; length      = 1.0)
                 (build(spec), 3)
             end),
             ("dest = (0.5, 0, 2.0)", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length      = 1.0)
                 bend!(spec;     radius      = 0.5, angle = π/2, axis_angle = 0.0)
-                jumpto!(spec;   destination = (0.5, 0.0, 2.0))
+                jumpto!(spec;   point = (0.5, 0.0, 2.0))
                 straight!(spec; length      = 1.0)
                 (build(spec), 3)
             end),
@@ -1171,21 +1315,21 @@ function demo_jumpby_g2_inheritance(;
         "JumpBy after bend — G2 inheritance of incoming κ from prior bend";
         variants = [
             ("R_bend = 0.30 (κ_in ≈ 3.33)", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 bend!(spec;   radius = 0.30, angle = π/4, axis_angle = 0.0)
                 jumpby!(spec; delta  = (0.3, 0.0, 0.3))
                 straight!(spec; length = 1.0)
                 (build(spec), 2)
             end),
             ("R_bend = 0.50 (κ_in = 2.00)", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 bend!(spec;   radius = 0.50, angle = π/4, axis_angle = 0.0)
                 jumpby!(spec; delta  = (0.3, 0.0, 0.3))
                 straight!(spec; length = 1.0)
                 (build(spec), 2)
             end),
             ("R_bend = 0.80 (κ_in = 1.25)", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 bend!(spec;   radius = 0.80, angle = π/4, axis_angle = 0.0)
                 jumpby!(spec; delta  = (0.3, 0.0, 0.3))
                 straight!(spec; length = 1.0)
@@ -1205,18 +1349,18 @@ function demo_jumpto_routing(;
         "JumpTo routing — T1/T2/T3 composite (anti-parallel tangents)";
         variants = [
             ("composite", () -> begin
-                spec = PathSpecBuilder()
+                spec = _path_sequence()
                 straight!(spec; length          = 1.0)
-                jumpto!(spec;   destination     = (1.0, 0.0, 1.0),
-                                tangent         = (0.0, 0.0, -1.0),
+                jumpto!(spec;   point     = (1.0, 0.0, 1.0),
+                                incoming_tangent         = (0.0, 0.0, -1.0),
                                 min_bend_radius = 0.1)
                 straight!(spec; length          = 1.0)
-                jumpto!(spec;   destination     = (2.0, 0.0, 0.0),
-                                tangent         = (0.0, 0.0, 1.0),
+                jumpto!(spec;   point     = (2.0, 0.0, 0.0),
+                                incoming_tangent         = (0.0, 0.0, 1.0),
                                 min_bend_radius = 0.1)
                 straight!(spec; length          = 1.0)
-                jumpto!(spec;   destination     = (3.0, 0.0, 1.0),
-                                tangent         = (0.0, 0.0, -1.0),
+                jumpto!(spec;   point     = (3.0, 0.0, 1.0),
+                                incoming_tangent         = (0.0, 0.0, -1.0),
                                 min_bend_radius = 0.1)
                 (build(spec), [2, 4, 6])
             end),
@@ -1227,16 +1371,16 @@ function demo_jumpto_routing(;
 end
 
 # ---------------------------------------------------------------------
-# Index page (demo2.html)
+# Monolithic index entries
 # ---------------------------------------------------------------------
 
 const DEMO2_INDEX = [
     (group = "2D", fn = demo_jumpby_2d_tangent_out, kwargs = (;),
      desc = "2D JumpBy outgoing tangent sweep (local frame), rendered as inline SVG."),
-    (group = "2D", fn = demo_jumpto_2d_destination, kwargs = (;),
-     desc = "2D JumpTo transverse destination sweep, rendered as inline SVG."),
+    (group = "2D", fn = demo_jumpto_2d_point, kwargs = (;),
+     desc = "2D JumpTo transverse point sweep, rendered as inline SVG."),
     (group = "2D", fn = demo_jumpto_2d_tangent_global, kwargs = (;),
-     desc = "2D JumpTo outgoing tangent sweep (global frame), rendered as inline SVG."),
+     desc = "2D JumpTo incoming tangent sweep (global frame), rendered as inline SVG."),
     (group = "2D", fn = demo_jumpto_2d_routing, kwargs = (;),
      desc = "2D JumpTo T1/T2/T3 composite routing with anti-parallel tangents, rendered as inline SVG."),
     (group = "2D", fn = demo_jumpto_2d_min_radius, kwargs = (;),
@@ -1255,18 +1399,18 @@ const DEMO2_INDEX = [
      desc = "3D Plotly: JumpBy outgoing tangent sweep (local frame)."),
     (group = "3D", fn = demo_jumpby_curvature_out, kwargs = (;),
      desc = "3D Plotly: JumpBy outgoing curvature sweep (G2 knob, local frame)."),
-    (group = "3D", fn = demo_jumpto_destination, kwargs = (;),
-     desc = "3D Plotly: JumpTo axial destination sweep."),
-    (group = "3D", fn = demo_jumpto_destination_transverse, kwargs = (;),
-     desc = "3D Plotly: JumpTo transverse destination sweep."),
+    (group = "3D", fn = demo_jumpto_point, kwargs = (;),
+     desc = "3D Plotly: JumpTo axial point sweep."),
+    (group = "3D", fn = demo_jumpto_point_transverse, kwargs = (;),
+     desc = "3D Plotly: JumpTo transverse point sweep."),
     (group = "3D", fn = demo_jumpto_tangent_global, kwargs = (;),
-     desc = "3D Plotly: JumpTo outgoing tangent sweep (global frame)."),
+     desc = "3D Plotly: JumpTo incoming tangent sweep (global frame)."),
     (group = "3D", fn = demo_jumpto_curvature_global, kwargs = (;),
-     desc = "3D Plotly: JumpTo outgoing curvature sweep (global frame)."),
+     desc = "3D Plotly: JumpTo incoming curvature sweep (global frame)."),
     (group = "3D", fn = demo_jumpby_after_bend, kwargs = (;),
      desc = "3D Plotly: JumpBy after 90° bend — delta expressed in the rotated local frame."),
     (group = "3D", fn = demo_jumpto_after_bend, kwargs = (;),
-     desc = "3D Plotly: JumpTo after 90° bend — destination in the global frame."),
+     desc = "3D Plotly: JumpTo after 90° bend — point in the global frame."),
     (group = "3D", fn = demo_jumpby_g2_inheritance, kwargs = (;),
      desc = "3D Plotly: JumpBy G2 inheritance of incoming curvature from a prior bend."),
     (group = "3D", fn = demo_jumpto_routing, kwargs = (;),
@@ -1276,88 +1420,36 @@ const DEMO2_INDEX = [
 """
     demo2_all(; index_output)
 
-Run every demo in `DEMO2_INDEX` and write `demo2.html` linking each
+Run every demo in `DEMO2_INDEX` and write `demo-index.html` linking each
 output file with a short description.
 """
-function demo2_all(; index_output::AbstractString = joinpath(@__DIR__, "..", "..", "output", "demo2.html"))
-    # Each entry: (group, title, path, desc).
+const _DEMO2_GROUP_TITLES = Dict(
+    "2D"        => "2D scenes (inline SVG)",
+    "2D-modify" => "meta and JumpTo interplay (2D)",
+    "3D"        => "3D scenes (Plotly)",
+)
+
+function demo2_entries()
     entries = Tuple{String, String, String, String}[]
 
     for d in DEMO2_INDEX
         println("[ demo2 ] $(d.fn)")
         result = d.fn(; d.kwargs...)
-        # Prefer `desc` provided inline by the demo function (kept next
-        # to the implementation it describes); otherwise fall back to
-        # the index entry's `desc` field.
-        desc_inline = (result isa NamedTuple && haskey(result, :desc)) ?
-                      String(result.desc) : nothing
-        desc_entry  = hasproperty(d, :desc) ? d.desc : ""
-        desc        = isnothing(desc_inline) ? desc_entry : desc_inline
-
-        paths = result isa NamedTuple ? values(result) : (result,)
-        for v in paths
-            if v isa AbstractString && endswith(v, ".html")
-                push!(entries, (d.group, basename(v), v, desc))
-            end
+        desc = _demo_result_desc(result, d)
+        for path in _demo_html_paths(result)
+            push!(entries, (d.group, basename(path), path, desc))
         end
     end
+    return entries
+end
 
-    open(index_output, "w") do io
-        println(io, """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BIFROST JumpBy / JumpTo demos</title>
-  <style>
-    body { font-family: sans-serif; max-width: 800px; margin: 2em auto; background: #111; color: #ddd; }
-    h1   { font-size: 1.5em; border-bottom: 1px solid #444; padding-bottom: 0.3em; }
-    h2   { font-size: 1.15em; margin-top: 1.8em; color: #4db87a; }
-    ul   { padding-left: 1.2em; }
-    li   { margin: 1em 0; }
-    a    { font-weight: bold; color: #4db87a; }
-    p.desc { margin: 0.3em 0 0 0; color: #999; font-size: 0.95em; }
-    nav.index-nav { font-size: 0.85em; margin-bottom: 1em; color: #666; }
-    nav.index-nav a { font-weight: normal; color: #4db87a; margin-right: 0.8em; }
-  </style>
-</head>
-<body>
-  <nav class="index-nav">
-    <a href="demo1.html">demo1</a>
-    <a href="demo2.html">demo2</a>
-    <a href="demo4mcm.html">demo4mcm</a>
-    <a href="demo3benchmark.html">demo3benchmark</a>
-  </nav>
-  <h1>BIFROST JumpBy / JumpTo demos</h1>""")
-
-        seen_groups = String[]
-        for (g, _, _, _) in entries
-            g in seen_groups || push!(seen_groups, g)
-        end
-        group_titles = Dict(
-            "2D"        => "2D scenes (inline SVG)",
-            "2D-modify" => "meta and JumpTo interplay (2D)",
-            "3D"        => "3D scenes (Plotly)",
-        )
-        for g in seen_groups
-            heading = get(group_titles, g, g)
-            println(io, "  <h2>$(heading)</h2>")
-            println(io, "  <ul>")
-            for (eg, title, path, desc) in entries
-                eg == g || continue
-                println(io, "    <li>")
-                println(io, "      <a href=\"$(path)\">$(title)</a>")
-                println(io, "      <p class=\"desc\">$(desc)</p>")
-                println(io, "    </li>")
-            end
-            println(io, "  </ul>")
-        end
-        println(io, """</body>
-</html>""")
-    end
-
-    println("Wrote demo2 index to: ", index_output)
-    return index_output
+function demo2_all(; index_output::AbstractString = DEMO_MONOLITHIC_INDEX_OUTPUT)
+    return _write_demo_index(
+        [(title = "JumpBy / JumpTo demos",
+          entries = demo2_entries(),
+          group_titles = _DEMO2_GROUP_TITLES)];
+        index_output,
+    )
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

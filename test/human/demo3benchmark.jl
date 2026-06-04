@@ -2,31 +2,33 @@
 # demo3benchmark.jl — MCM propagation speed benchmarks
 # =====================================================================
 #
-# Extends the MCM temperature-PTF scenarios from demo4mcm.jl with
+# Extends the MCM temperature-PTF scenarios from demo3mcm.jl with
 # timing measurements across four particle types:
 #
 #   * Float64          — deterministic baseline
-#   * Particles(40)    — heap-allocated, arbitrary N, standard MCM
-#   * StaticParticles(20/40) — SVector-backed, SIMD-friendly
+#   * Particles(2000)  — heap-allocated, arbitrary N, standard MCM
+#   * StaticParticles(50/100/200) — SVector-backed, SIMD-friendly
 #
 # For each variant two times are measured:
 #   * first-call  : wall time of the very first call, i.e. JIT
 #                   compilation overhead + one execution.
-#   * second-call : wall time of one repeated call after JIT.
+#   * steady-state: minimum wall time over many repetitions after JIT
+#                   (using BenchmarkTools @belapsed).
 #
 # M1 SIMD note: Apple M1 NEON has 128-bit lanes (2×f64/lane).
 # StaticParticles shines when N is small enough for Julia to emit
-# SIMD-vectorised loops over the SVector. These human-demo benchmarks use
-# small ensembles so the demo remains runnable during ordinary verification.
+# SIMD-vectorised loops over the SVector.  On M1, the sweet spot is
+# roughly N = 50–200; above ~300 the stack/register pressure grows
+# and Particles(N) can match or beat StaticParticles(N).
 #
 # Two HTML files are written:
 #   benchmark-mcm-propagate.html  — bar chart + table for propagate_fiber
-#   benchmark-mcm-modify.html     — bar chart + table for modify + propagate_fiber
+#   benchmark-mcm-build.html      — bar chart + table for build + propagate_fiber
 #
-# `demo3benchmark_all()` runs both and writes `output/demo3benchmark.html`.
+# `demo3benchmark_all()` runs both and writes `output/demo-index.html`.
 
 if !isdefined(Main, :_mcm_demo_fiber)
-    include(joinpath(@__DIR__, "demo4mcm.jl"))
+    include(joinpath(@__DIR__, "demo3mcm.jl"))
 end
 
 using BenchmarkTools
@@ -43,9 +45,8 @@ function _bench_build_fiber(make_T)
     T_val  = make_T()
     T_K    = T_val + 273.15
     ΔT_K   = T_K - _MCM_DEMO_T_REF_K
-    fiber  = _mcm_demo_fiber(ΔT_K)
-    mpath  = modify(fiber)
-    return Fiber(mpath; cross_section = _MCM_DEMO_XS, T_ref_K = T_K)
+    fiber  = _mcm_demo_fiber(ΔT_K)            # thermal applied at construction
+    return Fiber(fiber.path; cross_section = _MCM_DEMO_XS, T_ref_K = T_K)
 end
 
 # Time the first call to `f()` (JIT + one run) in milliseconds.
@@ -55,9 +56,9 @@ function _first_call_ms(f)
     return (time_ns() - t0) / 1e6
 end
 
-# Second-call wall time in milliseconds. This keeps the human demo quick.
+# Steady-state minimum wall time in milliseconds using BenchmarkTools.
 function _steady_ms(f)
-    return @elapsed(f()) * 1e3
+    return @belapsed($f()) * 1e3
 end
 
 # =====================================================================
@@ -68,19 +69,10 @@ end
 # make_T returns a fresh value each time it is called.
 function _bench_cases()
     return [
-        ("Float64", 0, () -> Float64(_MCM_DEMO_T_NOM_C)),
-        ("Particles(40)", _MCM_DEMO_PARTICLES_N, () -> Particles(
-            _MCM_DEMO_PARTICLES_N,
-            Normal(Float64(_MCM_DEMO_T_NOM_C), Float64(_MCM_DEMO_T_SIG_C)),
-        )),
-        ("StaticParticles(20)", _MCM_DEMO_STATIC_N, () -> StaticParticles(
-            _MCM_DEMO_STATIC_N,
-            Normal(Float64(_MCM_DEMO_T_NOM_C), Float64(_MCM_DEMO_T_SIG_C)),
-        )),
-        ("StaticParticles(40)", 40, () -> StaticParticles(
-            40,
-            Normal(Float64(_MCM_DEMO_T_NOM_C), Float64(_MCM_DEMO_T_SIG_C)),
-        )),
+        ("Float64",             0,    () -> Float64(_MCM_DEMO_T_NOM_C)),
+        ("Particles(2000)",     2000, () -> Particles(2000, Normal(Float64(_MCM_DEMO_T_NOM_C), Float64(_MCM_DEMO_T_SIG_C)))),
+        ("StaticParticles(50)", 50,   () -> StaticParticles(50,  Normal(Float64(_MCM_DEMO_T_NOM_C), Float64(_MCM_DEMO_T_SIG_C)))),
+        ("StaticParticles(75)", 75,  () -> StaticParticles(75, Normal(Float64(_MCM_DEMO_T_NOM_C), Float64(_MCM_DEMO_T_SIG_C)))),
     ]
 end
 
@@ -97,31 +89,23 @@ function _run_benchmarks(; scenario::Symbol = :propagate)
         if scenario === :propagate
             # Benchmark: propagate_fiber only (fiber pre-built)
             fiber  = _bench_build_fiber(make_T)
-            fn = () -> propagate_fiber(
-                fiber;
-                λ_m = _MCM_DEMO_λ_M,
-                rtol = _MCM_DEMO_RTOL,
-                verbose = false,
-            )
+            fn     = () -> propagate_fiber(fiber; λ_m = _MCM_DEMO_λ_M)
         else
-            # Benchmark: modify + propagate_fiber together
+            # Benchmark: fiber build (incl. :T_K thermal scaling) + propagate
             T_val  = make_T()
             T_K    = T_val + 273.15
             ΔT_K   = T_K - _MCM_DEMO_T_REF_K
-            base_f = _mcm_demo_fiber(ΔT_K)
             fn     = () -> begin
-                mp = modify(base_f)
-                f2 = Fiber(mp; cross_section = _MCM_DEMO_XS, T_ref_K = T_K)
-                propagate_fiber(
-                    f2;
-                    λ_m = _MCM_DEMO_λ_M,
-                    rtol = _MCM_DEMO_RTOL,
-                    verbose = false,
-                )
+                # The build (with thermal scaling) happens here so the benchmark
+                # covers fiber construction and propagation together.
+                f2 = Fiber(_mcm_demo_fiber(ΔT_K).path;
+                           cross_section = _MCM_DEMO_XS, T_ref_K = T_K)
+                propagate_fiber(f2; λ_m = _MCM_DEMO_λ_M)
             end
         end
 
         fc  = _first_call_ms(fn)   # includes JIT
+        fn()                        # second call warms any remaining caches
         ss  = _steady_ms(fn)
 
         push!(results, (; label, n_particles = n_p, first_ms = fc, steady_ms = ss))
@@ -241,18 +225,18 @@ end
 """
     demo_benchmark_mcm_propagate(; output_dir = …)
 
-Benchmark `propagate_fiber` alone across Float64, Particles(40),
-and StaticParticles(20/40). The fiber is pre-built; only the
+Benchmark `propagate_fiber` alone across Float64, Particles(2000),
+and StaticParticles(50/100/200).  The fiber is pre-built; only the
 ODE propagation is timed.
 """
 function demo_benchmark_mcm_propagate(;
     output_dir::AbstractString = joinpath(@__DIR__, "..", "..", "output"),
 )
     desc = "MCM benchmark: propagate_fiber wall time across Float64, " *
-           "Particles(40), StaticParticles(20/40).  " *
-           "The reference fiber now includes twist sensitivity in addition to " *
-           "temperature dependence. First-call includes JIT; second-call is " *
-           "one repeated call."
+           "Particles(2000), StaticParticles(50/100/200).  " *
+           "The reference fiber includes spinning sensitivity in addition to " *
+           "temperature dependence.  First-call includes JIT; steady-state is " *
+           "post-JIT minimum."
 
     println("Running propagate_fiber benchmarks …")
     results = _run_benchmarks(; scenario = :propagate)
@@ -261,10 +245,10 @@ function demo_benchmark_mcm_propagate(;
     _bench_html(
         results,
         "MCM benchmark — propagate_fiber (log scale)",
-        "Fiber: straight 5 m → helix (D=0.05 m, ~10002 turns, twist + " *
+        "Fiber: straight 5 m → helix (D=0.05 m, ~10002 turns, spinning + " *
         "temperature-sensitive) → straight 5 m → helix → straight 5 m. " *
-        "λ = 1550 nm. StaticParticles cases use small N so this human demo " *
-        "runs quickly.",
+        "λ = 1550 nm.  M1: NEON 128-bit SIMD (2×f64/lane); StaticParticles " *
+        "sweet spot ≈ N = 50–100.",
         out,
     )
     println("Wrote propagate_fiber benchmark to: ", out)
@@ -272,120 +256,71 @@ function demo_benchmark_mcm_propagate(;
 end
 
 """
-    demo_benchmark_mcm_modify_propagate(; output_dir = …)
+    demo_benchmark_mcm_build_propagate(; output_dir = …)
 
-Benchmark `modify + Fiber + propagate_fiber` together — the full
-per-sample pipeline — across Float64, Particles(40), and StaticParticles(20/40).
+Benchmark fiber construction and `propagate_fiber` together — the full
+per-sample pipeline — across Float64, Particles(2000), and
+StaticParticles(50/100/200).
 """
-function demo_benchmark_mcm_modify_propagate(;
+function demo_benchmark_mcm_build_propagate(;
     output_dir::AbstractString = joinpath(@__DIR__, "..", "..", "output"),
 )
-    desc = "MCM benchmark: modify + Fiber + propagate_fiber wall time across " *
-           "Float64, Particles(40), StaticParticles(20/40).  " *
-           "The reference fiber now includes twist sensitivity in addition to " *
-           "temperature dependence, and timing covers the full modify + " *
+    desc = "MCM benchmark: Fiber + propagate_fiber wall time across " *
+           "Float64, Particles(2000), StaticParticles(50/100/200).  " *
+           "The reference fiber includes spinning sensitivity in addition to " *
+           "temperature dependence, and timing covers the full build + " *
            "propagate pipeline."
 
-    println("Running modify + propagate_fiber benchmarks …")
-    results = _run_benchmarks(; scenario = :modify_propagate)
+    println("Running build + propagate_fiber benchmarks …")
+    results = _run_benchmarks(; scenario = :build_propagate)
 
-    out = joinpath(output_dir, "benchmark-mcm-modify-propagate.html")
+    out = joinpath(output_dir, "benchmark-mcm-build-propagate.html")
     _bench_html(
         results,
-        "MCM benchmark — modify + propagate_fiber (log scale)",
-        "Same twist + temperature-sensitive fiber as above.  Timing includes " *
-        "modify() geometry rebuild, Fiber() construction, and propagate_fiber().",
+        "MCM benchmark — build + propagate_fiber (log scale)",
+        "Same spinning + temperature-sensitive fiber as above.  Timing includes " *
+        "thermal geometry build, Fiber() construction, and propagate_fiber().",
         out,
     )
-    println("Wrote modify + propagate_fiber benchmark to: ", out)
+    println("Wrote build + propagate_fiber benchmark to: ", out)
     return (path = out, desc = desc)
 end
 
 # =====================================================================
-# Index page (demo3benchmark.html)
+# Monolithic index entries
 # =====================================================================
 
 const DEMO3BENCHMARK_INDEX = [
     (group = "benchmarks", fn = demo_benchmark_mcm_propagate,         kwargs = (;)),
-    (group = "benchmarks", fn = demo_benchmark_mcm_modify_propagate,  kwargs = (;)),
+    (group = "benchmarks", fn = demo_benchmark_mcm_build_propagate, kwargs = (;)),
 ]
 
 """
     demo3benchmark_all(; index_output)
 
-Run every demo in `DEMO3BENCHMARK_INDEX` and write `demo3benchmark.html`.
+Run every demo in `DEMO3BENCHMARK_INDEX` and write `demo-index.html`.
 """
-function demo3benchmark_all(;
-    index_output::AbstractString = joinpath(@__DIR__, "..", "..", "output", "demo3benchmark.html"),
-)
+function demo3benchmark_entries()
     entries = Tuple{String, String, String, String}[]
 
     for d in DEMO3BENCHMARK_INDEX
         println("[ demo3benchmark ] $(d.fn)")
         result = d.fn(; d.kwargs...)
-        desc_inline = (result isa NamedTuple && haskey(result, :desc)) ?
-                      String(result.desc) : ""
-        desc_entry  = hasproperty(d, :desc) ? d.desc : ""
-        desc        = isempty(desc_inline) ? desc_entry : desc_inline
-
-        paths = result isa NamedTuple ? values(result) : (result,)
-        for v in paths
-            if v isa AbstractString && endswith(v, ".html")
-                push!(entries, (d.group, basename(v), v, desc))
-            end
+        desc = _demo_result_desc(result, d)
+        for path in _demo_html_paths(result)
+            push!(entries, (d.group, basename(path), path, desc))
         end
     end
+    return entries
+end
 
-    open(index_output, "w") do io
-        println(io, """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BIFROST MCM benchmarks</title>
-  <style>
-    body { font-family: sans-serif; max-width: 800px; margin: 2em auto; background: #111; color: #ddd; }
-    h1   { font-size: 1.5em; border-bottom: 1px solid #444; padding-bottom: 0.3em; }
-    h2   { font-size: 1.15em; margin-top: 1.8em; color: #4db87a; }
-    ul   { padding-left: 1.2em; }
-    li   { margin: 1em 0; }
-    a    { font-weight: bold; color: #4db87a; }
-    p.desc { margin: 0.3em 0 0 0; color: #999; font-size: 0.95em; }
-    nav.index-nav { font-size: 0.85em; margin-bottom: 1em; color: #666; }
-    nav.index-nav a { font-weight: normal; color: #4db87a; margin-right: 0.8em; }
-  </style>
-</head>
-<body>
-  <nav class="index-nav">
-    <a href="demo1.html">demo1</a>
-    <a href="demo2.html">demo2</a>
-    <a href="demo4mcm.html">demo4mcm</a>
-    <a href="demo3benchmark.html">demo3benchmark</a>
-  </nav>
-  <h1>BIFROST MCM propagation benchmarks</h1>""")
-
-        seen_groups = String[]
-        for (g, _, _, _) in entries
-            g in seen_groups || push!(seen_groups, g)
-        end
-        for g in seen_groups
-            println(io, "  <h2>Speed benchmarks</h2>")
-            println(io, "  <ul>")
-            for (eg, title, path, desc) in entries
-                eg == g || continue
-                println(io, "    <li>")
-                println(io, "      <a href=\"$(path)\">$(title)</a>")
-                println(io, "      <p class=\"desc\">$(desc)</p>")
-                println(io, "    </li>")
-            end
-            println(io, "  </ul>")
-        end
-        println(io, """</body>
-</html>""")
-    end
-
-    println("Wrote demo3benchmark index to: ", index_output)
-    return index_output
+function demo3benchmark_all(; index_output::AbstractString = DEMO_MONOLITHIC_INDEX_OUTPUT)
+    return _write_demo_index(
+        [(title = "MCM propagation benchmarks",
+          entries = demo3benchmark_entries(),
+          group_titles = Dict("benchmarks" => "Speed benchmarks"))];
+        index_output,
+    )
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

@@ -306,6 +306,14 @@ function effective_mode_area(fiber::StepIndexCrossSection, λ, T_K)
     return π * w^2
 end
 
+"""
+    core_nonlinear_refractive_index(fiber, λ, T_K)
+
+Return the nonlinear refractive index `n2` of the fiber core material in m²/W.
+"""
+core_nonlinear_refractive_index(fiber::StepIndexCrossSection, λ, T_K) =
+    nonlinear_refractive_index(fiber.core_material, λ, T_K)
+
 # This is D_CD, the second derivative with respect to *wavelength*, often
 # used by engineers, -2πc/λ^2 * (d^2k/dω^2), often given in ps/(nm km) for fibers
 # Uses a numerical approximation of the second derivative of n_eff
