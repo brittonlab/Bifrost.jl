@@ -68,7 +68,8 @@ end
 
 @testset "Fiber :T_K — BendSegment preserves angle, scales radius" begin
     # T-PHYSICS: α scales R_eff = α·R; swept angle preserved.
-    spec = sb -> bend!(sb; radius = 0.1, angle = π / 3, axis_angle = 0.0, meta = _ft_mcm(1.1))
+    spec = sb -> bend!(sb; radius = 0.1, angle = π / 3, axis_angle = 0.0,
+                        meta = _ft_mcm(1.1))
     seg1 = _ft_baseline(spec).placed_segments[1].segment
     seg2 = _ft_scaled(spec).placed_segments[1].segment
     @test seg2.radius ≈ 1.1 * seg1.radius
@@ -107,6 +108,25 @@ end
     end
     @test arc_length(path.placed_segments[1].segment) ≈ 1.0
     @test arc_length(path.placed_segments[2].segment) ≈ 0.5
+end
+
+@testset "Fiber :T_K — segment temperatures are segment-indexed" begin
+    # T-GUARDRAIL: `segment_temperatures` is aligned with placed segment order,
+    # not keyed by arc length. `temperature(f, s)` does the post-build lookup.
+    ΔT = 12.0
+    sub = _ft_subpath() do sb
+        straight!(sb; length = 1.0, meta = [MCMadd(:T_K, ΔT)])
+        straight!(sb; length = 1.0)
+    end
+    f = Fiber(sub; cross_section = _FT_XS, T_ref_K = _FT_T_REF)
+    ps = f.path.placed_segments
+    s1 = 0.5 * arc_length(ps[1].segment)
+    s2 = Float64(_qc_nominalize(ps[2].s_offset_eff)) +
+         0.5 * Float64(_qc_nominalize(arc_length(ps[2].segment)))
+
+    @test f.segment_temperatures == Any[_FT_T_REF + ΔT, _FT_T_REF, _FT_T_REF]
+    @test temperature(f, s1) ≈ _FT_T_REF + ΔT
+    @test temperature(f, s2) ≈ _FT_T_REF
 end
 
 @testset "Fiber :T_K — segments without MCM annotations default to α = 1.0" begin
@@ -246,7 +266,8 @@ end
     mk(meta) = begin
         sb = SubpathBuilder(); start!(sb)
         straight!(sb; length = 0.5)
-        jumpto!(sb; point = (0.1, 0.0, 0.5), incoming_tangent = (1.0, 0.0, 0.0), meta = meta)
+        jumpto!(sb; point = (0.1, 0.0, 0.5),
+                incoming_tangent = (1.0, 0.0, 0.0), meta = meta)
         sb
     end
     @test_throws ArgumentError Fiber(mk([MCMadd(:length, 0.01)]);
@@ -254,8 +275,10 @@ end
     @test_throws ArgumentError Fiber(mk([MCMmul(:T_K, 1.1)]);
                                      cross_section = _FT_XS, T_ref_K = _FT_T_REF)
     # Supported: thermal :T_K, and a plain Nickname.
-    @test Fiber(mk([MCMadd(:T_K, 10.0)]); cross_section = _FT_XS, T_ref_K = _FT_T_REF) isa Fiber
-    @test Fiber(mk([Nickname("seal")]);  cross_section = _FT_XS, T_ref_K = _FT_T_REF) isa Fiber
+    @test Fiber(mk([MCMadd(:T_K, 10.0)]);
+                cross_section = _FT_XS, T_ref_K = _FT_T_REF) isa Fiber
+    @test Fiber(mk([Nickname("seal")]);
+                cross_section = _FT_XS, T_ref_K = _FT_T_REF) isa Fiber
 end
 
 # -----------------------------------------------------------------------
@@ -271,7 +294,8 @@ end
     f = Fiber(sb; cross_section = _FT_XS, T_ref_K = _FT_T_REF)
     conn = f.path.jumpto_quintic_connector
     L = arc_length(conn)
-    κ_peak = maximum(curvature(conn, s) for s in range(0.0, Float64(_qc_nominalize(L)); length = 64))
+    ss = range(0.0, Float64(_qc_nominalize(L)); length = 64)
+    κ_peak = maximum(curvature(conn, s) for s in ss)
     @test κ_peak <= 1 / 0.02 + 1e-6
 end
 
@@ -299,7 +323,8 @@ end
     f = Fiber(sb; cross_section = _FT_XS, T_ref_K = _FT_T_REF)
     conn = f.path.placed_segments[1].segment
     L = arc_length(conn)
-    κ_peak = maximum(curvature(conn, s) for s in range(0.0, Float64(_qc_nominalize(L)); length = 64))
+    ss = range(0.0, Float64(_qc_nominalize(L)); length = 64)
+    κ_peak = maximum(curvature(conn, s) for s in ss)
     @test κ_peak <= 1 / 0.02 + 1e-6
 end
 

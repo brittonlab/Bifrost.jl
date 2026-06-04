@@ -22,8 +22,8 @@ It owns:
 
 Operating wavelength `λ_m` is NOT stored on `Fiber`; it is an argument to
 `generator_K` / `generator_Kω` (and to `propagate_fiber` in `path-integral.jl`),
-so the same `Fiber` can be queried at multiple wavelengths. Temperature is
-fixed at `T_ref_K` for all queries.
+so the same `Fiber` can be queried at multiple wavelengths. `T_ref_K` is the
+default temperature; segment-level `:T_K` metadata can override it locally.
 
 # ----------------------------
 # Example Use
@@ -56,7 +56,7 @@ jumpto!(sb; point = (..., ..., ...))
 # (here the bend's MCMadd(:T_K, …) thermal annotation).
 fiber = Fiber(sb; cross_section = xs, T_ref_K = 297.15)
 
-# Operating wavelength is supplied per query; temperature is f.T_ref_K.
+# Operating wavelength is supplied per query; temperature comes from temperature(f, s).
 K  = generator_K(fiber, 1550e-9)
 Kω = generator_Kω(fiber, 1550e-9)
 """
@@ -84,10 +84,11 @@ struct Fiber{P,T,S,ST}
     T_ref_K::T
     s_start::S
     s_end::S
-    # Per-segment local temperature derived from `:T_K` (fiber-only): `nothing`
-    # when no segment carries `:T_K` (then `local_temperature ≡ T_ref_K`), else a
-    # `(breaks, vals)` pair giving the temperature on each placed segment in
-    # global arc-length order. See `local_temperature`.
+    # Per-placed-segment temperature derived from `:T_K` (fiber-only): `nothing`
+    # when no segment carries `:T_K` (then `temperature(f, s) ≡ T_ref_K`), else
+    # a flat vector aligned with `_all_placed_segs` for each built subpath in
+    # path order. This is intentionally segment-indexed; `s` is only meaningful
+    # after the geometry has been built.
     segment_temperatures::ST
 end
 
@@ -201,37 +202,29 @@ function _resolve_thermal_subpath(sub::Subpath, cross_section::FiberCrossSection
     return (resolved, jumpto_target_length, deltaT)
 end
 
-# Assemble the per-segment local-temperature table from a list of
-# `(SubpathBuilt, global_offset)` pairs and the matching per-Subpath ΔT vectors
-# (each `nothing` or aligned with that Subpath's placed segments). Returns
-# `nothing` when no Subpath is thermal (so `local_temperature ≡ T_ref_K`), else a
-# `(breaks, vals)` pair: `breaks[i]` is the global arc length at the end of
-# placed segment `i`, `vals[i]` its local temperature. `vals` keeps each entry
-# as-stored (no coercion) so a `Particles` ΔT propagates.
-function _build_segment_temperatures(pairs, deltaTs, T_ref_K)
+# Assemble the per-placed-segment temperature vector from the matching per-Subpath
+# ΔT vectors (each `nothing` or aligned with that Subpath's placed segments).
+# Returns `nothing` when no Subpath is thermal (so `temperature(f, s) ≡ T_ref_K`),
+# else a flat vector in path order. Entries are kept as-stored (no coercion) so a
+# `Particles` ΔT propagates.
+function _build_segment_temperatures(segment_counts, deltaTs, T_ref_K)
     any(!isnothing, deltaTs) || return nothing
-    breaks = Float64[]
     vals = Any[]
-    for k in eachindex(pairs)
-        b, off = pairs[k]
+    for k in eachindex(segment_counts)
         dT = deltaTs[k]
-        placed = _all_placed_segs(b)
-        for j in eachindex(placed)
-            ps = placed[j]
-            seg_end = off + Float64(_qc_nominalize(ps.s_offset_eff)) +
-                            Float64(_qc_nominalize(arc_length(ps.segment)))
+        for j in Base.OneTo(segment_counts[k])
             δ = dT === nothing ? nothing : dT[j]
-            push!(breaks, seg_end)
             push!(vals, δ === nothing ? T_ref_K : T_ref_K + δ)
         end
     end
-    return (breaks, vals)
+    return vals
 end
 
 function _build_perturbed(sub::Subpath, cross_section::FiberCrossSection, T_ref_K)
     resolved, target, deltaT = _resolve_thermal_subpath(sub, cross_section, T_ref_K)
+    segment_counts = (length(resolved.segments) + 1,)
     built = build(resolved; perturb = true, jumpto_target_length = target)
-    segment_temperatures = _build_segment_temperatures(((built, 0.0),), (deltaT,),
+    segment_temperatures = _build_segment_temperatures(segment_counts, (deltaT,),
                                                        T_ref_K)
     return built, segment_temperatures
 end
@@ -242,18 +235,18 @@ function _build_perturbed(subs::Vector{Subpath}, cross_section::FiberCrossSectio
     # thermal+perturbed built Subpath before this one is built.
     builts = Vector{SubpathBuilt}(undef, length(subs))
     deltaTs = Vector{Any}(undef, length(subs))
+    segment_counts = Vector{Int}(undef, length(subs))
     for i in eachindex(subs)
         sub = i == 1 ? subs[i] :
               PathGeometry._resolve_inherited_spin(subs[i], builts[i-1])
         resolved, target, dT = _resolve_thermal_subpath(sub, cross_section, T_ref_K)
+        segment_counts[i] = length(resolved.segments) + 1
         builts[i] = build(resolved; perturb = true, jumpto_target_length = target)
         deltaTs[i] = dT
     end
     path = build(builts)
-    offs = s_offsets(path)
-    pairs = Tuple{SubpathBuilt,Float64}[(path.subpaths[i], offs[i])
-                                        for i in eachindex(path.subpaths)]
-    segment_temperatures = _build_segment_temperatures(pairs, deltaTs, T_ref_K)
+    segment_temperatures = _build_segment_temperatures(segment_counts, deltaTs,
+                                                       T_ref_K)
     return path, segment_temperatures
 end
 
@@ -296,24 +289,48 @@ Fiber(spec::Vector{SubpathBuilder}; cross_section::FiberCrossSection,
 fiber_path(f::Fiber) = f.path
 
 """
-    local_temperature(f::Fiber, s) -> T
+    temperature(f::Fiber, s) -> T
 
-Local temperature (K) at fiber arc length `s`: `T_ref_K + ΔT` for the placed
-segment containing `s`, where `ΔT` is that segment's `:T_K` excursion. A fiber
-with no `:T_K` returns `T_ref_K` everywhere. The cross-section birefringences
-are evaluated at this temperature (asymmetric thermal stress ∝ `|T_soft − T|`,
-and the indices shift with `T`), so a `:T_K` segment's optical response — not
-only its length — reflects the excursion. `ΔT` may be `Particles`; the returned
-value carries it into the MCM-safe cross-section `T_K` slot.
+Temperature (K) at fiber arc length `s`: `T_ref_K + ΔT` for the placed segment
+containing `s`, where `ΔT` is that segment's `:T_K` excursion. A fiber with no
+`:T_K` returns `T_ref_K` everywhere. The cross-section birefringences are
+evaluated at this temperature (asymmetric thermal stress ∝ `|T_soft − T|`, and
+the indices shift with `T`), so a `:T_K` segment's optical response — not only
+its length — reflects the excursion. `ΔT` may be `Particles`; the returned value
+carries it into the MCM-safe cross-section `T_K` slot.
 """
-function local_temperature(f::Fiber, s::Real)
+function _segment_temperature_index(b::SubpathBuilt, s::Real)
+    for i in eachindex(b.placed_segments)
+        ps = b.placed_segments[i]
+        seg_end = Float64(_qc_nominalize(ps.s_offset_eff)) +
+                  Float64(_qc_nominalize(arc_length(ps.segment)))
+        s <= seg_end + 1e-9 && return i
+    end
+    return length(b.placed_segments) + 1
+end
+
+function _segment_temperature_index(p::PathBuilt, s::Real)
+    offs = s_offsets(p)
+    index_offset = 0
+    for i in eachindex(p.subpaths)
+        b = p.subpaths[i]
+        local_start = offs[i]
+        local_end = local_start + Float64(_qc_nominalize(arc_length(b)))
+        if s <= local_end + 1e-9
+            return index_offset + _segment_temperature_index(b, s - local_start)
+        end
+        index_offset += length(b.placed_segments) + 1
+    end
+    last_subpath = p.subpaths[end]
+    return index_offset - (length(last_subpath.placed_segments) + 1) +
+           _segment_temperature_index(last_subpath, arc_length(last_subpath))
+end
+
+function temperature(f::Fiber, s::Real)
     segment_temperatures = f.segment_temperatures
     segment_temperatures === nothing && return f.T_ref_K
-    breaks, vals = segment_temperatures
-    @inbounds for i in eachindex(breaks)
-        s <= breaks[i] + 1e-9 && return vals[i]
-    end
-    return vals[end]
+    i = _segment_temperature_index(f.path, s)
+    return segment_temperatures[i]
 end
 
 # ----------------------------
@@ -360,7 +377,7 @@ end
 function bend_generator_K(f::Fiber, s::Real, λ_m::Real)
     κ = curvature(f.path, s)
     κ == zero(κ) && return zero_generator()
-    T = local_temperature(f, s)
+    T = temperature(f, s)
     R = inv(κ)
     Δβb = bending_birefringence(f.cross_section, λ_m, T; bend_radius_m = R)
     c2φ, s2φ = _bend_axis_c2s2(f, s)
@@ -370,7 +387,7 @@ end
 function bend_generator_Kω(f::Fiber, s::Real, λ_m::Real)
     κ = curvature(f.path, s)
     κ == zero(κ) && return zero_generator()
-    T = local_temperature(f, s)
+    T = temperature(f, s)
     R = inv(κ)
     Δβbω = bending_birefringence(
         WithDerivative(),
@@ -389,7 +406,7 @@ end
 function twist_generator_K(f::Fiber, s::Real, λ_m::Real)
     τm = twist_rate(f.path, s)
     τm == zero(τm) && return zero_generator()
-    T = local_temperature(f, s)
+    T = temperature(f, s)
     Δβc = twisting_birefringence(f.cross_section, λ_m, T; twist_rate_rad_per_m = τm)
     return circular_birefringence_generator(Δβc)
 end
@@ -397,7 +414,7 @@ end
 function twist_generator_Kω(f::Fiber, s::Real, λ_m::Real)
     τm = twist_rate(f.path, s)
     τm == zero(τm) && return zero_generator()
-    T = local_temperature(f, s)
+    T = temperature(f, s)
     Δβcω = twisting_birefringence(
         WithDerivative(),
         f.cross_section,
@@ -424,7 +441,7 @@ end
 function ellipticity_generator_K(f::Fiber, s::Real, λ_m::Real)
     xs = f.cross_section
     xs.ellipticity_axis_ratio == one(xs.ellipticity_axis_ratio) && return zero_generator()
-    T = local_temperature(f, s)
+    T = temperature(f, s)
     Δβ = core_noncircularity_birefringence(xs, λ_m, T) +
          asymmetric_thermal_stress_birefringence(xs, λ_m, T)
     c2φ, s2φ = _intrinsic_axis_c2s2(f, s)
@@ -434,7 +451,7 @@ end
 function ellipticity_generator_Kω(f::Fiber, s::Real, λ_m::Real)
     xs = f.cross_section
     xs.ellipticity_axis_ratio == one(xs.ellipticity_axis_ratio) && return zero_generator()
-    T = local_temperature(f, s)
+    T = temperature(f, s)
     Δβω = core_noncircularity_birefringence(WithDerivative(), xs, λ_m, T).dω +
           asymmetric_thermal_stress_birefringence(WithDerivative(), xs, λ_m, T).dω
     c2φ, s2φ = _intrinsic_axis_c2s2(f, s)
