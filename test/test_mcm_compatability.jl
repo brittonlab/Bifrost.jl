@@ -109,7 +109,7 @@ end
                                                   axial_tension_N = 0.5 ± 0.05)
         @test Δβ_tension isa Particles
 
-        # ---- twisting_birefringence with uncertain spinning_rate
+        # ---- twisting_birefringence with uncertain spin_rate
         Δβ_spin = twisting_birefringence(fiber, λ, T_nom;
                                            twist_rate_rad_per_m = 10.0 ± 1.0)
         @test Δβ_spin isa Particles
@@ -176,13 +176,13 @@ end
 @testset "MCM :: path-integral.jl (single-interval propagation)" begin
     MonteCarloMeasurements.unsafe_comparisons(true)
     try
-        # T-PHYSICS: pure spinning at constant rate τ over length L produces
+        # T-PHYSICS: pure spin at constant rate τ over length L produces
         # J = rotation by τ·L. Under uncertain τ, the mean output should track
         # the rotation for the nominal τ.
         τ_nom = 0.5
         τ = τ_nom ± 0.05
         L = 2.0
-        # K(s) for a pure spinning (no bend) with material-spinning rate τ is a 2×2
+        # K(s) for a pure spin (no bend) with material-spin rate τ is a 2×2
         # skew-Hermitian with entries [0 -τ; τ 0]. Build a direct generator:
         zT = zero(τ) + 0im
         K = s -> [zT  -(τ + 0im); (τ + 0im)  zT]
@@ -208,13 +208,13 @@ end
 @testset "MCM :: path-integral.jl (sensitivity propagation)" begin
     MonteCarloMeasurements.unsafe_comparisons(true)
     try
-        # Sensitivity propagation with an uncertain spinning rate.
+        # Sensitivity propagation with an uncertain spin rate.
         τ_nom = 0.5
         τ = τ_nom ± 0.05
         L = 1.5
         zT = zero(τ) + 0im
         K = s -> [zT  -(τ + 0im); (τ + 0im)  zT]
-        Kω = s -> zeros(ComplexF64, 2, 2)  # no frequency dispersion for pure spinning
+        Kω = s -> zeros(ComplexF64, 2, 2)  # no frequency dispersion for pure spin
         J0 = Matrix{ComplexF64}(I, 2, 2)
         J_out, G_out, _ = propagate_interval_sensitivity!(K, Kω, 0.0, L, J0;
                                                           rtol = 1e-8, atol = 1e-10)
@@ -350,7 +350,7 @@ end
         end
         @test position(path_catenary, 0.025) isa Vector{<:Particles}
 
-        # TODO: spinning refactor — pending per-segment-meta spinning subsystem.
+        # TODO: spin refactor — pending per-segment-meta spin subsystem.
         @test_skip true
 
         # ---- T-PHYSICS: straight fiber with uncertain length → zero curvature everywhere
@@ -399,7 +399,7 @@ end
         @test real(K[1, 1]) isa Particles || imag(K[1, 1]) isa Particles
         @test real(Kω[1, 2]) isa Particles || imag(Kω[1, 2]) isa Particles
 
-        # T-GUARDRAIL: breakpoints include the path segment edges and spinning overlay edges.
+        # T-GUARDRAIL: breakpoints include the path segment edges and spin overlay edges.
         @test first(fiber_breakpoints(fiber)) == 0.0
         @test last(fiber_breakpoints(fiber)) == fiber.s_end
         @test length(fiber_breakpoints(fiber)) >= 2
@@ -410,7 +410,7 @@ end
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ▓▓▓  MCM path with material spinning — gating + propagator end-to-end  ▓▓▓
+# ▓▓▓  MCM path with material spin — gating + propagator end-to-end  ▓▓▓
 # ═══════════════════════════════════════════════════════════════════════════════
 #
 # These tests exercise the *primary* MCM consumer (propagate_fiber) on a fiber
@@ -426,7 +426,7 @@ end
         end
         @test arc_length(path.placed_segments[1].segment) isa Particles
         @test path.spin_rate == 1.0
-        # Spinning is MCM-clean: the rate is a plain Float64.
+        # Spin is MCM-clean: the rate is a plain Float64.
         @test path.spin_rate isa Float64
     finally
         MonteCarloMeasurements.unsafe_comparisons(false)
@@ -451,7 +451,7 @@ end
     end
 end
 
-@testset "MCM :: propagate_fiber lifts Particles into Jones matrix on MCM + spinning path" begin
+@testset "MCM :: propagate_fiber lifts Particles into Jones matrix on MCM + spin path" begin
     # T-GUARDRAIL: end-to-end propagate_fiber under MCM Particles. After the
     # Pass-1 architecture change, the terminal connector inherits Particles
     # K0 from the upstream bend, which makes the propagator's adaptive step
@@ -478,16 +478,16 @@ end
     end
 end
 
-@testset "MCM :: total_spinning returns Float64 with default endpoints (Tier 2.1)" begin
+@testset "MCM :: total_spin returns Float64 with default endpoints (Tier 2.1)" begin
     MonteCarloMeasurements.unsafe_comparisons(true)
     try
         path = _build_mcm_path(; spin_rate = 1.0) do sb
             bend!(sb; radius = 0.05 ± 0.005, angle = π/2)
         end
         # Default endpoints used to crash on Float64(::Particles); now nominalize.
-        Ω = total_spinning(path)
+        Ω = total_spin(path)
         @test Ω isa Float64
-        # Spinning rate * nominal arc length.
+        # Spin rate * nominal arc length.
         @test Ω ≈ 1.0 * pmean(arc_length(path)) rtol=1e-6
     finally
         MonteCarloMeasurements.unsafe_comparisons(false)

@@ -554,7 +554,7 @@ end
 end
 
 # -----------------------------------------------------------------------
-# Material spinning (start!(; spin_rate=…)) and spinning_rate
+# Material spin (start!(; spin_rate=…)) and spin_rate
 # -----------------------------------------------------------------------
 
 # Helper: terminate a straight-only spec at its natural endpoint with
@@ -563,7 +563,7 @@ function _seal_at_z(sb::SubpathBuilder, z::Real)
     jumpto!(sb; point = (0.0, 0.0, z), incoming_tangent = (0.0, 0.0, 1.0))
 end
 
-@testset "Spinning — constant rate (Float64) is exact" begin
+@testset "Spin — constant rate (Float64) is exact" begin
     # T-PHYSICS: a constant whole-Subpath spin rate is reported verbatim and its
     # integral over an interval is rate·length.
     sb = SubpathBuilder(); start!(sb; spin_rate = 1.5)
@@ -571,25 +571,25 @@ end
     _seal_at_z(sb, 2.0)
     b = build(sb)
     @test b.spin_rate == 1.5
-    @test spinning_rate(b, 0.0) == 1.5
-    @test spinning_rate(b, 0.7) == 1.5
-    @test spinning_rate(b, 2.0) == 1.5
-    @test isapprox(total_spinning(b; s_start = 0.0, s_end = 2.0), 1.5 * 2.0;
+    @test spin_rate(b, 0.0) == 1.5
+    @test spin_rate(b, 0.7) == 1.5
+    @test spin_rate(b, 2.0) == 1.5
+    @test isapprox(total_spin(b; s_start = 0.0, s_end = 2.0), 1.5 * 2.0;
                    atol = 1e-12)
 end
 
-@testset "Spinning — no spin (spin_rate=nothing) is zero everywhere" begin
+@testset "Spin — no spin (spin_rate=nothing) is zero everywhere" begin
     # T-GUARDRAIL: the default Subpath has no spin.
     sb = SubpathBuilder(); start!(sb)
     straight!(sb; length = 1.0)
     _seal_at_z(sb, 1.0)
     b = build(sb)
     @test b.spin_rate === nothing
-    @test spinning_rate(b, 0.5) == 0.0
-    @test total_spinning(b; s_start = 0.0, s_end = 1.0) == 0.0
+    @test spin_rate(b, 0.5) == 0.0
+    @test total_spin(b; s_start = 0.0, s_end = 1.0) == 0.0
 end
 
-@testset "Spinning — function rate is a function of Subpath-local s" begin
+@testset "Spin — function rate is a function of Subpath-local s" begin
     # T-PHYSICS: a function rate spans the whole Subpath with s_local = 0 at the
     # Subpath start.
     f = s -> sin(s)
@@ -597,37 +597,37 @@ end
     straight!(sb; length = 2π)
     _seal_at_z(sb, 2π)
     b = build(sb)
-    @test spinning_rate(b, 0.7) == f(0.7)
+    @test spin_rate(b, 0.7) == f(0.7)
     # ∫₀^{2π} sin(s) ds = 0
-    @test isapprox(total_spinning(b; s_start = 0.0, s_end = 2π), 0.0; atol = 1e-7)
+    @test isapprox(total_spin(b; s_start = 0.0, s_end = 2π), 0.0; atol = 1e-7)
 end
 
-@testset "Spinning — oscillatory rate handled by adaptive quadrature" begin
+@testset "Spin — oscillatory rate handled by adaptive quadrature" begin
     sb = SubpathBuilder(); start!(sb; spin_rate = s -> sin(50 * s))
     straight!(sb; length = 2π)
     _seal_at_z(sb, 2π)
     b = build(sb)
     # ∫₀^{2π} sin(50 s) ds = (1 - cos(100π)) / 50 = 0
-    @test isapprox(total_spinning(b; s_start = 0.0, s_end = 2π), 0.0; atol = 1e-7)
+    @test isapprox(total_spin(b; s_start = 0.0, s_end = 2π), 0.0; atol = 1e-7)
 end
 
-@testset "Spinning — total_spinning partial interval" begin
+@testset "Spin — total_spin partial interval" begin
     sb = SubpathBuilder(); start!(sb; spin_rate = 0.5)
     straight!(sb; length = 4.0)
     _seal_at_z(sb, 4.0)
     b = build(sb)
-    @test total_spinning(b; s_start = 1.0, s_end = 3.0) == 0.5 * 2.0
+    @test total_spin(b; s_start = 1.0, s_end = 3.0) == 0.5 * 2.0
 end
 
-@testset "Spinning — frame() returns spinning_rate" begin
+@testset "Spin — frame() returns spin_rate" begin
     sb = SubpathBuilder(); start!(sb; spin_rate = 2.5)
     straight!(sb; length = 1.0)
     _seal_at_z(sb, 1.0)
     b = build(sb)
-    @test frame(b, 0.4).spinning_rate == 2.5
+    @test frame(b, 0.4).spin_rate == 2.5
 end
 
-@testset "Spinning — total_frame_rotation = τ_geom + Ω_spin" begin
+@testset "Spin — total_frame_rotation = τ_geom + Ω_spin" begin
     # straight segment has τ_geom = 0, so total_frame_rotation = ∫τ_spin ds.
     sb = SubpathBuilder(); start!(sb; spin_rate = 0.5)
     straight!(sb; length = 2.0)
@@ -636,7 +636,7 @@ end
     @test isapprox(total_frame_rotation(b; s_start = 0.0, s_end = 2.0), 1.0; atol = 1e-12)
 end
 
-@testset "Spinning — spin covers the whole Subpath including the seal lead-out" begin
+@testset "Spin — spin covers the whole Subpath including the seal lead-out" begin
     # T-PHYSICS: the single whole-Subpath spin rate applies to interior segments
     # and the terminal seal connector alike.
     τ = 2.0
@@ -646,13 +646,13 @@ end
     straight!(sb; length = L_int)
     seal!(sb; extra = L_extra)
     b = build(sb)
-    @test spinning_rate(b, 0.5 * L_int) == τ                 # interior
-    @test spinning_rate(b, L_int + 0.5 * L_extra) == τ       # lead-out
-    @test isapprox(total_spinning(b; s_start = 0.0, s_end = L_int + L_extra),
+    @test spin_rate(b, 0.5 * L_int) == τ                 # interior
+    @test spin_rate(b, L_int + 0.5 * L_extra) == τ       # lead-out
+    @test isapprox(total_spin(b; s_start = 0.0, s_end = L_int + L_extra),
                    τ * (L_int + L_extra); atol = 1e-9)
 end
 
-@testset "Spinning — spin covers the jumpto! connector" begin
+@testset "Spin — spin covers the jumpto! connector" begin
     # T-GUARDRAIL: the whole-Subpath spin rate is reported throughout the
     # terminal jumpto! connector region, not just the interior.
     τ = 1.25
@@ -664,17 +664,17 @@ end
     s_conn = Float64(_qc_nominalize(b.jumpto_placed.s_offset_eff))
     L = arc_length(b)
     @test L > s_conn                                         # connector has length
-    @test spinning_rate(b, 0.5) == τ                         # interior
-    @test spinning_rate(b, 0.5 * (s_conn + L)) == τ          # within the connector
+    @test spin_rate(b, 0.5) == τ                         # interior
+    @test spin_rate(b, 0.5 * (s_conn + L)) == τ          # within the connector
 end
 
-@testset "Spinning — validation: bad spin_rate symbol rejected at start!" begin
+@testset "Spin — validation: bad spin_rate symbol rejected at start!" begin
     # T-GUARDRAIL: only :inherit is an accepted Symbol.
     sb = SubpathBuilder()
     @test_throws ArgumentError start!(sb; spin_rate = :wobble)
 end
 
-@testset "Spinning — :inherit on a first/standalone Subpath errors at build" begin
+@testset "Spin — :inherit on a first/standalone Subpath errors at build" begin
     # T-GUARDRAIL: :inherit has no predecessor to inherit a rate from.
     sb = SubpathBuilder(); start!(sb; spin_rate = :inherit)
     straight!(sb; length = 1.0)
@@ -686,7 +686,7 @@ end
 # Spin phase continuity across Subpaths (_spin_phi_at_s0)
 # -----------------------------------------------------------------------
 
-@testset "Spinning — first Subpath phase is 0 (even with no spin)" begin
+@testset "Spin — first Subpath phase is 0 (even with no spin)" begin
     # T-GUARDRAIL: build(::Vector{SubpathBuilt}) seeds _spin_phi_at_s0 = 0 on the
     # first Subpath regardless of spin_rate.
     sb = SubpathBuilder(); start!(sb)
@@ -696,7 +696,7 @@ end
     @test p.subpaths[1]._spin_phi_at_s0 == 0.0
 end
 
-@testset "Spinning — phase is continuous across a concrete-rate boundary" begin
+@testset "Spin — phase is continuous across a concrete-rate boundary" begin
     # T-PHYSICS: a concrete spin_rate on Subpath 2 does NOT reset the phase; its
     # phase at s0 is the continued value φ = τ₁·L₁.
     L1 = 2.0; τ1 = 0.5; τ2 = 1.3
@@ -716,7 +716,7 @@ end
     @test p.subpaths[2].spin_rate == τ2     # concrete rate, unchanged
 end
 
-@testset "Spinning — :inherit copies the rate and continues the phase" begin
+@testset "Spin — :inherit copies the rate and continues the phase" begin
     # T-PHYSICS: Subpath 2 inherits Subpath 1's rate and its phase continues.
     L1 = 2.0; τ1 = 0.5
     sb1 = SubpathBuilder(); start!(sb1; spin_rate = τ1)
@@ -732,10 +732,10 @@ end
     sub1_s_end = Float64(_qc_nominalize(arc_length(p.subpaths[1])))
     @test p.subpaths[2].spin_rate == τ1
     @test isapprox(p.subpaths[2]._spin_phi_at_s0, τ1 * sub1_s_end; atol = 1e-8)
-    @test spinning_rate(p.subpaths[2], 0.3) == τ1
+    @test spin_rate(p.subpaths[2], 0.3) == τ1
 end
 
-@testset "Spinning — phase carries unchanged through a no-spin Subpath" begin
+@testset "Spin — phase carries unchanged through a no-spin Subpath" begin
     # T-PHYSICS: a middle Subpath with no spin contributes 0 to the phase, so the
     # phase at the third Subpath equals the first Subpath's accumulated phase.
     L1 = 2.0; τ1 = 0.7; L2 = 1.0
@@ -759,7 +759,7 @@ end
     @test isapprox(p.subpaths[3]._spin_phi_at_s0, τ1 * sub1_s_end; atol = 1e-8)
 end
 
-@testset "Spinning — explicit :inherit after a no-spin Subpath errors" begin
+@testset "Spin — explicit :inherit after a no-spin Subpath errors" begin
     # T-GUARDRAIL: there is no rate to inherit from a no-spin predecessor.
     sb1 = SubpathBuilder(); start!(sb1)            # no spin
     straight!(sb1; length = 1.0)

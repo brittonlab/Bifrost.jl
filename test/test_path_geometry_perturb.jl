@@ -87,7 +87,7 @@ end
 end
 
 # -----------------------------------------------------------------------
-# Connector / spinning interactions under field-MCM
+# Connector / spin interactions under field-MCM
 # -----------------------------------------------------------------------
 
 @testset "perturb — upstream bend change recomputes connector K0" begin
@@ -103,7 +103,7 @@ end
     @test curvature(connector, 0.0) ≈ 0.5 atol = 1e-12
 end
 
-@testset "perturb — spinning tolerates MCM-valued modified length" begin
+@testset "perturb — spin tolerates MCM-valued modified length" begin
     # T-GUARDRAIL
     MonteCarloMeasurements.unsafe_comparisons(true)
     try
@@ -113,8 +113,8 @@ end
         seg = path.placed_segments[1].segment
         L_seg = arc_length(seg)
         @test L_seg isa Particles
-        # Integrated material spinning over the segment = 2.0 * L_seg.
-        @test total_spinning(path; s_start = 0.0,
+        # Integrated material spin over the segment = 2.0 * L_seg.
+        @test total_spin(path; s_start = 0.0,
                              s_end = Float64(_qc_nominalize(L_seg))) ≈
               2.0 * pmean(L_seg) rtol = 1e-3
     finally

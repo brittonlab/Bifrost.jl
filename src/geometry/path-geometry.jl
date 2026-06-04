@@ -4,7 +4,7 @@ Construct and query three-dimensional smooth space curves (fiber paths).
 This file defines a small authoring DSL for building piecewise paths from
 local-frame segment primitives, compiling them to an immutable global-frame
 form, and querying differential geometry (position, tangent/normal/binormal,
-curvature, torsion) and material spinning along arc length.
+curvature, torsion) and material spin along arc length.
 
 # Three layers
 
@@ -43,9 +43,9 @@ Interior `jumpby!` is supported as a relative jump within a Subpath. Each
 Subpath must call `start!` before any segment and seal exactly once at the end
 (`jumpto!` or `seal!`).
 
-# Spinning
+# Spin
 
-Material spinning is one spec per Subpath, set at [`start!`](@ref) via the
+Material spin is one spec per Subpath, set at [`start!`](@ref) via the
 `spin_rate` keyword. It covers the whole Subpath (interior segments and the
 terminal `jumpto!`/`seal!` connector alike):
 
@@ -77,7 +77,7 @@ continuous cross-Subpath spin phase (`_spin_phi_at_s0`).
     arc_length(path, s1, s2)
     curvature(seg_or_path, s)
     geometric_torsion(seg_or_path, s)
-    spinning_rate(path, s)
+    spin_rate(path, s)
     position(path, s)
     tangent(path, s)
     normal(path, s)
@@ -142,8 +142,8 @@ Supertype for per-segment annotations carried in a segment's
 `path-geometry.jl` is deliberately ignorant of what the bag contains;
 downstream layers define their own `AbstractMeta` subtypes (see
 `path-geometry-meta.jl`) and decide how to act on them. The geometry layer does
-not interpret any `AbstractMeta` directly (spinning is a `start!` keyword, not
-meta — see the file-header "Spinning" section).
+not interpret any `AbstractMeta` directly (spin is a `start!` keyword, not
+meta — see the file-header "Spin" section).
 """
 abstract type AbstractMeta end
 
@@ -180,7 +180,7 @@ twist_rate(seg::AbstractPathSegment, s) = _eval_rate(_segment_twist(seg), s)
 """
     _integrate_rate(rate, a, b; rtol=1e-8, atol=0.0)
 
-Integrate a spinning `rate` over the Subpath-local interval `[a, b]`.
+Integrate a spin `rate` over the Subpath-local interval `[a, b]`.
 
 Constant rates take the analytic branch; `Function` rates use QuadGK adaptive
 Gauss–Kronrod, which subdivides automatically for oscillatory integrands; a
@@ -775,7 +775,7 @@ mutable struct SubpathBuilder
     # bending. `jumpto_natural_extra` is an optional straight lead-out length.
     jumpto_natural::Bool
     jumpto_natural_extra::Float64
-    # Material spinning over the whole Subpath, set by `start!(; spin_rate=…)`.
+    # Material spin over the whole Subpath, set by `start!(; spin_rate=…)`.
     # `nothing` = no spin; `Float64`/`Function` = concrete rate; `:inherit` =
     # copy the previous Subpath's rate (resolved at vector build).
     spin_rate::Union{Float64, Function, Nothing, Symbol}
@@ -816,7 +816,7 @@ _check_unsealed(b::SubpathBuilder) =
 Seal the Subpath start state. Throws if `start!` has already been called or
 if any interior segment has already been appended.
 
-`spin_rate` sets material spinning over the whole Subpath:
+`spin_rate` sets material spin over the whole Subpath:
 
 - `nothing` (default) — no spin.
 - a `Real` — constant rate (rad/m).
@@ -826,7 +826,7 @@ if any interior segment has already been appended.
   non-first Subpath in `build([...])` whose predecessor actually spins.
 
 The spin phase is always continuous across Subpath boundaries (see the
-file-header "Spinning" section); it is resolved at build time, not here.
+file-header "Spin" section); it is resolved at build time, not here.
 """
 function start!(b::SubpathBuilder;
                 point = (0.0, 0.0, 0.0),
@@ -1043,7 +1043,7 @@ struct Subpath
     # terminal connector is built directly at the natural exit (see build).
     jumpto_natural::Bool
     jumpto_natural_extra::Float64
-    # Whole-Subpath material spinning (see SubpathBuilder).
+    # Whole-Subpath material spin (see SubpathBuilder).
     spin_rate::Union{Float64, Function, Nothing, Symbol}
     _spin_phi_at_s0::Union{Float64, Nothing}
 end
@@ -1084,7 +1084,7 @@ arc_length(::Subpath)               = error("Subpath: call build(subpath) before
 arc_length(::Subpath, ::Real, ::Real) = error("Subpath: call build(subpath) before querying arc_length")
 curvature(::Subpath, ::Real)        = error("Subpath: call build(subpath) before querying curvature")
 geometric_torsion(::Subpath, ::Real) = error("Subpath: call build(subpath) before querying geometric_torsion")
-spinning_rate(::Subpath, ::Real)   = error("Subpath: call build(subpath) before querying spinning_rate")
+spin_rate(::Subpath, ::Real)   = error("Subpath: call build(subpath) before querying spin_rate")
 twist_rate(::Subpath, ::Real)      = error("Subpath: call build(subpath) before querying twist_rate")
 twist_phase(::Subpath, ::Real)     = error("Subpath: call build(subpath) before querying twist_phase")
 torsion_phase(::Subpath, ::Real)   = error("Subpath: call build(subpath) before querying torsion_phase")
@@ -1322,7 +1322,7 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
 end
 
 # -----------------------------------------------------------------------
-# Spinning resolution (across Subpaths)
+# Spin resolution (across Subpaths)
 # -----------------------------------------------------------------------
 
 """
@@ -1569,16 +1569,16 @@ function geometric_torsion(b::SubpathBuilt, s::Real)
 end
 
 """
-    spinning_rate(b, s)
+    spin_rate(b, s)
 
 Material spin rate (rad/m) at Subpath-local arc length `s`. The Subpath carries
 a single whole-length `spin_rate`: `nothing` → `0`; a constant `Float64`; or a
 `Function` evaluated at `s` (Subpath-local, `s = 0` at the Subpath start).
 """
-function spinning_rate(b::SubpathBuilt, s)
+function spin_rate(b::SubpathBuilt, s)
     r = b.spin_rate
     r === :inherit && error(
-        "spinning_rate: unresolved :inherit spin_rate; build via build([...]) first")
+        "spin_rate: unresolved :inherit spin_rate; build via build([...]) first")
     r === nothing && return zero(s isa AbstractFloat ? s : Float64(s))
     return r isa Function ? r(s) : r
 end
@@ -1726,7 +1726,7 @@ end
 
 Return all differential-geometry quantities of a built `path` at arc length
 `s` as a `NamedTuple`: `position`, `tangent`, `normal`, `binormal`,
-`curvature`, `geometric_torsion`, and `spinning_rate`.
+`curvature`, `geometric_torsion`, and `spin_rate`.
 """
 function frame(b::SubpathBuilt, s::Real)
     T = tangent(b, s)
@@ -1734,9 +1734,9 @@ function frame(b::SubpathBuilt, s::Real)
     Bi = binormal(b, s)
     κ = curvature(b, s)
     τ = geometric_torsion(b, s)
-    m = spinning_rate(b, s)
+    m = spin_rate(b, s)
     return (; position = position(b, s), tangent = T, normal = N, binormal = Bi,
-              curvature = κ, geometric_torsion = τ, spinning_rate = m)
+              curvature = κ, geometric_torsion = τ, spin_rate = m)
 end
 
 # -----------------------------------------------------------------------
@@ -1876,13 +1876,13 @@ function total_torsion(b::SubpathBuilt)
 end
 
 """
-    total_spinning(b; s_start, s_end, rtol = 1e-8, atol = 0.0) → Float64
+    total_spin(b; s_start, s_end, rtol = 1e-8, atol = 0.0) → Float64
 
-Integrated material spinning ``∫ τ_{\\mathrm{mat}}(s) \\, ds`` over local arc length
+Integrated material spin ``∫ τ_{\\mathrm{mat}}(s) \\, ds`` over local arc length
 from `s_start` to `s_end` (defaults: full Subpath). Both endpoints must lie
 in `[0, s_end(b)]`.
 """
-function total_spinning(
+function total_spin(
     b::SubpathBuilt;
     s_start::Real = 0.0,
     s_end::Real   = s_end(b),
@@ -1893,13 +1893,13 @@ function total_spinning(
     s_hi = Float64(_qc_nominalize(s_end))
     if s_lo > s_hi
         throw(ArgumentError(
-            "total_spinning: require s_start ≤ s_end; got s_start=$(s_lo), s_end=$(s_hi)"))
+            "total_spin: require s_start ≤ s_end; got s_start=$(s_lo), s_end=$(s_hi)"))
     end
     ps0 = 0.0
     ps1 = Float64(_qc_nominalize(arc_length(b)))
     if !(ps0 - 1e-12 <= s_lo <= ps1 + 1e-12) || !(ps0 - 1e-12 <= s_hi <= ps1 + 1e-12)
         throw(ArgumentError(
-            "total_spinning: require 0 ≤ s ≤ s_end(b) for both endpoints; " *
+            "total_spin: require 0 ≤ s ≤ s_end(b) for both endpoints; " *
             "got [$(s_lo), $(s_hi)] m vs subpath domain [$(ps0), $(ps1)] m"))
     end
     s_lo == s_hi && return 0.0
@@ -1972,7 +1972,7 @@ function total_frame_rotation(
         end
     end
 
-    Ω_total = total_spinning(b; s_start = s_lo, s_end = s_hi,
+    Ω_total = total_spin(b; s_start = s_lo, s_end = s_hi,
                                    rtol = rtolf, atol = atolf)
     return τ_total + Ω_total
 end
@@ -2010,7 +2010,7 @@ end
 
 One evaluated point on a path: arc-length coordinate `s` plus all frame
 quantities (position, tangent/normal/binormal, curvature, geometric torsion,
-spinning rate).
+spin rate).
 
 The frame is the propagated (parallel-transport) frame, not the textbook
 Frenet frame — see [`build`](@ref).
@@ -2023,7 +2023,7 @@ struct Sample
     binormal          :: AbstractVector
     curvature         :: Real
     geometric_torsion :: Real
-    spinning_rate    :: Real
+    spin_rate    :: Real
 end
 
 """
@@ -2087,7 +2087,7 @@ end
 
 Return the number of sample points to allocate to placed segment `ps` over the
 clamped window `[s_lo, s_hi]`, scaled by `fidelity` and the segment's geometric
-turning and spinning angle.
+turning and spin angle.
 """
 function _segment_point_budget(
     ps::PlacedSegment,
@@ -2110,11 +2110,11 @@ function _segment_point_budget(
     geom_angle  = _budget_scalar(_segment_total_angle(seg) * frac)
     geom_budget = max(2, ceil(Int, fidelity * geom_angle / (2π) * 32))
 
-    spinning_total  = total_spinning(b; s_start = a, s_end = bb, rtol = 1e-3)
-    spinning_angle  = abs(_budget_scalar(spinning_total))
-    spinning_budget = max(2, ceil(Int, fidelity * spinning_angle / (2π) * 32))
+    spin_total  = total_spin(b; s_start = a, s_end = bb, rtol = 1e-3)
+    spin_angle  = abs(_budget_scalar(spin_total))
+    spin_budget = max(2, ceil(Int, fidelity * spin_angle / (2π) * 32))
 
-    return max(geom_budget, spinning_budget)
+    return max(geom_budget, spin_budget)
 end
 
 """
@@ -2167,7 +2167,7 @@ function sample_path(b::SubpathBuilt, s1::Real, s2::Real; fidelity::Float64 = 1.
             fr.binormal,
             fr.curvature,
             fr.geometric_torsion,
-            fr.spinning_rate,
+            fr.spin_rate,
         )
     end
     return PathSample(samples, s_lo, s_hi, n)
@@ -2207,7 +2207,7 @@ end
 """
     breakpoints(path) -> Vector{Float64}
 
-Return the normalized arc-length segment breakpoints of a built `path`. Spinning
+Return the normalized arc-length segment breakpoints of a built `path`. Spin
 is constant or smooth over the whole Subpath, so it introduces no interior
 breakpoints; Subpath boundaries are already segment breakpoints. The propagator
 never steps across one of these.
@@ -2293,7 +2293,7 @@ end
 # Forward all "point-query at s" methods through _find_subpath. `spin_phase`
 # is point-like at the PathBuilt level because each Subpath's `_spin_phi_at_s0`
 # already encodes the cross-Subpath accumulation.
-for f in (:curvature, :geometric_torsion, :spinning_rate, :twist_rate, :spin_phase,
+for f in (:curvature, :geometric_torsion, :spin_rate, :twist_rate, :spin_phase,
           :position, :tangent, :normal, :binormal, :frame)
     @eval function $f(p::PathBuilt, s::Real)
         sb, s_local = _find_subpath(p, s)
@@ -2352,7 +2352,7 @@ total_turning_angle(p::PathBuilt) = sum(total_turning_angle(b) for b in p.subpat
 total_torsion(p::PathBuilt)       = sum(total_torsion(b)       for b in p.subpaths;
                                         init = 0.0)
 
-function total_spinning(p::PathBuilt;
+function total_spin(p::PathBuilt;
                               s_start::Real = 0.0,
                               s_end::Real   = s_end(p),
                               rtol::Real    = 1e-8,
@@ -2367,7 +2367,7 @@ function total_spinning(p::PathBuilt;
         a_local = max(0.0, s_lo - offs[i])
         b_local = min(L,   s_hi - offs[i])
         b_local <= a_local && continue
-        total += total_spinning(p.subpaths[i];
+        total += total_spin(p.subpaths[i];
                                       s_start = a_local, s_end = b_local,
                                       rtol = rtol, atol = atol)
     end
@@ -2466,7 +2466,7 @@ function sample_path(p::PathBuilt, s1::Real, s2::Real; fidelity::Float64 = 1.0)
             fr.binormal,
             fr.curvature,
             fr.geometric_torsion,
-            fr.spinning_rate,
+            fr.spin_rate,
         )
     end
     return PathSample(samples, s_lo, s_hi, n)

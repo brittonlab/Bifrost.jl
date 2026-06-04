@@ -67,7 +67,7 @@ end
 
 # Path-backed fibers use the path's local normal/binormal frame. The bend
 # axis is the curvature normal, so the local transverse bend components are
-# (κ, 0) in that frame. Frame rotation enters through the path spinning rate.
+# (κ, 0) in that frame. Frame rotation enters through the path spin rate.
 function bend_components(path::Union{SubpathBuilt, PathBuilt}, s::Real)
     κ = curvature(path, s)
     if κ == zero(κ)
@@ -238,7 +238,7 @@ Fiber(spec::Vector{SubpathBuilder}; cross_section::FiberCrossSection,
           cross_section = cross_section, T_ref_K = T_ref_K)
 
 frame_rotation_rate(path::Union{SubpathBuilt, PathBuilt}, s::Real) =
-    geometric_torsion(path, s) + spinning_rate(path, s)
+    geometric_torsion(path, s) + spin_rate(path, s)
 
 fiber_path(f::Fiber) = f.path
 
@@ -307,14 +307,14 @@ function bend_generator_Kω(f::Fiber, s::Real, λ_m::Real)
     return linear_birefringence_generator(Δβbω, c2φ, s2φ)
 end
 
-function spinning_generator_K(f::Fiber, s::Real, λ_m::Real)
+function spin_generator_K(f::Fiber, s::Real, λ_m::Real)
     tau = frame_rotation_rate(f.path, s)
     T = f.T_ref_K
     Δβt = twisting_birefringence(f.cross_section, λ_m, T; twist_rate_rad_per_m = tau)
     return circular_birefringence_generator(Δβt)
 end
 
-function spinning_generator_Kω(f::Fiber, s::Real, λ_m::Real)
+function spin_generator_Kω(f::Fiber, s::Real, λ_m::Real)
     tau = frame_rotation_rate(f.path, s)
     T = f.T_ref_K
     Δβtω = twisting_birefringence(
@@ -366,14 +366,14 @@ generator_Kω(f::Fiber, λ_m::Real) = generator_Kω(f, f.cross_section, λ_m)
 function generator_K(f::Fiber, xs::StepIndexCrossSection, λ_m::Real)
     return function (s::Real)
         return bend_generator_K(f, s, λ_m) +
-               spinning_generator_K(f, s, λ_m)
+               spin_generator_K(f, s, λ_m)
     end
 end
 
 function generator_Kω(f::Fiber, xs::StepIndexCrossSection, λ_m::Real)
     return function (s::Real)
         return bend_generator_Kω(f, s, λ_m) +
-               spinning_generator_Kω(f, s, λ_m)
+               spin_generator_Kω(f, s, λ_m)
     end
 end
 
@@ -402,11 +402,11 @@ function bend_geometry(f::Fiber, s::Real)
     return (Rb = inv(sqrt(k2)), theta_b = atan(ky, kx), kx = kx, ky = ky, k2 = k2)
 end
 
-# Extend the PathGeometry.spinning_rate generic with a Fiber method rather than
-# defining a separate FiberPath.spinning_rate. The two layers query the same
+# Extend the PathGeometry.spin_rate generic with a Fiber method rather than
+# defining a separate FiberPath.spin_rate. The two layers query the same
 # conceptual quantity at different binding points; sharing one generic avoids a
 # name collision when both submodules are re-exported by `using Bifrost`. For a
-# Fiber this is the frame rotation rate (geometric torsion + path spinning).
-function PathGeometry.spinning_rate(f::Fiber, s::Real)
+# Fiber this is the frame rotation rate (geometric torsion + path spin).
+function PathGeometry.spin_rate(f::Fiber, s::Real)
     return frame_rotation_rate(f.path, s)
 end

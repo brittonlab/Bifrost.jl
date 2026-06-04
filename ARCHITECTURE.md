@@ -51,7 +51,7 @@ legacy behavior and must not be modified without explicit user authorization.
 - Separate material physics, path geometry, fiber assembly, and numerical
   propagation.
 - Keep the core propagation API usable with any callable `K(s)` and `Kω(s)`.
-- Support continuous/function-valued geometry and spinning rather than only fixed
+- Support continuous/function-valued geometry and spin rather than only fixed
   pre-sliced segment grids.
 - Keep lossless Jones propagation isolated from any future gain/loss model.
 - Preserve MCM compatibility on uncertainty-carrying code paths.
@@ -71,7 +71,7 @@ The fiber-specific layers combine those pieces:
 | File | How it extends the standalone pieces |
 | --- | --- |
 | `fiber-cross-section/` | Adds step-index fiber optics and birefringence responses (`cross-section.jl` base + concrete cross sections). |
-| `fiber-path.jl` | Binds path geometry to a cross section and assembles bend/spinning `K` and `Kω`. |
+| `fiber-path.jl` | Binds path geometry to a cross section and assembles bend/spin `K` and `Kω`. |
 
 ## Layered Design
 
@@ -93,11 +93,12 @@ The fiber-specific layers combine those pieces:
    - **Invariant:** the geometry layer carries any meta it cannot interpret
      blindly and never errors on it — in particular it never references `:T_K`.
      Interpretation of foreign meta is a consuming layer's job (the fiber).
-   - Resolves material spinning metadata into path-coordinate spinning runs.
+   - Resolves the per-Subpath `spin_rate` into path-coordinate material spin.
    - Resolves `JumpBy` and the terminal `jumpto!` connector into G2 quintic
      connectors at build time.
-   - The `AbstractMeta` vocabulary (`Nickname`, `MCMadd`, `MCMmul`, `Spinning`)
+   - The `AbstractMeta` vocabulary (`Nickname`, `MCMadd`, `MCMmul`)
      lives in `geometry/path-geometry-meta.jl`. It makes no reference to fiber.
+     (Material spin is a `start!(; spin_rate=…)` keyword, not meta.)
 
 1. **Material layer** (`material-properties.jl`)
 
@@ -128,7 +129,7 @@ The fiber-specific layers combine those pieces:
      target length is set).
    - Keeps operating wavelength as a per-query argument rather than `Fiber`
      state.
-   - Assembles fiber-level bend and spinning generators `K(s)` and `Kω(s)`.
+   - Assembles fiber-level bend and spin generators `K(s)` and `Kω(s)`.
 
 4. **Propagation layer** (`path-integral.jl`)
 
@@ -164,7 +165,7 @@ The fiber-specific layers combine those pieces:
 
 - Path breakpoints are normalized and globally merged before piecewise
   propagation.
-- The propagator must not step across path segment or spinning-run boundaries.
+- The propagator must not step across path segment or spin-run boundaries.
 - Numerical tolerances (`rtol`, `atol`, step controls) are explicit API inputs,
   not hidden globals.
 - Global phase-insensitive error metrics are used in adaptive acceptance checks.
