@@ -155,6 +155,24 @@ Return the segment's `meta` annotation bag, or an empty vector if it has none.
 segment_meta(seg::AbstractPathSegment) =
     :meta ∈ fieldnames(typeof(seg)) ? seg.meta : AbstractMeta[]
 
+"""
+    _segment_twist(seg::AbstractPathSegment) -> TwistRate
+
+Return the segment's mechanical-twist rate spec, or `nothing` if it has none.
+"""
+_segment_twist(seg::AbstractPathSegment) =
+    :twist ∈ fieldnames(typeof(seg)) ? seg.twist : nothing
+
+"""
+    twist_rate(seg::AbstractPathSegment, s) -> value
+
+Return the mechanical-twist rate (rad/m) at segment-local arc length `s`. Part
+of the [`AbstractPathSegment`](@ref) interface, beside `curvature` and
+`geometric_torsion`; defaults to evaluating the segment's `twist` field (zero
+for an untwisted segment).
+"""
+twist_rate(seg::AbstractPathSegment, s) = _eval_rate(_segment_twist(seg), s)
+
 # -----------------------------------------------------------------------
 # Quadrature helper (spin-phase accumulation)
 # -----------------------------------------------------------------------
@@ -171,7 +189,10 @@ Gauss–Kronrod, which subdivides automatically for oscillatory integrands; a
 _integrate_rate(::Nothing, a::Float64, b::Float64;
                 rtol::Float64 = 1e-8, atol::Float64 = 0.0) = 0.0
 
-_integrate_rate(rate::Float64, a::Float64, b::Float64;
+# `::Real` (not `::Float64`) so a `Particles` constant rate — e.g. an
+# MCM-perturbed `twist` — integrates without coercion: `rate * (b - a)`
+# promotes to `Particles`. `Float64` is `Real`, so spin still hits this branch.
+_integrate_rate(rate::Real, a::Float64, b::Float64;
                 rtol::Float64 = 1e-8, atol::Float64 = 0.0) = rate * (b - a)
 
 function _integrate_rate(rate::Function, a::Float64, b::Float64;
@@ -179,6 +200,30 @@ function _integrate_rate(rate::Function, a::Float64, b::Float64;
     val, _err = QuadGK.quadgk(rate, a, b; rtol = rtol, atol = atol)
     return val
 end
+
+# -----------------------------------------------------------------------
+# Rate evaluation (per-segment twist / spin rate at a local arc length)
+# -----------------------------------------------------------------------
+
+"""
+    TwistRate
+
+Type of a per-segment mechanical-twist rate specification: `nothing` (no twist),
+a `Real` constant (rad/m, including an MCM `Particles`), or a `Function` of the
+segment-local arc length `s_local`.
+"""
+const TwistRate = Union{Nothing, Real, Function}
+
+"""
+    _eval_rate(rate, s) -> value
+
+Evaluate a rate specification at local arc length `s`: `nothing` → `0`, a `Real`
+constant → itself, a `Function` → `rate(s)`. Branch-free per type so a
+`Particles` constant propagates without coercion.
+"""
+_eval_rate(::Nothing, s) = zero(s isa AbstractFloat ? s : Float64(s))
+_eval_rate(rate::Real, s) = rate
+_eval_rate(rate::Function, s) = rate(s)
 
 # -----------------------------------------------------------------------
 # StraightSegment
@@ -198,16 +243,18 @@ broadcasts elementwise over a `Particles` length.
 """
 struct StraightSegment{T} <: AbstractPathSegment
     length::T
+    twist::TwistRate
     meta::Vector{AbstractMeta}
 
     """
-        StraightSegment(length; meta=AbstractMeta[]) -> StraightSegment
+        StraightSegment(length, twist=nothing; meta=AbstractMeta[]) -> StraightSegment
 
-    Construct a straight segment of signed `length`. See
+    Construct a straight segment of signed `length`, optionally carrying a
+    mechanical-twist rate `twist` (see [`TwistRate`](@ref)). See
     [`AbstractPathSegment`](@ref).
     """
-    function StraightSegment(length; meta = AbstractMeta[])
-        new{typeof(length)}(length, Vector{AbstractMeta}(meta))
+    function StraightSegment(length, twist = nothing; meta = AbstractMeta[])
+        new{typeof(length)}(length, twist, Vector{AbstractMeta}(meta))
     end
 end
 
@@ -309,13 +356,14 @@ struct BendSegment{T} <: AbstractPathSegment
     radius::T
     angle::T       # total angle swept (rad)
     axis_angle::T  # orientation of inward normal in transverse plane (rad)
+    twist::TwistRate
     meta::Vector{AbstractMeta}
 
-    function BendSegment(radius, angle, axis_angle = 0.0;
+    function BendSegment(radius, angle, axis_angle = 0.0, twist = nothing;
                          meta = AbstractMeta[])
         @assert radius > 0 "BendSegment: radius must be positive"
         r, a, x = promote(radius, angle, axis_angle)
-        new{typeof(r)}(r, a, x, Vector{AbstractMeta}(meta))
+        new{typeof(r)}(r, a, x, twist, Vector{AbstractMeta}(meta))
     end
 end
 
@@ -384,14 +432,15 @@ struct CatenarySegment{T} <: AbstractPathSegment
     a::T
     length::T
     axis_angle::T
+    twist::TwistRate
     meta::Vector{AbstractMeta}
 
-    function CatenarySegment(a, length, axis_angle = 0.0;
+    function CatenarySegment(a, length, axis_angle = 0.0, twist = nothing;
                              meta = AbstractMeta[])
         @assert a > 0      "CatenarySegment: a must be positive"
         @assert length > 0 "CatenarySegment: length must be positive"
         av, L, x = promote(a, length, axis_angle)
-        new{typeof(av)}(av, L, x, Vector{AbstractMeta}(meta))
+        new{typeof(av)}(av, L, x, twist, Vector{AbstractMeta}(meta))
     end
 end
 
@@ -470,14 +519,15 @@ struct HelixSegment{T} <: AbstractPathSegment
     pitch::T
     turns::T
     axis_angle::T
+    twist::TwistRate
     meta::Vector{AbstractMeta}
 
     function HelixSegment(radius, pitch, turns,
-                          axis_angle = 0.0; meta = AbstractMeta[])
+                          axis_angle = 0.0, twist = nothing; meta = AbstractMeta[])
         @assert radius > 0 "HelixSegment: radius must be positive"
         @assert turns  > 0 "HelixSegment: turns must be positive"
         r, p, n, x = promote(radius, pitch, turns, axis_angle)
-        new{typeof(r)}(r, p, n, x, Vector{AbstractMeta}(meta))
+        new{typeof(r)}(r, p, n, x, twist, Vector{AbstractMeta}(meta))
     end
 end
 
@@ -584,25 +634,27 @@ struct JumpBy <: AbstractPathSegment
     tangent_out::Union{Nothing, NTuple{3, Float64}}
     curvature_out::Union{Nothing, NTuple{3, Float64}}
     min_bend_radius::Union{Nothing, Float64}
+    twist::TwistRate
     meta::Vector{AbstractMeta}
 
     """
         JumpBy(delta; tangent_out=nothing, curvature_out=nothing,
-                      min_bend_radius=nothing, meta=AbstractMeta[]) -> JumpBy
+                      min_bend_radius=nothing, twist=nothing, meta=AbstractMeta[]) -> JumpBy
 
     Construct a relative jump connector to `current_position + delta`, resolved
-    at `build` time. See the type docstring above for the full argument
-    semantics.
+    at `build` time. `twist` is the connector's mechanical-twist rate, carried
+    onto the resolved [`QuinticConnector`](@ref). See the type docstring above
+    for the full argument semantics.
     """
     function JumpBy(delta; tangent_out = nothing, curvature_out = nothing,
-                    min_bend_radius = nothing, meta = AbstractMeta[])
+                    min_bend_radius = nothing, twist = nothing, meta = AbstractMeta[])
         d = (Float64(delta[1]), Float64(delta[2]), Float64(delta[3]))
         t = isnothing(tangent_out) ? nothing :
             (Float64(tangent_out[1]), Float64(tangent_out[2]), Float64(tangent_out[3]))
         k = isnothing(curvature_out) ? nothing :
             (Float64(curvature_out[1]), Float64(curvature_out[2]), Float64(curvature_out[3]))
         r = isnothing(min_bend_radius) ? nothing : Float64(min_bend_radius)
-        new(d, t, k, r, Vector{AbstractMeta}(meta))
+        new(d, t, k, r, twist, Vector{AbstractMeta}(meta))
     end
 end
 
@@ -652,6 +704,7 @@ function _resolve_at_placement(seg::JumpBy, pos::AbstractVector, frame_mat::Abst
                                               collect(seg.curvature_out)
     return _build_quintic_connector(p1_local, t_hat_out, K0_local, K1_local;
                                     min_bend_radius = seg.min_bend_radius,
+                                    twist = seg.twist,
                                     meta = seg.meta)
 end
 
@@ -715,6 +768,9 @@ mutable struct SubpathBuilder
     # not interpret it; a consuming layer (the fiber) may — e.g. to thermally
     # expand the connector via build's `jumpto_target_length`.
     jumpto_meta::Vector{AbstractMeta}
+    # Mechanical-twist rate on the terminal connector (set by jumpto!/seal!),
+    # applied to the resolved connector at build (parallel to jumpto_meta).
+    jumpto_twist::TwistRate
     # Natural seal (set by seal!): seal at the natural exit with no connector
     # bending. `jumpto_natural_extra` is an optional straight lead-out length.
     jumpto_natural::Bool
@@ -732,7 +788,7 @@ mutable struct SubpathBuilder
             nothing, nothing, nothing,
             AbstractPathSegment[],
             nothing, nothing, nothing, nothing, AbstractMeta[],
-            false, 0.0, nothing, nothing)
+            nothing, false, 0.0, nothing, nothing)
 end
 
 """
@@ -807,10 +863,10 @@ Append a [`StraightSegment`](@ref) of signed `length` to `builder`.
 See also [`bend!`](@ref), [`helix!`](@ref), [`catenary!`](@ref),
 [`jumpby!`](@ref), [`seal!`](@ref), [`jumpto!`](@ref).
 """
-function straight!(spec::SubpathBuilder; length,
+function straight!(spec::SubpathBuilder; length, twist = nothing,
                    meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
     _check_started(spec); _check_unsealed(spec)
-    push!(spec.segments, StraightSegment(length; meta))
+    push!(spec.segments, StraightSegment(length, twist; meta))
     return spec
 end
 
@@ -824,9 +880,9 @@ See also [`straight!`](@ref), [`helix!`](@ref), [`catenary!`](@ref),
 [`jumpby!`](@ref).
 """
 function bend!(spec::SubpathBuilder; radius::Real, angle::Real, axis_angle::Real = 0.0,
-               meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
+               twist = nothing, meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
     _check_started(spec); _check_unsealed(spec)
-    push!(spec.segments, BendSegment(radius, angle, axis_angle; meta))
+    push!(spec.segments, BendSegment(radius, angle, axis_angle, twist; meta))
     return spec
 end
 
@@ -840,9 +896,10 @@ See also [`straight!`](@ref), [`bend!`](@ref), [`catenary!`](@ref),
 [`jumpby!`](@ref).
 """
 function helix!(spec::SubpathBuilder; radius::Real, pitch::Real, turns::Real,
-                axis_angle::Real = 0.0, meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
+                axis_angle::Real = 0.0, twist = nothing,
+                meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
     _check_started(spec); _check_unsealed(spec)
-    push!(spec.segments, HelixSegment(radius, pitch, turns, axis_angle; meta))
+    push!(spec.segments, HelixSegment(radius, pitch, turns, axis_angle, twist; meta))
     return spec
 end
 
@@ -856,9 +913,9 @@ See also [`straight!`](@ref), [`bend!`](@ref), [`helix!`](@ref),
 [`jumpby!`](@ref).
 """
 function catenary!(spec::SubpathBuilder; a::Real, length::Real, axis_angle::Real = 0.0,
-                   meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
+                   twist = nothing, meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
     _check_started(spec); _check_unsealed(spec)
-    push!(spec.segments, CatenarySegment(a, length, axis_angle; meta))
+    push!(spec.segments, CatenarySegment(a, length, axis_angle, twist; meta))
     return spec
 end
 
@@ -874,12 +931,12 @@ builders [`straight!`](@ref), [`bend!`](@ref), [`helix!`](@ref),
 [`catenary!`](@ref).
 """
 function jumpby!(spec::SubpathBuilder; delta, tangent = nothing,
-                 curvature_out = nothing, min_bend_radius = nothing,
+                 curvature_out = nothing, min_bend_radius = nothing, twist = nothing,
                  meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
     _check_started(spec); _check_unsealed(spec)
     push!(spec.segments, JumpBy(delta; tangent_out = tangent,
                                 curvature_out = curvature_out,
-                                min_bend_radius, meta))
+                                min_bend_radius, twist, meta))
     return spec
 end
 
@@ -905,6 +962,7 @@ function jumpto!(b::SubpathBuilder;
                  incoming_tangent = nothing,
                  incoming_curvature = nothing,
                  min_bend_radius = nothing,
+                 twist = nothing,
                  meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
     isnothing(b.start_point) &&
         throw(ArgumentError("SubpathBuilder: call start!() before jumpto!()"))
@@ -917,6 +975,7 @@ function jumpto!(b::SubpathBuilder;
         (Float64(incoming_curvature[1]), Float64(incoming_curvature[2]), Float64(incoming_curvature[3]))
     b.jumpto_min_bend_radius    = isnothing(min_bend_radius) ? nothing : Float64(min_bend_radius)
     b.jumpto_meta = Vector{AbstractMeta}(meta)
+    b.jumpto_twist = twist
     return b
 end
 
@@ -939,7 +998,7 @@ Like `jumpto!`, this seals the builder: no further segments may be added, and a
 builder may be sealed exactly once (by either `seal!` or `jumpto!`). Throws if
 `start!` was not called, if the builder is already sealed, or if `extra < 0`.
 """
-function seal!(b::SubpathBuilder; extra::Real = 0.0,
+function seal!(b::SubpathBuilder; extra::Real = 0.0, twist = nothing,
                meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
     isnothing(b.start_point) &&
         throw(ArgumentError("SubpathBuilder: call start!() before seal!()"))
@@ -950,6 +1009,7 @@ function seal!(b::SubpathBuilder; extra::Real = 0.0,
     b.jumpto_natural = true
     b.jumpto_natural_extra = Float64(extra)
     b.jumpto_meta = Vector{AbstractMeta}(meta)
+    b.jumpto_twist = twist
     return b
 end
 
@@ -977,6 +1037,8 @@ struct Subpath
     # Meta on the terminal connector, carried verbatim and interpreted only by
     # consuming layers (e.g. the fiber's thermal expansion).
     jumpto_meta::Vector{AbstractMeta}
+    # Mechanical-twist rate on the terminal connector (see SubpathBuilder).
+    jumpto_twist::TwistRate
     # Natural seal (set by seal!): when true, jumpto_point is nothing and the
     # terminal connector is built directly at the natural exit (see build).
     jumpto_natural::Bool
@@ -1010,6 +1072,7 @@ function Subpath(b::SubpathBuilder)
                    b.jumpto_incoming_curvature,
                    b.jumpto_min_bend_radius,
                    deepcopy(b.jumpto_meta),
+                   b.jumpto_twist,
                    b.jumpto_natural,
                    b.jumpto_natural_extra,
                    b.spin_rate,
@@ -1022,6 +1085,10 @@ arc_length(::Subpath, ::Real, ::Real) = error("Subpath: call build(subpath) befo
 curvature(::Subpath, ::Real)        = error("Subpath: call build(subpath) before querying curvature")
 geometric_torsion(::Subpath, ::Real) = error("Subpath: call build(subpath) before querying geometric_torsion")
 spinning_rate(::Subpath, ::Real)   = error("Subpath: call build(subpath) before querying spinning_rate")
+twist_rate(::Subpath, ::Real)      = error("Subpath: call build(subpath) before querying twist_rate")
+twist_phase(::Subpath, ::Real)     = error("Subpath: call build(subpath) before querying twist_phase")
+torsion_phase(::Subpath, ::Real)   = error("Subpath: call build(subpath) before querying torsion_phase")
+spin_phase(::Subpath, ::Real)      = error("Subpath: call build(subpath) before querying spin_phase")
 position(::Subpath, ::Real)         = error("Subpath: call build(subpath) before querying position")
 tangent(::Subpath, ::Real)          = error("Subpath: call build(subpath) before querying tangent")
 normal(::Subpath, ::Real)           = error("Subpath: call build(subpath) before querying normal")
@@ -1214,6 +1281,7 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
         # QuinticConnector query path (zero-speed → local ẑ tangent).
         connector = _build_straight_connector(sub.jumpto_natural_extra,
                                               eltype(K_in_global);
+                                              twist = sub.jumpto_twist,
                                               meta = sub.jumpto_meta)
     else
         # Destination is global (sub.jumpto_point); transform to local frame to
@@ -1235,6 +1303,7 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
         connector = _build_quintic_connector(p1_local, t_hat_out, K0_local, K1_local;
                                              min_bend_radius    = sub.jumpto_min_bend_radius,
                                              target_path_length = jumpto_target_length,
+                                             twist              = sub.jumpto_twist,
                                              meta               = sub.jumpto_meta)
     end
     # PlacedSegment wrapper for the terminal connector: anchor at the
@@ -1274,7 +1343,7 @@ function _resolve_inherited_spin(sub::Subpath, prev_built::SubpathBuilt)
         sub.meta, sub.start_point, sub.start_outgoing_tangent,
         sub.start_outgoing_curvature, sub.segments, sub.jumpto_point,
         sub.jumpto_incoming_tangent, sub.jumpto_incoming_curvature,
-        sub.jumpto_min_bend_radius, sub.jumpto_meta,
+        sub.jumpto_min_bend_radius, sub.jumpto_meta, sub.jumpto_twist,
         sub.jumpto_natural, sub.jumpto_natural_extra,
         prev_built.spin_rate, sub._spin_phi_at_s0)
 end
@@ -1513,6 +1582,93 @@ function spinning_rate(b::SubpathBuilt, s)
     r === nothing && return zero(s isa AbstractFloat ? s : Float64(s))
     return r isa Function ? r(s) : r
 end
+
+# -----------------------------------------------------------------------
+# Per-segment phase integrals (twist, geometric torsion) and the
+# accumulators that the fiber generators consume to orient birefringence
+# axes. These deliberately do NOT `_qc_nominalize` the integrand so an MCM
+# `Particles` twist rate propagates into the accumulated phase.
+# -----------------------------------------------------------------------
+
+"""
+    _segment_torsion_phase(seg, a, b) -> value
+
+Integral of `geometric_torsion(seg, ·)` over the segment-local interval
+`[a, b]`. Geometric torsion is constant for every authored segment type
+(zero for planar shapes, `h/(R²+h²)` for a helix), so the default evaluates it
+once and multiplies by the interval length; the `QuinticConnector` torsion
+varies and is integrated by quadrature.
+"""
+_segment_torsion_phase(seg::AbstractPathSegment, a::Float64, b::Float64) =
+    geometric_torsion(seg, a) * (b - a)
+
+_segment_torsion_phase(seg::QuinticConnector, a::Float64, b::Float64) =
+    QuadGK.quadgk(s -> geometric_torsion(seg, s), a, b; rtol = 1e-8)[1]
+
+"""
+    _accumulate_segment_phase(b::SubpathBuilt, s, seg_phase) -> value
+
+Accumulate a per-segment phase integral `seg_phase(seg, a_local, b_local)` from
+the Subpath start to global arc length `s`, walking the placed interior
+segments and the terminal connector. Segment-boundary positions are reduced to
+`Float64` for the loop bounds (so no `Particles` conditional is evaluated),
+while the integrand carries whatever element type the rate has.
+"""
+function _accumulate_segment_phase(b::SubpathBuilt, s, seg_phase)
+    s_hi = Float64(_qc_nominalize(s))
+    phi = nothing
+    for ps in _all_placed_segs(b)
+        seg   = ps.segment
+        seg_s0 = Float64(_qc_nominalize(ps.s_offset_eff))
+        L      = Float64(_qc_nominalize(arc_length(seg)))
+        upper  = min(s_hi - seg_s0, L)
+        upper <= 0.0 && continue
+        contrib = seg_phase(seg, 0.0, upper)
+        phi = phi === nothing ? contrib : phi + contrib
+    end
+    return phi === nothing ? zero(s_hi) : phi
+end
+
+"""
+    twist_rate(path, s) -> value
+
+Mechanical-twist rate (rad/m) of a built `path` at global arc length `s`,
+read from the segment containing `s`.
+"""
+function twist_rate(b::SubpathBuilt, s)
+    ps, s_local = _find_placed_segment(b, s)
+    return twist_rate(ps.segment, s_local)
+end
+
+"""
+    twist_phase(path, s) -> value
+
+Accumulated mechanical-twist phase `∫₀ˢ τ_m` (rad) of a built `path`. Co-rotates
+the intrinsic linear birefringence axes with the cross section.
+"""
+twist_phase(b::SubpathBuilt, s) =
+    _accumulate_segment_phase(b, s,
+        (seg, a, bb) -> _integrate_rate(_segment_twist(seg), a, bb))
+
+"""
+    torsion_phase(path, s) -> value
+
+Accumulated geometric-torsion phase `∫₀ˢ τ_g` (rad) of a built `path`. Rotates
+the bend (curvature-direction) birefringence axis relative to the
+parallel-transport frame.
+"""
+torsion_phase(b::SubpathBuilt, s) =
+    _accumulate_segment_phase(b, s, _segment_torsion_phase)
+
+"""
+    spin_phase(path, s) -> value
+
+Accumulated material-spin phase (rad) of a built `path` at global arc length
+`s`: the Subpath's continuous start phase plus `∫₀ˢ ξ`. Rotates the intrinsic
+linear birefringence axes with the spun (relaxed) glass.
+"""
+spin_phase(b::SubpathBuilt, s) =
+    b._spin_phi_at_s0 + _integrate_rate(b.spin_rate, 0.0, Float64(_qc_nominalize(s)))
 
 """
     position(path, s) -> Vector
@@ -2124,14 +2280,43 @@ function _find_subpath(p::PathBuilt, s)
     error("PathBuilt: s = $s out of path bounds")
 end
 
-# Forward all "point-query at s" methods through _find_subpath.
-for f in (:curvature, :geometric_torsion, :spinning_rate,
+# Forward all "point-query at s" methods through _find_subpath. `spin_phase`
+# is point-like at the PathBuilt level because each Subpath's `_spin_phi_at_s0`
+# already encodes the cross-Subpath accumulation.
+for f in (:curvature, :geometric_torsion, :spinning_rate, :twist_rate, :spin_phase,
           :position, :tangent, :normal, :binormal, :frame)
     @eval function $f(p::PathBuilt, s::Real)
         sb, s_local = _find_subpath(p, s)
         return $f(sb, s_local)
     end
 end
+
+"""
+    _pathbuilt_cumulative_phase(p, s, subphase) -> value
+
+Sum a from-zero per-Subpath phase accumulator `subphase(subpath, s_local)`
+across the Subpaths preceding the one containing global arc length `s` (each
+taken over its full length) plus the partial contribution of the containing
+Subpath. Used for `twist_phase`/`torsion_phase`, which — unlike spin — carry no
+stored cross-Subpath offset. No `Particles` conditional is evaluated (loop
+bounds use the `Float64` subpath offsets).
+"""
+function _pathbuilt_cumulative_phase(p::PathBuilt, s, subphase)
+    s_hi = Float64(_qc_nominalize(s))
+    offs = s_offsets(p)
+    phi = nothing
+    for i in eachindex(p.subpaths)
+        L     = Float64(_qc_nominalize(arc_length(p.subpaths[i])))
+        upper = min(s_hi - offs[i], L)
+        upper <= 0.0 && continue
+        contrib = subphase(p.subpaths[i], upper)
+        phi = phi === nothing ? contrib : phi + contrib
+    end
+    return phi === nothing ? zero(s_hi) : phi
+end
+
+twist_phase(p::PathBuilt, s::Real)   = _pathbuilt_cumulative_phase(p, s, twist_phase)
+torsion_phase(p::PathBuilt, s::Real) = _pathbuilt_cumulative_phase(p, s, torsion_phase)
 
 # Endpoint access
 start_point(p::PathBuilt)   = position(p, 0.0)
