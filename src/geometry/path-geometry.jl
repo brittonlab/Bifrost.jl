@@ -142,8 +142,7 @@ Supertype for per-segment annotations carried in a segment's
 `path-geometry.jl` is deliberately ignorant of what the bag contains;
 downstream layers define their own `AbstractMeta` subtypes (see
 `path-geometry-meta.jl`) and decide how to act on them. The geometry layer does
-not interpret any `AbstractMeta` directly (spinning is a `start!` keyword, not
-meta — see the file-header "Spinning" section).
+not interpret any `AbstractMeta` directly.
 """
 abstract type AbstractMeta end
 
