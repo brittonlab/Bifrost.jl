@@ -189,9 +189,16 @@ The fiber-specific layers combine those pieces:
 ## Extension Guidance
 
 - Add new path shapes by implementing the `AbstractPathSegment` local geometry
-  interface in `path-geometry.jl`, and declare its length-dimensioned fields via
-  `_length_fields` in `path-geometry-perturb.jl` so isotropic scaling is defined
-  (the fallback errors loudly if omitted).
+  interface in `path-geometry.jl` (`curvature`, `geometric_torsion`,
+  `twist_rate`, and the frame/position queries), and declare its
+  length-dimensioned fields via `_length_fields` in `path-geometry-perturb.jl`
+  so isotropic scaling is defined (the fallback errors loudly if omitted).
+  Mechanical twist is a **per-segment geometric parameter, not meta**: an
+  optional `twist` field/kwarg (rad/m; `nothing`/`Real`/`Function` of
+  segment-local `s`) on every building call, surfaced as `twist_rate(seg, s)`.
+  Being a rate (not a length) it is excluded from `_length_fields`, so thermal
+  scaling leaves it untouched. Per-`s` accumulators `spin_phase`/`twist_phase`/
+  `torsion_phase` orient the fiber's birefringence axes.
 - Add new per-segment annotations by extending the `AbstractMeta` vocabulary and
   keeping interpretation in the consuming layer — the geometry layer must carry
   meta it cannot interpret blindly (never naming it, never erroring on it).

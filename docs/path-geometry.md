@@ -25,13 +25,34 @@ rate of change to two scalar fields:
   circular helix is the canonical out-of-plane curve and has constant nonzero
   τ_geom (see the example below).
 - **Spinning** Ω(s): rate at which the fiber cross-section rotates relative
-  to the Frenet frame, in rad/m.  This arises from applied torque or spinning
-  during fiber lay-down, and is specified via `Spinning` per-segment metadata.
-  The rate may be constant or a callable function of run-local arc length.
+  to the propagation frame, in rad/m.  This is *manufacturing spin* — the fiber
+  rotated while molten during the draw, freezing a rotating axis into relaxed
+  glass.  It is specified once per Subpath via the `start!(; spin_rate=…)`
+  keyword (`nothing`, a constant rate, a callable of Subpath-local arc length,
+  or `:inherit`), **not** as per-segment metadata.  Spinning rotates the
+  intrinsic linear birefringence axes but introduces no circular birefringence.
+- **Mechanical twist** τ_m(s): rate at which the *solid* fiber is twisted about
+  its axis after manufacture (rotating the ends / spooling), in rad/m.  It is a
+  **per-segment geometric parameter** — the optional `twist` keyword on every
+  building call (`straight!`, `bend!`, `helix!`, `catenary!`, `jumpby!`,
+  `jumpto!`, `seal!`), accepting `nothing`, a constant rate, or a callable of
+  segment-local arc length — and joins the `AbstractPathSegment` interface as
+  `twist_rate(seg, s)`.  Mechanical twist does not change the centerline shape
+  (so contributes no τ_geom); the fiber layer converts it into circular
+  birefringence and co-rotates the intrinsic linear axes with the cross section.
 
-The total rotation rate of the polarization reference frame is their sum:
+The propagation frame used for polarization is the **parallel-transport
+(Bishop) frame**, not the Frenet frame: it does not spin with the curve's
+torsion, giving a well-defined transverse basis even where κ = 0.  The
+geometric frame rotation rate is the sum of torsion and spin:
 
     dψ/ds = τ_geom(s) + Ω(s)
+
+Per-arc-length accumulated phases are available for orienting birefringence
+axes (consumed by the fiber generators): `spin_phase(path, s) = ∫₀ˢ Ω`,
+`twist_phase(path, s) = ∫₀ˢ τ_m`, and `torsion_phase(path, s) = ∫₀ˢ τ_geom`.
+These propagate MCM `Particles` (they are not nominalized), unlike the
+breakpoint-oriented `total_*` integrals below.
 
 ---
 
@@ -60,11 +81,11 @@ shape alone; it does not depend on the fiber material or applied torques.
 
     ∫ Ω(s) ds
 
-The integrated applied material spinning, in radians.  Only counts contributions
-from explicit `Spinning` metadata attached to segments.  Knows nothing about the
-geometry of the centerline — a helix with no `Spinning` annotation contributes
-zero here, even though the fiber reference frame does rotate as it traverses the
-helix.
+The integrated applied material spinning, in radians.  Counts only the Subpath's
+`spin_rate` (set at `start!`).  Knows nothing about the geometry of the
+centerline — a helix with no spin contributes zero here, even though the fiber
+reference frame does rotate as it traverses the helix.  Mechanical twist τ_m is
+a separate, per-segment quantity and is **not** included in `total_spinning`.
 
 ### `total_frame_rotation(path; s_start, s_end)`
 

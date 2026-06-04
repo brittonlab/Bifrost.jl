@@ -154,6 +154,14 @@ Do not break these without explicit user discussion:
 4. Declare `coverage_intervals(source)` and `breakpoints(source)`.
 5. Add guardrail tests before adding physics tests.
 
+Note: mechanical **twist** is *not* a birefringence source or an `AbstractMeta`.
+It is a per-segment geometric parameter (the `twist` field/kwarg, surfaced as
+`twist_rate(seg, s)`) living in `path-geometry.jl`, because a twist *rate* is
+fully resolvable by the geometry layer. Only its optical conversion (circular
+birefringence) lives in the fiber/cross-section layer. Manufacturing **spin** is
+likewise geometric — a whole-Subpath `start!(; spin_rate=…)` keyword. The fiber
+orients its birefringence axes from `spin_phase`/`twist_phase`/`torsion_phase`.
+
 ## What Requires User Authorization
 
 - Starting any task listed in TODO.md.
@@ -174,6 +182,11 @@ The model is valid for:
 - Bend radii R ≫ r_cladding
 - Temperature: ~200–300 K
 - Wavelength: 1–2 μm
+
+Mechanisms currently **modeled** include: bending and axial-tension linear
+birefringence, mechanical-twist circular birefringence (photoelastic optical
+activity), core ellipticity, and asymmetric thermal stress — the latter two
+oriented by the spin/twist phase and evaluated at the segment-local temperature.
 
 Mechanisms currently **not modeled**: cladding noncircularity, non-concentric core,
 external stress, electric/magnetic fields, polarization-dependent loss, nonlinear

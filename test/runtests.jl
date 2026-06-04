@@ -20,6 +20,7 @@ _run_test_file(joinpath(@__DIR__, "test_mcm_compatability.jl"))
 _run_test_file(joinpath(@__DIR__, "test_paddle_transfer.jl"))
 _run_test_file(joinpath(@__DIR__, "test_dgd.jl"))
 _run_test_file(joinpath(@__DIR__, "test_fiber_cross_section.jl"))
+_run_test_file(joinpath(@__DIR__, "test_twist_ellipticity.jl"))
 _run_test_file(joinpath(@__DIR__, "test_path_integral.jl"))
 _run_test_file(joinpath(@__DIR__, "cross-platform_tests.jl"))
 
