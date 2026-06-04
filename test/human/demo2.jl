@@ -32,7 +32,7 @@ end
 # verbs for proxy receiver types. Import the functions from Bifrost so these
 # definitions EXTEND the real generics rather than shadow them with new
 # `Main`-local functions (which would break `straight!(::SubpathBuilder)`).
-import Bifrost: straight!, bend!, helix!, catenary!, jumpby!, jumpto!, build
+import Bifrost: straight!, bend!, helix!, catenary!, jumpby!, jumpto!, build, Fiber
 
 # ---------------------------------------------------------------------
 # Compatibility proxy: lets demo closures keep using the old
@@ -170,6 +170,26 @@ function build(p::_PathProxy)
 
     subs = [Subpath(sb) for sb in p.subpaths]
     return length(subs) == 1 ? build(subs[1]) : build(subs)
+end
+
+# Fiber(::_PathProxy; ...): seal the trailing Subpath (mirroring
+# build(::_PathProxy)), then hand the resulting Subpath / Vector{Subpath} to the
+# library Fiber constructor so it applies thermal `:T_K` and field-level MCM.
+function Fiber(p::_PathProxy; cross_section, T_ref_K)
+    @assert !isnothing(p.current) "Fiber: proxy already finalized"
+    if !isempty(p.current.segments)
+        seal!(p.current)
+        push!(p.subpaths, p.current)
+    end
+    p.current = nothing  # mark finalized
+
+    if isempty(p.subpaths)
+        error("Fiber(::_PathProxy): no segments authored")
+    end
+
+    subs = [Subpath(sb) for sb in p.subpaths]
+    spec = length(subs) == 1 ? subs[1] : subs
+    return Fiber(spec; cross_section = cross_section, T_ref_K = T_ref_K)
 end
 
 # =====================================================================
