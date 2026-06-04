@@ -549,22 +549,28 @@ function twisting_dω(
     return BirefringenceResponse(Δβ, dω)
 end
 
-core_noncircularity_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K; axis_ratio) =
+core_noncircularity_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K;
+                                  axis_ratio = fiber.ellipticity_axis_ratio) =
     core_noncircularity_dω(ValueOnly(), fiber, λ, T_K; axis_ratio = axis_ratio).Δβ
 
-core_noncircularity_birefringence(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K; axis_ratio) =
+core_noncircularity_birefringence(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K;
+                                  axis_ratio = fiber.ellipticity_axis_ratio) =
     core_noncircularity_dω(WithDerivative(), fiber, λ, T_K; axis_ratio = axis_ratio)
 
-core_noncircularity_birefringence(fiber::StepIndexCrossSection, λ, T_K; axis_ratio) =
+core_noncircularity_birefringence(fiber::StepIndexCrossSection, λ, T_K;
+                                  axis_ratio = fiber.ellipticity_axis_ratio) =
     core_noncircularity_birefringence(ValueOnly(), fiber, λ, T_K; axis_ratio = axis_ratio)
 
-asymmetric_thermal_stress_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K; axis_ratio) =
+asymmetric_thermal_stress_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K;
+                                        axis_ratio = fiber.ellipticity_axis_ratio) =
     asymmetric_thermal_stress_dω(ValueOnly(), fiber, λ, T_K; axis_ratio = axis_ratio).Δβ
 
-asymmetric_thermal_stress_birefringence(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K; axis_ratio) =
+asymmetric_thermal_stress_birefringence(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K;
+                                        axis_ratio = fiber.ellipticity_axis_ratio) =
     asymmetric_thermal_stress_dω(WithDerivative(), fiber, λ, T_K; axis_ratio = axis_ratio)
 
-asymmetric_thermal_stress_birefringence(fiber::StepIndexCrossSection, λ, T_K; axis_ratio) =
+asymmetric_thermal_stress_birefringence(fiber::StepIndexCrossSection, λ, T_K;
+                                        axis_ratio = fiber.ellipticity_axis_ratio) =
     asymmetric_thermal_stress_birefringence(ValueOnly(), fiber, λ, T_K; axis_ratio = axis_ratio)
 
 bending_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K; bend_radius_m) =
