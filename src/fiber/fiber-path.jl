@@ -129,56 +129,105 @@ _segment_delta_T(seg) = (Δ = MCMcombine(0.0, seg, :T_K); Δ === 0.0 ? nothing :
 _seal_delta_T(sub::Subpath) =
     (Δ = MCMcombine(0.0, sub.jumpto_meta, :T_K); Δ === 0.0 ? nothing : Δ)
 
+# ----------------------------
+# Tension (`:tension`) interpretation — fiber-only
+# ----------------------------
+#
+# `:tension` is a foreign meta exactly like `:T_K`: the geometry layer carries it
+# inertly and the fiber is its sole interpreter. It is an *absolute* axial tension
+# in Newtons and plays a dual role: it sets the segment's optical tension response
+# (consumed by `tension_generator_K`) *and* an axial elongation of its length. At
+# build time the fiber converts `F` into a length scaling `(1 + ε)` with the axial
+# strain `ε = F / (π·r_clad²·E)` (the same denominator as `axial_tension_dω`),
+# using `E = youngs_modulus(cladding_material, T_ref_K)` and `r_clad =
+# cladding_radius(cross_section)` — the cladding convention, for consistency with
+# the `:T_K` length-scaling path. Like `:T_K` it is *left on the segment*, so
+# `tension(f, s)` recovers it on demand. This is the only place `:tension` is named.
+
+# Axial tension (N) for a segment from its additive `:tension` meta, or `nothing`
+# when it carries none.
+_segment_tension(seg) = (F = MCMcombine(0.0, seg, :tension); F === 0.0 ? nothing : F)
+
+# Axial tension (N) for the terminal connector from the seal's `:tension` meta, or
+# `nothing` when the seal carries none.
+_seal_tension(sub::Subpath) =
+    (F = MCMcombine(0.0, sub.jumpto_meta, :tension); F === 0.0 ? nothing : F)
+
+# Axial strain `ε = F / (π·r_clad²·E)` elongating a segment by `(1 + ε)` under an
+# absolute tension `F`. Shares the denominator of `axial_tension_dω`.
+_tension_strain(F, r_clad, E) = F / (π * r_clad^2 * E)
+
 # The terminal connector supports only `MCMadd(:T_K, …)` (thermal expansion,
-# issue #33). Any other MCMadd/MCMmul — field-level perturbation, or a
-# multiplicative `:T_K` — has no effect on a solved connector, so reject it loudly
-# rather than silently ignore. (This lives in the fiber: distinguishing the
-# supported `:T_K` from field MCM requires naming `:T_K`, which the geometry layer
-# must not do.)
+# issue #33) and `MCMadd(:tension, …)` (axial elongation). Any other MCMadd/MCMmul
+# — field-level perturbation, or a multiplicative `:T_K`/`:tension` — has no effect
+# on a solved connector, so reject it loudly rather than silently ignore. (This
+# lives in the fiber: distinguishing the supported additive meta from field MCM
+# requires naming them, which the geometry layer must not do.)
 function _validate_seal_meta(sub::Subpath)
     for m in sub.jumpto_meta
-        bad = (m isa MCMmul) || (m isa MCMadd && m.symbol !== :T_K)
+        bad = (m isa MCMmul) ||
+              (m isa MCMadd && m.symbol !== :T_K && m.symbol !== :tension)
         bad && throw(ArgumentError(
             "jumpto!: the terminal connector supports only MCMadd(:T_K, …) thermal " *
-            "meta (issue #33); got $(nameof(typeof(m)))(:$(m.symbol)). Field-level " *
-            "MCMadd/MCMmul is not applied to a solved connector."))
+            "or MCMadd(:tension, …) elongation meta (issues #33, #74); got " *
+            "$(nameof(typeof(m)))(:$(m.symbol)). Field-level MCMadd/MCMmul is not " *
+            "applied to a solved connector."))
     end
     return nothing
 end
 
-# Resolve a Subpath's `:T_K` meta into geometry: scale each thermal interior
-# segment's length-fields by τ while *retaining* its `:T_K` (the segment keeps it
-# as a temperature record for `temperature(f, s)`). If the terminal `jumpto!`
-# connector carries `:T_K`, also compute its thermal target arc length (issue
-# #33): the nominal connector length L0 scaled by τ_seal, re-solved to the fixed
-# endpoint by `build`. Returns the resolved Subpath and that target length (or
-# `nothing`).
+# Resolve a Subpath's `:T_K` and `:tension` meta into geometry: scale each
+# affected interior segment's length-fields by the *combined* factor `τ =
+# (1 + α_lin·ΔT)·(1 + ε)` (thermal expansion and tension elongation compose
+# multiplicatively) while *retaining* the meta (the segment keeps `:T_K`/`:tension`
+# as records for `temperature(f, s)` and `tension(f, s)`). If the terminal
+# `jumpto!` connector carries either, also compute its target arc length (issue
+# #33 for `:T_K`, #74 for `:tension`): the nominal connector length L0 scaled by
+# the same combined factor, re-solved to the fixed endpoint by `build`. The
+# material `cte`/`youngs_modulus` lookups are gated behind the presence of the
+# corresponding meta so a plain fiber on a cladding with neither defined still
+# builds. Returns the resolved Subpath and that target length (or `nothing`).
 function _resolve_thermal_subpath(sub::Subpath, cross_section::FiberCrossSection, T_ref_K)
     _validate_seal_meta(sub)   # reject unsupported MCM on the terminal connector
     seal_ΔT     = _seal_delta_T(sub)
+    seal_F      = _seal_tension(sub)
     interior_TK = any(seg -> _segment_delta_T(seg) !== nothing, sub.segments)
+    interior_F  = any(seg -> _segment_tension(seg) !== nothing, sub.segments)
 
-    # Skip cte (and any thermal work) entirely when nothing is thermal, so a
-    # non-thermal fiber on a cladding with no defined CTE still builds.
-    (interior_TK || seal_ΔT !== nothing) || return (sub, nothing)
+    # Skip all material lookups (and any meta work) when nothing is thermal or
+    # tensioned, so a plain fiber on a cladding with no CTE/stiffness still builds.
+    any_thermal = interior_TK || seal_ΔT !== nothing
+    any_tension = interior_F || seal_F !== nothing
+    (any_thermal || any_tension) || return (sub, nothing)
 
-    α_lin = cte(cross_section.cladding_material, T_ref_K)
+    # Consult cladding CTE/stiffness lazily — only the one(s) actually needed.
+    α_lin  = any_thermal ? cte(cross_section.cladding_material, T_ref_K) : nothing
+    E_clad = any_tension ? youngs_modulus(cross_section.cladding_material, T_ref_K) :
+             nothing
+    r_clad = cladding_radius(cross_section)
+
+    # Combined length factor for one segment from its `:T_K` (ΔT) and `:tension`
+    # (F) meta; either may be absent (`nothing` → unit factor).
+    _τ(ΔT, F) =
+        (ΔT === nothing ? 1 : (1 + α_lin * ΔT)) *
+        (F === nothing ? 1 : (1 + _tension_strain(F, r_clad, E_clad)))
+
     new_segments = AbstractPathSegment[
-        let ΔT = _segment_delta_T(seg)
-            ΔT === nothing ? seg :
-                _scale_length_fields(seg, 1 + α_lin * ΔT, segment_meta(seg))
+        let ΔT = _segment_delta_T(seg), F = _segment_tension(seg)
+            (ΔT === nothing && F === nothing) ? seg :
+                _scale_length_fields(seg, _τ(ΔT, F), segment_meta(seg))
         end
         for seg in sub.segments
     ]
 
-    # Issue #33: terminal connector thermal target = τ_seal · L0, where L0 is the
-    # nominal connector length (solved without :T_K). `build` re-solves to the
-    # fixed `jumpto_point` with this arc length.
+    # Issues #33/#74: terminal connector target = τ_seal · L0, where L0 is the
+    # nominal connector length (solved without :T_K/:tension). `build` re-solves to
+    # the fixed `jumpto_point` with this arc length.
     jumpto_target_length = nothing
-    if seal_ΔT !== nothing
+    if seal_ΔT !== nothing || seal_F !== nothing
         L0 = Float64(_qc_nominalize(
             arc_length(build(sub; perturb = false).jumpto_quintic_connector)))
-        jumpto_target_length = (1 + α_lin * seal_ΔT) * L0
+        jumpto_target_length = _τ(seal_ΔT, seal_F) * L0
     end
 
     resolved = Subpath(
@@ -226,6 +275,17 @@ length-dimensioned fields are scaled by `1 + α_lin·ΔT`. Field-level `MCMadd`/
 are then applied by the geometry build. If the terminal `jumpto!` connector carries
 `:T_K`, it thermally expands too (issue #33): its arc length scales by `τ_seal` while
 still landing at the fixed `jumpto_point`. The geometry is built exactly once.
+
+Per-segment axial tension `:tension` (absolute Newtons, e.g.
+`MCMadd(:tension, 0.5)`) is interpreted here too (issue #74) and plays a dual
+role exactly like `:T_K`: it elongates the segment by `(1 + ε)` with the axial
+strain `ε = F / (π·r_clad²·E)` (`E = youngs_modulus(cladding_material, T_ref_K)`,
+`r_clad = cladding_radius(cross_section)`) *and* it sets the segment's axial-tension
+photoelastic birefringence (a linear birefringence on the bend eigen-axis, so it
+is zero on a straight segment; recovered downstream via `tension(f, s)`). Thermal
+and tension length scalings compose multiplicatively. A terminal `jumpto!` carrying
+`:tension` elongates the connector the same way. The `:tension` meta is left on the
+segment for on-demand recovery, as `:T_K` is.
 """
 Fiber(spec::SubpathBuilder; cross_section::FiberCrossSection, T_ref_K = DEFAULT_T_REF_K) =
     Fiber(Subpath(spec); cross_section = cross_section, T_ref_K = T_ref_K)
@@ -265,6 +325,19 @@ value carries it into the MCM-safe cross-section `T_K` slot. Sibling of
 function temperature(f::Fiber, s::Real)
     return f.T_ref_K + MCMcombine(0.0, local_segment(f.path, s), :T_K)
 end
+
+"""
+    tension(f::Fiber, s) -> F
+
+Axial tension (N) at fiber arc length `s`, derived on demand from the `:tension`
+meta carried by the segment containing `s` (via `local_segment(f.path, s)`); `0`
+where none is present — `MCMcombine(0.0, seg, :tension)` collapses to `0.0` when
+the segment carries none, so no sentinel is needed. Consumed by
+`tension_generator_K` (axial-tension photoelastic birefringence). May be
+`Particles`. Sibling of `temperature(f, s)` — no tension state is stored on
+`Fiber`.
+"""
+tension(f::Fiber, s::Real) = MCMcombine(0.0, local_segment(f.path, s), :tension)
 
 # ----------------------------
 # Generator K(s) and Curvature Kω(s)
@@ -391,6 +464,41 @@ function ellipticity_generator_Kω(f::Fiber, s::Real, λ_m::Real)
     return linear_birefringence_generator(Δβω, c2φ, s2φ)
 end
 
+# Axial-tension photoelastic birefringence (issue #74). Like bending, it is a
+# *linear* birefringence on the bend eigen-axis and vanishes on a straight segment
+# (the response ∝ 1/R), so a tensioned but unbent segment contributes nothing. Its
+# own additive generator term, separate from bending. Temperature enters through
+# the photoelastic/stiffness constants exactly as for the bend term.
+function tension_generator_K(f::Fiber, s::Real, λ_m::Real)
+    F = tension(f, s)
+    F == zero(F) && return zero_generator()
+    κ = curvature(f.path, s)
+    κ == zero(κ) && return zero_generator()   # tension birefringence ∝ 1/R
+    T = temperature(f, s)
+    Δβ = axial_tension_birefringence(f.cross_section, λ_m, T;
+                                     bend_radius_m = inv(κ), axial_tension_N = F)
+    c2φ, s2φ = _bend_axis_c2s2(f, s)           # shares the bend eigen-axis
+    return linear_birefringence_generator(Δβ, c2φ, s2φ)
+end
+
+function tension_generator_Kω(f::Fiber, s::Real, λ_m::Real)
+    F = tension(f, s)
+    F == zero(F) && return zero_generator()
+    κ = curvature(f.path, s)
+    κ == zero(κ) && return zero_generator()
+    T = temperature(f, s)
+    Δβω = axial_tension_birefringence(
+        WithDerivative(),
+        f.cross_section,
+        λ_m,
+        T;
+        bend_radius_m   = inv(κ),
+        axial_tension_N = F,
+    ).dω
+    c2φ, s2φ = _bend_axis_c2s2(f, s)
+    return linear_birefringence_generator(Δβω, c2φ, s2φ)
+end
+
 fiber_breakpoints(f::Fiber) = breakpoints(f.path)
 
 # ----------------------------
@@ -429,9 +537,10 @@ generator_Kω(f::Fiber, λ_m::Real) = generator_Kω(f, f.cross_section, λ_m)
 
 function generator_K(f::Fiber, xs::StepIndexCrossSection, λ_m::Real)
     return function (s::Real)
-        return bend_generator_K(f, s, λ_m) +        # linear: bending / tension
+        return bend_generator_K(f, s, λ_m) +        # linear: bending
                twist_generator_K(f, s, λ_m) +       # circular: mechanical twist
-               ellipticity_generator_K(f, s, λ_m)   # linear: ellipticity + stress
+               ellipticity_generator_K(f, s, λ_m) + # linear: ellipticity + stress
+               tension_generator_K(f, s, λ_m)       # linear: axial tension
     end
 end
 
@@ -439,7 +548,8 @@ function generator_Kω(f::Fiber, xs::StepIndexCrossSection, λ_m::Real)
     return function (s::Real)
         return bend_generator_Kω(f, s, λ_m) +
                twist_generator_Kω(f, s, λ_m) +
-               ellipticity_generator_Kω(f, s, λ_m)
+               ellipticity_generator_Kω(f, s, λ_m) +
+               tension_generator_Kω(f, s, λ_m)
     end
 end
 

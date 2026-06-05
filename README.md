@@ -230,13 +230,20 @@ linear birefringence, twist, and other non-commuting terms vary along the path.
 The Julia implementation instead assembles a local generator:
 
 ```math
-K(s,\omega)=K_{\mathrm{bend}}(s,\omega)+K_{\mathrm{twist}}(s,\omega).
+K(s,\omega)=K_{\mathrm{bend}}(s,\omega)+K_{\mathrm{twist}}(s,\omega)
+           +K_{\mathrm{ellip}}(s,\omega)+K_{\mathrm{tension}}(s,\omega).
 ```
 
 The bending contribution comes from path curvature. For a local bend radius
 `R(s)`, the implemented perturbation uses the bending birefringence response
 from `src/fiber/fiber-cross-section.jl`; in the simplest stress model the
 magnitude scales like `1/R(s)^2`.
+
+The tension contribution `K_{\mathrm{tension}}` comes from per-segment axial
+tension authored as a `:tension` meta (absolute Newtons): an axial-tension
+photoelastic linear birefringence sharing the bend eigen-axis, so it scales like
+`1/R(s)` and vanishes on a straight segment. Axial tension also elongates the
+segment by `(1 + \varepsilon)` with `\varepsilon = F/(\pi r_{\mathrm{clad}}^2 E)`.
 
 The twist contribution uses the total frame twist rate:
 
