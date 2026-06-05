@@ -54,12 +54,16 @@ function validate_molar_fraction(x::Real)
     return xf
 end
 
-function validate_model_temperature(T_K, min_T, max_T)
+# TODO: Edit these functions to make them material-specific, with args for max/min
+function validate_model_temperature(T_K)
     if !(isfinite(T_K) && T_K > 0.0)
         throw(ArgumentError("temperature must be a finite positive value in kelvin"))
     end
-    if !(min_T <= T_K <= max_T)
-        @warn "temperature is outside the current model validity range [$(min_T), $(max_T)] K: got $(T_K)"
+    if !(MIN_VALID_TEMPERATURE_K <= T_K <= MAX_VALID_TEMPERATURE_K)
+        throw(ArgumentError(
+            "temperature is outside the current model validity range " *
+            "[$(MIN_VALID_TEMPERATURE_K), $(MAX_VALID_TEMPERATURE_K)] K: got $(T_K)"
+        ))
     end
     return T_K
 end
