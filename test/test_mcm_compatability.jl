@@ -56,7 +56,6 @@ using Bifrost.PathGeometry: _qc_nominalize
         @test poisson_ratio(PURE_SILICA, T) isa Float64
         @test youngs_modulus(PURE_SILICA, T) isa Float64
         @test photoelastic_constants(PURE_SILICA, T) isa Tuple{Float64, Float64}
-        @test nonlinear_refractive_index(PURE_SILICA, λ, T) isa Float64
     finally
         MonteCarloMeasurements.unsafe_comparisons(false)
     end

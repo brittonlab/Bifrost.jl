@@ -8,7 +8,6 @@ Units (SI unless noted):
 - cte                   1/K
 - softening_temperature  K
 - youngs_modulus        Pa
-- nonlinear_refractive_index (n_2)  m²/W
 
 [Example usage]
 
@@ -49,8 +48,6 @@ const SILICA_POISSON_RATIO = 0.170
 const SILICA_PHOTOELASTIC_CONSTANTS = (0.121, 0.270)
 
 const SILICA_YOUNGS_MODULUS = 74e9
-
-const SILICA_N2 = 2.2e-20
 
 #################################################
 #
@@ -97,9 +94,3 @@ softening_temperature(::SiO2, _) = SILICA_SOFTENING_TEMPERATURE_K
 poisson_ratio(::SiO2, _) = SILICA_POISSON_RATIO
 photoelastic_constants(::SiO2, _) = SILICA_PHOTOELASTIC_CONSTANTS
 youngs_modulus(::SiO2, _) = SILICA_YOUNGS_MODULUS
-
-function nonlinear_refractive_index(::SiO2, λ, T_K)
-    validate_model_wavelength(λ)
-    validate_model_temperature(T_K)
-    return SILICA_N2
-end

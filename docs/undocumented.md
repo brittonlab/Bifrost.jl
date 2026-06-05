@@ -31,7 +31,6 @@ top-level exported bindings.
 - [ ] `FLUORINE_TERM_2`
 - [ ] `FLUORINE_TERM_3`
 - [ ] `GERMANIA_CTE`
-- [ ] `GERMANIA_N2`
 - [ ] `GERMANIA_PHOTOELASTIC_CONSTANTS`
 - [ ] `GERMANIA_POISSON_RATIO`
 - [ ] `GERMANIA_REFERENCE_TEMPERATURE_K`
@@ -48,7 +47,6 @@ top-level exported bindings.
 - [ ] `PURE_GERMANIA`
 - [ ] `PURE_SILICA`
 - [ ] `SILICA_CTE`
-- [ ] `SILICA_N2`
 - [ ] `SILICA_PHOTOELASTIC_CONSTANTS`
 - [ ] `SILICA_POISSON_RATIO`
 - [ ] `SILICA_SOFTENING_TEMPERATURE_K`
@@ -73,7 +71,6 @@ top-level exported bindings.
 - [ ] `evaluate`
 - [ ] `interpolate_pair`
 - [ ] `interpolate_scalar`
-- [ ] `nonlinear_refractive_index`
 - [ ] `photoelastic_constants`
 - [ ] `poisson_ratio`
 - [ ] `reference_refractive_index`

@@ -12,7 +12,6 @@ Units (SI unless noted):
 - cte                   1/K
 - softening_temperature  K
 - youngs_modulus        Pa
-- nonlinear_refractive_index (n_2)  m²/W
 """
 
 abstract type AbstractMaterial end
@@ -182,7 +181,6 @@ softening_temperature(material::AbstractMaterial, T_K)
 poisson_ratio(material::AbstractMaterial, T_K)
 photoelastic_constants(material::AbstractMaterial, T_K)
 youngs_modulus(material::AbstractMaterial, T_K)
-nonlinear_refractive_index(material::AbstractMaterial, λ, T_K)
 
 """
 

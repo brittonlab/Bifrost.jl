@@ -8,7 +8,6 @@ Units (SI unless noted):
 - cte                   1/K
 - softening_temperature  K
 - youngs_modulus        Pa
-- nonlinear_refractive_index (n_2)  m²/W
 
 [Example usage]
 
@@ -40,8 +39,6 @@ const GERMANIA_POISSON_RATIO = 0.212
 const GERMANIA_PHOTOELASTIC_CONSTANTS = (0.130, 0.288)
 
 const GERMANIA_YOUNGS_MODULUS = 45.5e9
-
-const GERMANIA_N2 = 4.6e-20
 
 #################################################
 #
@@ -101,9 +98,3 @@ softening_temperature(::GeO2, _) = GERMANIA_SOFTENING_TEMPERATURE_K
 poisson_ratio(::GeO2, _) = GERMANIA_POISSON_RATIO
 photoelastic_constants(::GeO2, _) = GERMANIA_PHOTOELASTIC_CONSTANTS
 youngs_modulus(::GeO2, _) = GERMANIA_YOUNGS_MODULUS
-
-function nonlinear_refractive_index(::GeO2, λ, T_K)
-    validate_model_wavelength(λ)
-    validate_model_temperature(T_K)
-    return GERMANIA_N2
-end

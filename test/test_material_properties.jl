@@ -166,7 +166,6 @@ end
     @test poisson_ratio(germania, 297.15) == GERMANIA_POISSON_RATIO
     @test photoelastic_constants(germania, 297.15) == GERMANIA_PHOTOELASTIC_CONSTANTS
     @test youngs_modulus(germania, 297.15) == GERMANIA_YOUNGS_MODULUS
-    @test nonlinear_refractive_index(germania, 1550e-9, 297.15) == GERMANIA_N2
 end
 
 @testset "SilicaGermaniaGlass" begin
@@ -187,8 +186,6 @@ end
     @test photoelastic_constants(pure_germania_glass, T) == photoelastic_constants(GeO2(), T)
     @test youngs_modulus(pure_silica_glass, T) == youngs_modulus(SiO2(), T)
     @test youngs_modulus(pure_germania_glass, T) == youngs_modulus(GeO2(), T)
-    @test nonlinear_refractive_index(pure_silica_glass, λ, T) == nonlinear_refractive_index(SiO2(), λ, T)
-    @test nonlinear_refractive_index(pure_germania_glass, λ, T) == nonlinear_refractive_index(GeO2(), λ, T)
 
     for x in (0.036, 0.25)
         glass = SilicaGermaniaGlass(x)
@@ -199,7 +196,6 @@ end
         @test poisson_ratio(glass, T) == reference_scalar_mix(SILICA_POISSON_RATIO, GERMANIA_POISSON_RATIO, x)
         @test photoelastic_constants(glass, T) == reference_pair_mix(SILICA_PHOTOELASTIC_CONSTANTS, GERMANIA_PHOTOELASTIC_CONSTANTS, x)
         @test youngs_modulus(glass, T) == reference_scalar_mix(SILICA_YOUNGS_MODULUS, GERMANIA_YOUNGS_MODULUS, x)
-        @test nonlinear_refractive_index(glass, λ, T) == reference_scalar_mix(SILICA_N2, GERMANIA_N2, x)
     end
 
     glass0 = SilicaGermaniaGlass(0.0)
@@ -234,8 +230,7 @@ end
         () -> softening_temperature(SilicaFluorinatedGlass(0.01), T),
         () -> poisson_ratio(SilicaFluorinatedGlass(0.01), T),
         () -> photoelastic_constants(SilicaFluorinatedGlass(0.01), T),
-        () -> youngs_modulus(SilicaFluorinatedGlass(0.01), T),
-        () -> nonlinear_refractive_index(SilicaFluorinatedGlass(0.01), λ, T)
+        () -> youngs_modulus(SilicaFluorinatedGlass(0.01), T)
     ]
 
     for f in unsupported_calls
@@ -257,9 +252,6 @@ end
         @test isfinite(refractive_index(germania, 1550e-9, T))
         @test isfinite(refractive_index(ge_glass, 1550e-9, T))
         @test isfinite(refractive_index(f_glass, 1550e-9, T))
-        @test nonlinear_refractive_index(silica, 1550e-9, T) == SILICA_N2
-        @test nonlinear_refractive_index(germania, 1550e-9, T) == GERMANIA_N2
-        @test nonlinear_refractive_index(ge_glass, 1550e-9, T) == reference_scalar_mix(SILICA_N2, GERMANIA_N2, ge_glass.x_ge)
     end
 
     for λ in (1300e-9, 1700e-9)
@@ -267,9 +259,6 @@ end
         @test isfinite(refractive_index(germania, λ, 297.15))
         @test isfinite(refractive_index(ge_glass, λ, 297.15))
         @test isfinite(refractive_index(f_glass, λ, 297.15))
-        @test nonlinear_refractive_index(silica, λ, 297.15) == SILICA_N2
-        @test nonlinear_refractive_index(germania, λ, 297.15) == GERMANIA_N2
-        @test nonlinear_refractive_index(ge_glass, λ, 297.15) == reference_scalar_mix(SILICA_N2, GERMANIA_N2, ge_glass.x_ge)
     end
 
     @test_throws ArgumentError refractive_index(silica, 1550e-9, 242.999)
@@ -281,10 +270,6 @@ end
     @test_throws ArgumentError refractive_index(germania, 1700.001e-9, 297.15)
     @test_throws ArgumentError refractive_index(ge_glass, 1299.999e-9, 297.15)
     @test_throws ArgumentError refractive_index(f_glass, 1700.001e-9, 297.15)
-
-    @test_throws ArgumentError nonlinear_refractive_index(silica, 1550e-9, 0.0)
-    @test_throws ArgumentError nonlinear_refractive_index(germania, 0.0, 297.15)
-    @test_throws ArgumentError nonlinear_refractive_index(ge_glass, 1700.001e-9, 297.15)
 end
 
 @testset "Spectral responses" begin
