@@ -40,7 +40,6 @@ refractive_index(material::AbstractMaterial, λ, T_K) =
 #
 #################################################
 
-# TODO Banner... validate ranges
 const MIN_VALID_TEMPERATURE_K = 243.0
 const MAX_VALID_TEMPERATURE_K = 373.0
 const MIN_VALID_WAVELENGTH_M = 1300e-9
