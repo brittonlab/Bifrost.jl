@@ -114,7 +114,7 @@ end
     @test length(terms) == 3
     @test terms isa NTuple{3, SellmeierTerm}
 
-    for T in (243.0, 297.15, 305.0)
+    for T in (243.0, 297.15, 373.0)
         actual = sellmeier_coefficients(silica, T)
         expected = reference_silica_coefficients(T)
         @test length(actual) == 3
@@ -124,12 +124,12 @@ end
         end
     end
 
-    for (λ, T) in ((1300e-9, 210.0), (1700e-9, 245.0), (1550e-9, 293.15))
+    for (λ, T) in ((1300e-9, 243.0), (1550e-9, 297.15), (1700e-9, 373.0))
         @test refractive_index(silica, λ, T) ≈ reference_silica_index(λ, T) atol = 1e-12 rtol = 1e-12
     end
 
     λs = range(1300e-9, 1700e-9; length = 4)
-    Ts = range(200.0, 300.0; length = 4)
+    Ts = range(243.0, 373.0; length = 4)
     for T in Ts, λ in λs
         @test isfinite(refractive_index(silica, λ, T))
     end
@@ -138,13 +138,13 @@ end
 @testset "GeO2" begin
     germania = GeO2()
 
-    for (λ, T) in ((1300e-9, 210.0), (1700e-9, 245.0), (1550e-9, 293.15))
+    for (λ, T) in ((1300e-9, 243.0), (1550e-9, 297.15), (1700e-9, 373.0))
         @test refractive_index(germania, λ, T) ≈ reference_germania_index(λ, T) atol = 1e-12 rtol = 1e-12
     end
 
     λ = 1550e-9
     n_ref = refractive_index(germania, λ, 297.15)
-    n_warm = refractive_index(germania, λ, 299.50)
+    n_warm = refractive_index(germania, λ, 350.0)
     @test n_ref ≈ reference_sellmeier_index(reference_germania_base_coefficients(297.15), λ) atol = 1e-12 rtol = 1e-12
     @test reference_germania_thermo_optic_shift(297.15) == 0.0
     @test n_warm > n_ref
@@ -240,7 +240,7 @@ end
     ge_glass = SilicaGermaniaGlass(0.036)
     f_glass = SilicaFluorinatedGlass(0.01)
 
-    for T in (200.0, 300.0)
+    for T in (243.0, 373.0)
         @test isfinite(refractive_index(silica, 1550e-9, T))
         @test isfinite(refractive_index(germania, 1550e-9, T))
         @test isfinite(refractive_index(ge_glass, 1550e-9, T))
@@ -260,15 +260,15 @@ end
         @test nonlinear_refractive_index(ge_glass, λ, 297.15) == reference_scalar_mix(SILICA_N2, GERMANIA_N2, ge_glass.x_ge)
     end
 
-    @test_throws ArgumentError refractive_index(silica, 1550e-9, 29.999)
+    @test_throws ArgumentError refractive_index(silica, 1550e-9, 242.999)
     @test_throws ArgumentError refractive_index(germania, 1550e-9, 373.001)
-    @test_throws ArgumentError refractive_index(ge_glass, 1550e-9, 199.999)
+    @test_throws ArgumentError refractive_index(ge_glass, 1550e-9, 242.999)
     @test_throws ArgumentError refractive_index(f_glass, 1550e-9, 373.001)
 
-    @test_throws ArgumentError refractive_index(silica, 399.999e-9, 297.15)
+    @test_throws ArgumentError refractive_index(silica, 1299.999e-9, 297.15)
     @test_throws ArgumentError refractive_index(germania, 1700.001e-9, 297.15)
     @test_throws ArgumentError refractive_index(ge_glass, 1299.999e-9, 297.15)
-    @test_throws ArgumentError refractive_index(f_glass, 2600.001e-9, 297.15)
+    @test_throws ArgumentError refractive_index(f_glass, 1700.001e-9, 297.15)
 
     @test_throws ArgumentError nonlinear_refractive_index(silica, 1550e-9, 0.0)
     @test_throws ArgumentError nonlinear_refractive_index(germania, 0.0, 297.15)
