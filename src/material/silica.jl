@@ -25,6 +25,8 @@ cte_value = cte(glass, T_K)
 #
 #################################################
 
+# Sellmeier polynomial coefficients from Leviton and Frey.
+
 const SILICA_TERM_1 = SellmeierTerm(
     TemperaturePolynomial((1.10127, -4.94251e-5, 5.27414e-7, -1.59700e-9, 1.75949e-12)),
     TemperaturePolynomial((-8.906e-2, 9.0873e-6, -6.53638e-8, 7.77072e-11, 6.84605e-14))

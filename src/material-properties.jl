@@ -122,20 +122,9 @@ ways for different materials. We have included a few common ones below.
       )
       ```
       This produces a Sellmeier term where B varies as a + bT + cT^2 + ... and C varies as 
-      d + eT + fT^2...
+      d + eT + fT^2... . Calling evaluate(x, T_0) returns a 2-tuple of the B and C coefficients
+      at temperature T0.
 """
-struct SellmeierTerm{TB, TC}
-    B_law::TB
-    C_law::TC
-end
-
-evaluate(term::SellmeierTerm, temperature_like) = (term.B_law(temperature_like), term.C_law(temperature_like))
-
-
-
-
-
-
 
 struct TemperaturePolynomial
     coeffs::Tuple{Vararg{Float64}}
@@ -145,6 +134,13 @@ end
 function (poly::TemperaturePolynomial)(T_K)
     return evalpoly(T_K, poly.coeffs)
 end
+
+struct SellmeierTerm{TB, TC}
+    B_law::TB
+    C_law::TC
+end
+
+evaluate(term::SellmeierTerm, temperature_like) = (term.B_law(temperature_like), term.C_law(temperature_like))
 
 struct SellmeierConstantLaw
     value::Float64
@@ -160,12 +156,6 @@ struct SellmeierQuadraticMolarLaw
 end
 
 (law::SellmeierQuadraticMolarLaw)(x) = law.quadratic * x^2 + law.linear * x
-
-
-
-
-
-
 
 struct SellmeierCorrectionTerm
     ΔB_law::SellmeierQuadraticMolarLaw
