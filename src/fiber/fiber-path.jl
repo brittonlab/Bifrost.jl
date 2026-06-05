@@ -225,9 +225,9 @@ function _resolve_thermal_and_tension(sub::Subpath, cross_section::FiberCrossSec
 
     new_segments = AbstractPathSegment[_scaled(seg) for seg in sub.segments]
 
-    # Issues #33/#74: terminal connector target = τ_seal · L0, where L0 is the
-    # nominal connector length (solved without :T_K/:tension). `build` re-solves to
-    # the fixed `jumpto_point` with this arc length.
+    # for jumpto the terminal connector target = τ_seal · L0
+    # Here,  L0 is the nominal connector length (solved without :T_K/:tension). 
+    # `build` re-solves to the fixed `jumpto_point` with this arc length.
     jumpto_target_length = nothing
     if seal_ΔT !== nothing || seal_F !== nothing
         L0 = Float64(_qc_nominalize(
@@ -258,7 +258,7 @@ function _build_perturbed(subs::Vector{Subpath}, cross_section::FiberCrossSectio
     # thermal+perturbed built Subpath before this one is built.
     builts = Vector{SubpathBuilt}(undef, length(subs))
     for i in eachindex(subs)
-        sub = i == 1 ? subs[i] :
+        sub = i == 1 ? subs[1] :
               PathGeometry._resolve_inherited_spin(subs[i], builts[i-1])
         resolved, target = _resolve_thermal_and_tension(sub, cross_section, T_ref_K)
         builts[i] = build(resolved; perturb = true, jumpto_target_length = target)
