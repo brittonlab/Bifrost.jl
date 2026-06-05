@@ -85,6 +85,20 @@ module FiberPath
     _export_public!(@__MODULE__)
 end
 
+module Nonlinear
+    using LinearAlgebra
+    using Printf
+    using DataInterpolations
+    using FFTW
+    using ..MaterialProperties
+    using ..FiberCS
+    using ..FiberPath
+    include("nonlinear/silica_raman.jl")
+    include("nonlinear/silica_brillouin.jl")
+    import ..Bifrost: _export_public!
+    _export_public!(@__MODULE__)
+end
+
 module PathIntegral
     using LinearAlgebra
     using Printf
@@ -103,8 +117,9 @@ using .FiberCS
 using .PathGeometry
 using .FiberPath
 using .PathIntegral
+using .Nonlinear
 
-for m in (MaterialProperties, FiberCS, PathGeometry, FiberPath, PathIntegral)
+for m in (MaterialProperties, FiberCS, PathGeometry, FiberPath, PathIntegral, Nonlinear)
     for n in names(m)
         n === nameof(m) && continue
         @eval export $n
@@ -113,7 +128,7 @@ end
 
 # Also export the submodule names themselves so callers can write
 # `PG = PathGeometry` (or qualified `PathGeometry.X`) after `using Bifrost`.
-export MaterialProperties, FiberCS, PathGeometry, FiberPath, PathIntegral
+export MaterialProperties, FiberCS, PathGeometry, FiberPath, PathIntegral, Nonlinear
 
 # Plotting lives in a separate `Plots` submodule, opt-in via
 # `using Bifrost.Plots`, so plain `using Bifrost` does not pull plotting
