@@ -359,8 +359,8 @@ Bisect for the LP11 cutoff wavelength.
 function cutoff_wavelength(
     fiber::StepIndexCrossSection,
     T_K;
-    λ_min::Real = MIN_VALID_WAVELENGTH_M,
-    λ_max::Real = MAX_VALID_WAVELENGTH_M,
+    λ_min::Real = 1000e-9,
+    λ_max::Real = 2000e-9,
     atol::Real = 1e-12,
     maxiter::Integer = 200
 )

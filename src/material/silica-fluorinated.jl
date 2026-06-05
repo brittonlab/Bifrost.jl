@@ -62,9 +62,9 @@ function sellmeier_coefficients(glass::SilicaFluorinatedGlass, T_K)
 end
 
 refractive_index(material::SilicaFluorinatedGlass, λ, T_K) = 
-        sellmeier_index_from_coefficients(sellmeier_coefficients(material, T_K), λ)
+        sellmeier_index_from_coefficients(sellmeier_coefficients(material, T_K), λ, SILICA_MIN_VALID_WAVELENGTH_M, SILICA_MAX_VALID_WAVELENGTH_M)
 refractive_index(::WithDerivative, material::SilicaFluorinatedGlass, λ, T_K) = 
-        sellmeier_index_from_coefficients_dω(sellmeier_coefficients(material, T_K), λ)
+        sellmeier_index_from_coefficients_dω(sellmeier_coefficients(material, T_K), λ, SILICA_MIN_VALID_WAVELENGTH_M, SILICA_MAX_VALID_WAVELENGTH_M)
 refractive_index(::ValueOnly, material::SilicaFluorinatedGlass, λ, T_K) = 
         refractive_index(material::SilicaFluorinatedGlass, λ, T_K)
 

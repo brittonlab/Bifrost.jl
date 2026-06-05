@@ -53,7 +53,9 @@ function validate_model_temperature(T_K, min_T, max_T)
         throw(ArgumentError("temperature must be a finite positive value in kelvin"))
     end
     if !(min_T <= T_K <= max_T)
-        @warn "temperature is outside the current model measurement range [$(min_T), $(max_T)] K: got $(T_K)"
+        throw(ArgumentError(
+            "temperature is outside the current model measurement range [$(min_T), $(max_T)] K: got $(T_K)"
+        ))
     end
     return T_K
 end
@@ -66,7 +68,7 @@ function validate_model_wavelength(λ, min_λ, max_λ)
     if !(min_λ <= λ <= max_λ)
         throw(ArgumentError(
             "wavelength is outside the current model validity range " *
-            "[$(MIN_VALID_WAVELENGTH_M), $(MAX_VALID_WAVELENGTH_M)] m: got $(λ)"
+            "[$(min_λ), $(max_λ)] m: got $(λ)"
         ))
     end
     return λ

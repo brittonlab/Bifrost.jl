@@ -83,5 +83,7 @@ photoelastic_constants(glass::SilicaGermaniaGlass, _) = interpolate_pair(SILICA_
 youngs_modulus(glass::SilicaGermaniaGlass, _) = interpolate_scalar(SILICA_YOUNGS_MODULUS, GERMANIA_YOUNGS_MODULUS, glass.x_ge)
 
 function nonlinear_refractive_index(glass::SilicaGermaniaGlass, λ, T_K)
+    validate_model_wavelength(λ, GE_MIN_VALID_WAVELENGTH_M, GE_MAX_VALID_WAVELENGTH_M)
+    validate_model_temperature(T_K, GE_MIN_VALID_TEMPERATURE_K, GE_MAX_VALID_TEMPERATURE_K)
     return interpolate_scalar(SILICA_N2, GERMANIA_N2, glass.x_ge)
 end
