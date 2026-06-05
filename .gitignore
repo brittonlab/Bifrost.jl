@@ -5,6 +5,7 @@ fiberinput_paddles_3d.html
 output/
 __pycache__/
 *.pyc
+.gitkeep
 
 # Documenter.jl build artifacts
 docs/build/
