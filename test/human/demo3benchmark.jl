@@ -234,7 +234,7 @@ function demo_benchmark_mcm_propagate(;
 )
     desc = "MCM benchmark: propagate_fiber wall time across Float64, " *
            "Particles(2000), StaticParticles(50/100/200).  " *
-           "The reference fiber includes spinning sensitivity in addition to " *
+           "The reference fiber now includes spin sensitivity in addition to " *
            "temperature dependence.  First-call includes JIT; steady-state is " *
            "post-JIT minimum."
 
@@ -245,7 +245,7 @@ function demo_benchmark_mcm_propagate(;
     _bench_html(
         results,
         "MCM benchmark — propagate_fiber (log scale)",
-        "Fiber: straight 5 m → helix (D=0.05 m, ~10002 turns, spinning + " *
+        "Fiber: straight 5 m → helix (D=0.05 m, ~10002 turns, spin + " *
         "temperature-sensitive) → straight 5 m → helix → straight 5 m. " *
         "λ = 1550 nm.  M1: NEON 128-bit SIMD (2×f64/lane); StaticParticles " *
         "sweet spot ≈ N = 50–100.",
@@ -267,7 +267,7 @@ function demo_benchmark_mcm_build_propagate(;
 )
     desc = "MCM benchmark: Fiber + propagate_fiber wall time across " *
            "Float64, Particles(2000), StaticParticles(50/100/200).  " *
-           "The reference fiber includes spinning sensitivity in addition to " *
+           "The reference fiber now includes spin sensitivity in addition to " *
            "temperature dependence, and timing covers the full build + " *
            "propagate pipeline."
 
@@ -278,7 +278,7 @@ function demo_benchmark_mcm_build_propagate(;
     _bench_html(
         results,
         "MCM benchmark — build + propagate_fiber (log scale)",
-        "Same spinning + temperature-sensitive fiber as above.  Timing includes " *
+        "Same spin + temperature-sensitive fiber as above.  Timing includes " *
         "thermal geometry build, Fiber() construction, and propagate_fiber().",
         out,
     )

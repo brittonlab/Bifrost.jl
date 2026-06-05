@@ -316,7 +316,7 @@ module PlotRuntime
     # two parents up. In-file helpers (rotate_about_axis, frenet_serret_frame,
     # poincare_vector_representation, render_pol_circle, render_poincare_sphere)
     # live in `Bifrost.Plots`, reachable as `..Plots`.
-    using ...FiberPath: Fiber, bend_geometry, spinning_rate, fiber_path
+    using ...FiberPath: Fiber, bend_geometry, spin_rate, fiber_path
     using ...PathIntegral: generator_K, generator_Kω,
                            exp_sensitivity_midpoint_step, output_dgd
     using ...PathGeometry: frame
@@ -462,7 +462,7 @@ module PlotRuntime
             k2 = [κ^2 for κ in kx]
             Rb = [iszero(fr.curvature) ? Inf : Float64(inv(fr.curvature)) for fr in frames]
             theta_b = zeros(Float64, n)
-            frame_rate = [Float64(fr.geometric_torsion + fr.spinning_rate) for fr in frames]
+            frame_rate = [Float64(fr.geometric_torsion + fr.spin_rate) for fr in frames]
 
             return (; s = ss, x, y, zc, tx, ty, tz, e1x, e1y, e1z, e2x, e2y, e2z,
                       Rb, theta_b, frame_rate, kx, ky, k2, nx, ny, nz, bx, by, bz)
@@ -508,7 +508,7 @@ module PlotRuntime
             bend = bend_geometry(f, si)
             R = Float64(bend.Rb)
             θ = Float64(bend.theta_b)
-            τ = Float64(spinning_rate(f, si))
+            τ = Float64(spin_rate(f, si))
 
             Rb[i] = R
             theta_b[i] = θ

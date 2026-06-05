@@ -74,29 +74,33 @@ in 3D that matches position, tangent direction, and curvature vector at both end
 - `lambda`: chosen handle scale (`Float64` — must be deterministic under MCM inputs).
 - `s_table`: arc-length lookup, where `s_table[i]` is the arc length from `u = 0` to
   `u = (i-1)/(n-1)`.
+- `twist`: mechanical-twist rate (rad/m) carried from the originating
+  `JumpBy`/seal (see [`TwistRate`](@ref)).
 - `meta`: per-segment annotation bag (see [`AbstractMeta`](@ref)).
 """
 struct QuinticConnector{T<:Real} <: AbstractPathSegment
     a       :: Matrix{T}     # 6 × 3
     lambda  :: Float64
     s_table :: Vector{T}
+    twist   :: TwistRate     # mechanical-twist rate (rad/m); see `TwistRate`
     meta    :: Vector{AbstractMeta}
 end
 
 """
-    QuinticConnector(a, lambda, s_table; meta = AbstractMeta[])
+    QuinticConnector(a, lambda, s_table; twist = nothing, meta = AbstractMeta[])
 
 Construct a [`QuinticConnector`](@ref) from a precomputed coefficient matrix `a`, handle
 scale `lambda`, and arc-length table `s_table`.
 
-Coerces `lambda` to `Float64` and wraps `meta` in an `AbstractMeta` vector. Callers
+Coerces `lambda` to `Float64` and wraps `meta` in an `AbstractMeta` vector. `twist`
+is the connector's mechanical-twist rate (see [`TwistRate`](@ref)). Callers
 normally obtain `a`/`s_table` from the internal connector builders rather than calling
 this directly.
 """
 QuinticConnector(a::Matrix{T}, lambda::Real, s_table::AbstractVector{T};
-                 meta = AbstractMeta[]) where {T<:Real} =
+                 twist = nothing, meta = AbstractMeta[]) where {T<:Real} =
     QuinticConnector{T}(a, Float64(lambda), Vector{T}(s_table),
-                        Vector{AbstractMeta}(meta))
+                        twist, Vector{AbstractMeta}(meta))
 
 # ---------------------------------------------------------------------------
 # Coefficient solve (closed-form quintic Hermite)
@@ -428,12 +432,13 @@ consuming-layer annotation (e.g. a thermal `:T_K`) is carried through like any
 other segment's meta.
 """
 function _build_straight_connector(extra::Real, ::Type{T};
+                                   twist = nothing,
                                    meta::AbstractVector{<:AbstractMeta} = AbstractMeta[]) where {T<:Real}
     L = T(extra)
     a = zeros(T, 6, 3)
     a[2, 3] = L                       # r(u) = (0, 0, L·u): linear in ẑ
     s_table = T[zero(T), L]           # straight ⇒ two table points suffice
-    return QuinticConnector(a, 1.0, s_table; meta = meta)
+    return QuinticConnector(a, 1.0, s_table; twist = twist, meta = meta)
 end
 
 # ---------------------------------------------------------------------------
@@ -482,6 +487,7 @@ function _build_quintic_connector(p1_local::AbstractVector,
                                   bisect_iter::Int = 64,
                                   rel_tol::Float64 = 1e-6,
                                   curvature_tol::Float64 = 1e-8,
+                                  twist = nothing,
                                   meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
     Tc = promote_type(eltype(p1_local), eltype(t_hat_out),
                       eltype(K0_local), eltype(K1_local), Float64)
@@ -595,14 +601,14 @@ function _build_quintic_connector(p1_local::AbstractVector,
                 "$(round(κ_limit;digits=3)) m⁻¹"))
         end
 
-        return QuinticConnector(coeffs_final, λ_final, s_table; meta = meta)
+        return QuinticConnector(coeffs_final, λ_final, s_table; twist = twist, meta = meta)
     end
 
     # Unconstrained: build at the initial λ.
     if !isfinite(κ_limit)
         coeffs = _qc_assemble(p1_local, t_hat_in, t_hat_out, K0_perp, K1_perp, λ)
         s_table = _qc_build_table(coeffs, n_table)
-        return QuinticConnector(coeffs, λ, s_table; meta = meta)
+        return QuinticConnector(coeffs, λ, s_table; twist = twist, meta = meta)
     end
 
     # Test λ₀.
@@ -610,7 +616,7 @@ function _build_quintic_connector(p1_local::AbstractVector,
     κ0 = _qc_peak_curvature(coeffs0; n_check = n_check)
     if κ0 <= κ_limit + curvature_tol
         s_table = _qc_build_table(coeffs0, n_table)
-        return QuinticConnector(coeffs0, λ, s_table; meta = meta)
+        return QuinticConnector(coeffs0, λ, s_table; twist = twist, meta = meta)
     end
 
     # Exponential bracket: grow λ until feasible.
@@ -646,5 +652,5 @@ function _build_quintic_connector(p1_local::AbstractVector,
 
     coeffs_final = _qc_assemble(p1_local, t_hat_in, t_hat_out, K0_perp, K1_perp, λ_hi)
     s_table = _qc_build_table(coeffs_final, n_table)
-    return QuinticConnector(coeffs_final, λ_hi, s_table; meta = meta)
+    return QuinticConnector(coeffs_final, λ_hi, s_table; twist = twist, meta = meta)
 end

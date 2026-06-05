@@ -24,10 +24,10 @@ rate of change to two scalar fields:
   straight segment or circular bend — stays in one plane and has τ_geom = 0.  A
   circular helix is the canonical out-of-plane curve and has constant nonzero
   τ_geom (see the example below).
-- **Spinning** Ω(s): rate at which the fiber cross-section rotates relative
-  to the Frenet frame, in rad/m.  This arises from applied torque or spinning
-  during fiber lay-down, and is specified via `Spinning` per-segment metadata.
-  The rate may be constant or a callable function of run-local arc length.
+- **Spin** Ω(s): rate at which the fiber cross-section rotates relative
+  to the Frenet frame, in rad/m.  This arises from applied torque or spin
+  during fiber lay-down, and is specified per Subpath via the `start!(; spin_rate=…)`
+  keyword.  The rate may be constant or a callable function of run-local arc length.
 
 The total rotation rate of the polarization reference frame is their sum:
 
@@ -45,7 +45,7 @@ Four scalar integrals are available.  They measure related but distinct things:
 
 The integrated curvature κ(s) (defined above), in radians.  Measures how much
 the tangent direction T̂ has turned — the "winding" of the path in 3D.
-Independent of torsion and spinning.  For a closed planar loop this equals 2π.
+Independent of torsion and spin.  For a closed planar loop this equals 2π.
 
 ### `total_torsion(path)`
 
@@ -56,13 +56,13 @@ straight segments and circular bends (both have τ_geom = 0).  Nonzero for
 helices and other out-of-plane curves.  This is a property of the centerline
 shape alone; it does not depend on the fiber material or applied torques.
 
-### `total_spinning(path; s_start, s_end)`
+### `total_spin(path; s_start, s_end)`
 
     ∫ Ω(s) ds
 
-The integrated applied material spinning, in radians.  Only counts contributions
-from explicit `Spinning` metadata attached to segments.  Knows nothing about the
-geometry of the centerline — a helix with no `Spinning` annotation contributes
+The integrated applied material spin, in radians.  Only counts contributions
+from the Subpath's `spin_rate` (set at `start!`).  Knows nothing about the
+geometry of the centerline — a helix with no `spin_rate` contributes
 zero here, even though the fiber reference frame does rotate as it traverses the
 helix.
 
@@ -73,7 +73,7 @@ helix.
 The total rotation of the polarization reference frame, in radians.  This is
 the physically meaningful quantity for polarization propagation: it captures
 both the frame rotation due to the shape of the path (geometric torsion) and
-any additional rotation applied to the fiber material (material spinning).  Use
+any additional rotation applied to the fiber material (material spin).  Use
 this when you want the net polarization-axis rotation over a segment or the
 whole path.
 
@@ -81,11 +81,11 @@ whole path.
 
 ## Quick reference
 
-| Function | Integrand | Shape | Spinning |
+| Function | Integrand | Shape | Spin |
 |---|---|---|---|
 | `total_turning_angle` | κ(s) | ✓ | — |
 | `total_torsion` | τ_geom(s) | ✓ | — |
-| `total_spinning` | Ω(s) | — | ✓ |
+| `total_spin` | Ω(s) | — | ✓ |
 | `total_frame_rotation` | τ_geom(s) + Ω(s) | ✓ | ✓ |
 
 ---
@@ -96,10 +96,10 @@ A helix with radius R, pitch-parameter h = pitch/(2π), and arc length L has:
 
     τ_geom = h / (R² + h²)   [constant along the helix]
     total_torsion         = τ_geom · L
-    total_frame_rotation  = τ_geom · L + total_spinning
+    total_frame_rotation  = τ_geom · L + total_spin
 
 A sequence of circular `bend!` segments forming a coil has τ_geom = 0
 everywhere, so `total_torsion = 0` and `total_frame_rotation` reduces to
-`total_spinning` alone — even though the fiber winds around in 3D.  The
+`total_spin` alone — even though the fiber winds around in 3D.  The
 out-of-plane geometry of a coil does not, by itself, rotate the Frenet frame;
 only a true helical path (nonzero torsion) does.

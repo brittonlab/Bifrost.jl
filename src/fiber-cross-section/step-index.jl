@@ -45,6 +45,23 @@ struct StepIndexCrossSection{T<:Real} <: FiberCrossSection
     cladding_material::STEP_INDEX_GLASS
     core_diameter_m::T
     cladding_diameter_m::T
+    # Intrinsic transverse core ellipticity. `ellipticity_axis_ratio` is the
+    # major/minor magnitude and must be ≥ 1 (1 ⇒ circular ⇒ no ellipticity
+    # birefringence). Requiring ≥ 1 makes the major axis — and hence the angle
+    # below — unambiguous: an ellipse with ratio r < 1 is the same object as
+    # ratio 1/r rotated 90°, so callers express it canonically as ratio ≥ 1.
+    # The cross-section returns only the birefringence *magnitude*; the fiber
+    # generator orients it.
+
+    # `ellipticity_axis_angle` (rad) is the **major-axis** orientation in the
+    # local transverse frame, canonical in [0, π) (an ellipse is 180°-symmetric).
+    # When ellipticity_axis_angle = 0 the core's major axis is aligned with the
+    # curvature normal (the same direction the bend birefringence picks out).
+    # Increasing the angle rotates it toward the binormal, about the propagation
+    # tangent.
+
+    ellipticity_axis_ratio::T
+    ellipticity_axis_angle::T
 
     function StepIndexCrossSection(
         core_material::STEP_INDEX_GLASS,
@@ -52,22 +69,28 @@ struct StepIndexCrossSection{T<:Real} <: FiberCrossSection
         core_diameter_m::Real,
         cladding_diameter_m::Real;
         manufacturer::Union{Nothing, AbstractString} = nothing,
-        model_number::Union{Nothing, AbstractString} = nothing
+        model_number::Union{Nothing, AbstractString} = nothing,
+        ellipticity_axis_ratio::Real = 1.0,
+        ellipticity_axis_angle::Real = 0.0
     )
         core_diameter = validate_positive_length(core_diameter_m, "core diameter")
         cladding_diameter = validate_positive_length(cladding_diameter_m, "cladding diameter")
         core_diameter < cladding_diameter || throw(ArgumentError(
             "core diameter must be smaller than cladding diameter"
         ))
+        axis_ratio = validate_axis_ratio(ellipticity_axis_ratio)
 
-        T = promote_type(typeof(core_diameter), typeof(cladding_diameter))
+        T = promote_type(typeof(core_diameter), typeof(cladding_diameter),
+                         typeof(axis_ratio), typeof(ellipticity_axis_angle))
         new{T}(
             isnothing(manufacturer) ? nothing : String(manufacturer),
             isnothing(model_number) ? nothing : String(model_number),
             core_material,
             cladding_material,
             core_diameter,
-            cladding_diameter
+            cladding_diameter,
+            axis_ratio,
+            ellipticity_axis_angle
         )
     end
 end
@@ -401,13 +424,9 @@ function cutoff_wavelength(
     return (a + b) / 2
 end
 
-function eccentricity_squared(axis_ratio; signed::Bool = false)
+function eccentricity_squared(axis_ratio)
     ε = validate_axis_ratio(axis_ratio)
-    if ε >= one(ε)
-        return one(ε) - inv(ε)^2
-    end
-    value = one(ε) - ε^2
-    return signed ? -value : value
+    return one(ε) - inv(ε)^2
 end
 
 #################################################
@@ -416,11 +435,13 @@ end
 #
 #################################################
 
-# TODO: Determine signs on this answer
-#    PB: Right now axis_ratio is not fixed to any definition and neither is Δβ so it's unclear
-#    when the result should be negative. I think planned changes should just get the magnitude
-#    of the birefringence and then orient it appropriately when constructing the generator.
-function core_noncircularity_dω(style::SpectralStyle, fiber::StepIndexCrossSection, λ, T_K; axis_ratio)
+# The cross-section returns the birefringence **magnitude**; the fiber generator
+# orients the eigen-axes from `ellipticity_axis_angle` (plus spin/twist phase).
+# `axis_ratio` is canonical (≥ 1, major/minor), so `eccentricity_squared` is a
+# single nonnegative branch `1 - 1/ε²`; orientation lives in the angle, not the
+# sign of the magnitude.
+function core_noncircularity_dω(style::SpectralStyle, fiber::StepIndexCrossSection, λ, T_K;
+                                axis_ratio = fiber.ellipticity_axis_ratio)
     terms = mode_terms(style, fiber, λ, T_K)
     ε = validate_axis_ratio(axis_ratio)
     ε == one(ε) && return BirefringenceResponse(zero(terms.β), zero(terms.β))
@@ -430,7 +451,7 @@ function core_noncircularity_dω(style::SpectralStyle, fiber::StepIndexCrossSect
     V = terms.V
     h = 4 * log(V)^3 / (V^3 * (one(V) + log(V)))
     h_prime = h / V * (3 / log(V) - 3 - inv(one(V) + log(V)))
-    prefactor = eccentricity_squared(ε; signed = true) / terms.core_radius
+    prefactor = eccentricity_squared(ε) / terms.core_radius
     Δβ = prefactor * (2*χ)^(3 / 2) * h
     dω = prefactor * ((3 / 2) * sqrt(2*χ) * dχ_dω * h + (2*χ)^(3 / 2) * h_prime * terms.dV_dω)
     return BirefringenceResponse(Δβ, dω)
@@ -441,7 +462,7 @@ function asymmetric_thermal_stress_dω(
     fiber::StepIndexCrossSection,
     λ,
     T_K;
-    axis_ratio
+    axis_ratio = fiber.ellipticity_axis_ratio
 )
     terms = mode_terms(style, fiber, λ, T_K)
     ε = validate_axis_ratio(axis_ratio)
@@ -451,6 +472,9 @@ function asymmetric_thermal_stress_dω(
     α_clad = cte(fiber.cladding_material, T_K)
     T_soft = softening_temperature(fiber.core_material, T_K)
     ν = poisson_ratio(fiber.core_material, T_K)
+    # `axis_ratio` is canonical (≥ 1, major/minor), so the ellipse-asymmetry factor
+    # `(ε - 1)/(ε + 1)` is already ≥ 0; the generator supplies orientation from the
+    # major-axis angle (see `core_noncircularity_dω`).
     const_factor = 0.5 * (p11 - p12) * (α_clad - α_core) * abs(T_soft - T_K) / (1 - ν^2) * ((ε - 1) / (ε + 1))
     Δβ = terms.k0 * terms.modal_prefactor * terms.n_core^3 * const_factor
     dω = const_factor * (
@@ -506,11 +530,22 @@ function axial_tension_dω(
     return BirefringenceResponse(Δβ, dω)
 end
 
-# TODO: Determine signs on this answer
-#    PB: Similar to the core ellipticity, the sign will need to be carefully considered.
-#    Note that this birefringence is *circular.* The answer here will need to be matrix-transformed
-#        back to the right basis at generator contruction time.
-#    The answer here is βLC - βRC.
+# Twist-induced **circular** birefringence (optical activity) from the
+# photoelastic effect: the difference in propagation constants of the two
+# circular polarizations, βLC − βRC, per unit mechanical-twist rate. The
+# polarization tracks the geometric rotation of the medium (the leading `1`)
+# reduced by the photoelastic slip `n²(p₁₁−p₁₂)/2` (negative for silica), so the
+# net rotation rate is `(1 + n²(p₁₁−p₁₂)/2)·τ_m`. The generator places this on
+# the real antisymmetric (rotation) part of K; see `circular_birefringence_generator
+#
+# We believe this method is correct.
+# It is wrong in v1 of our 2025 paper [1] and in the seminal 1983 Rashleigh paper [2].
+# Our implementation agrees with [3] which contains experimental validation.
+#
+# [1] arxiv.org/abs/2510.01212v1
+# [2] 10.1109/JLT.1983.1072121
+# [3] 10.1016/j.yofte.2011.10.001
+
 function twisting_dω(
     style::SpectralStyle,
     fiber::StepIndexCrossSection,
@@ -524,27 +559,34 @@ function twisting_dω(
     tr == zero(tr) && return BirefringenceResponse(zero(terms.β), zero(terms.β))
     p11, p12 = photoelastic_constants(fiber.core_material, T_K)
     coeff = (p11 - p12) / 2
-    Δβ = coeff * terms.n_core^2 * tr
+    Δβ = (one(terms.n_core) + coeff * terms.n_core^2) * tr
+    # d/dω of the leading `1·tr` term is zero; only the n² term carries dispersion.
     dω = 2 * coeff * terms.n_core * terms.dn_core_dω * tr
     return BirefringenceResponse(Δβ, dω)
 end
 
-core_noncircularity_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K; axis_ratio) =
+core_noncircularity_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K;
+                                  axis_ratio = fiber.ellipticity_axis_ratio) =
     core_noncircularity_dω(ValueOnly(), fiber, λ, T_K; axis_ratio = axis_ratio).Δβ
 
-core_noncircularity_birefringence(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K; axis_ratio) =
+core_noncircularity_birefringence(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K;
+                                  axis_ratio = fiber.ellipticity_axis_ratio) =
     core_noncircularity_dω(WithDerivative(), fiber, λ, T_K; axis_ratio = axis_ratio)
 
-core_noncircularity_birefringence(fiber::StepIndexCrossSection, λ, T_K; axis_ratio) =
+core_noncircularity_birefringence(fiber::StepIndexCrossSection, λ, T_K;
+                                  axis_ratio = fiber.ellipticity_axis_ratio) =
     core_noncircularity_birefringence(ValueOnly(), fiber, λ, T_K; axis_ratio = axis_ratio)
 
-asymmetric_thermal_stress_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K; axis_ratio) =
+asymmetric_thermal_stress_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K;
+                                        axis_ratio = fiber.ellipticity_axis_ratio) =
     asymmetric_thermal_stress_dω(ValueOnly(), fiber, λ, T_K; axis_ratio = axis_ratio).Δβ
 
-asymmetric_thermal_stress_birefringence(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K; axis_ratio) =
+asymmetric_thermal_stress_birefringence(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K;
+                                        axis_ratio = fiber.ellipticity_axis_ratio) =
     asymmetric_thermal_stress_dω(WithDerivative(), fiber, λ, T_K; axis_ratio = axis_ratio)
 
-asymmetric_thermal_stress_birefringence(fiber::StepIndexCrossSection, λ, T_K; axis_ratio) =
+asymmetric_thermal_stress_birefringence(fiber::StepIndexCrossSection, λ, T_K;
+                                        axis_ratio = fiber.ellipticity_axis_ratio) =
     asymmetric_thermal_stress_birefringence(ValueOnly(), fiber, λ, T_K; axis_ratio = axis_ratio)
 
 bending_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K; bend_radius_m) =

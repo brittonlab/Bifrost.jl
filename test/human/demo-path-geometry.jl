@@ -81,7 +81,7 @@ function demo_path_geometry_segment_labels(;
     PG.catenary!(sb; a = 0.04, length = 0.08, axis_angle = 0.0,
                  meta = [PG.Nickname("sag")])
     PG.helix!(sb; radius = 0.025, pitch = 0.015, turns = 1.2,
-              axis_angle = 0.0, meta = [PG.Nickname("spinning section")])
+              axis_angle = 0.0, meta = [PG.Nickname("spin section")])
     PG.straight!(sb; length = 0.06, meta = [PG.Nickname("lead-out")])
     PG.seal!(sb)
     b = PG.build(sb)

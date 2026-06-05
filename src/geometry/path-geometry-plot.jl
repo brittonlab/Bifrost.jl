@@ -57,7 +57,7 @@ function _expand(ps::PathGeometry.PathSample)
     bz       = [smpl.binormal[3]          for smpl in ps.samples]
     kappa    = [smpl.curvature            for smpl in ps.samples]
     tau_geom = [smpl.geometric_torsion    for smpl in ps.samples]
-    tau_spin  = [smpl.spinning_rate       for smpl in ps.samples]
+    tau_spin  = [smpl.spin_rate       for smpl in ps.samples]
     return (; s, x, y, z, tx, ty, tz, nx, ny, nz, bx, by, bz, kappa, tau_geom, tau_spin)
 end
 
@@ -250,7 +250,7 @@ view.
 Open-circle markers mark effective arc-length joins between authored segments that fall
 within `[s1, s2]`. Each authored segment carrying a `Nickname` meta gets a 3D text label at
 its midpoint arc length, nudged along the principal normal. A red arrow in the local N̂–B̂
-plane points along `cos(Φ) N̂ + sin(Φ) B̂`, where `Φ` is `PathGeometry.total_spinning` from
+plane points along `cos(Φ) N̂ + sin(Φ) B̂`, where `Φ` is `PathGeometry.total_spin` from
 `s1` to the cursor arc length.
 
 # Arguments
@@ -267,7 +267,7 @@ plane points along `cos(Φ) N̂ + sin(Φ) B̂`, where `Φ` is `PathGeometry.tota
   length of the T/N/B segments, as fractions of the bounding-box diagonal.
 - `segment_label_nudge_frac`: normal offset of nickname labels, as a fraction of the
   bounding-box diagonal.
-- `spinning_n_quad`: quadrature point count passed to `total_spinning` for the Φ overlay
+- `spin_n_quad`: quadrature point count passed to `total_spin` for the Φ overlay
   (default 128).
 """
 function write_path_geometry_plot3d(
@@ -280,7 +280,7 @@ function write_path_geometry_plot3d(
     plane_extent_frac::Float64 = 0.08,
     axis_extent_frac::Float64 = 0.06,
     segment_label_nudge_frac::Float64 = 0.035,
-    spinning_n_quad::Int = 128,
+    spin_n_quad::Int = 128,
 )
     path_sample = PathGeometry.sample_path(path, s1, s2; fidelity = fidelity)
     samples = _expand(path_sample)
@@ -320,7 +320,7 @@ function write_path_geometry_plot3d(
     # Φ(s) = ∫_{s1}^{s} τ_spin(s') ds' for the red ∫τ_spin overlay arrow.
     integrated_tau_spin = [
         s <= s1f ? 0.0 :
-            Float64(PathGeometry.total_spinning(
+            Float64(PathGeometry.total_spin(
                 path; s_start = s1f, s_end = s, rtol = 1e-6))
         for s in s_samples
     ]
@@ -340,7 +340,7 @@ function write_path_geometry_plot3d(
       - T̂: orange segment, unit tangent at the cursor.
       - N̂: blue segment, principal normal at the cursor.
       - B̂: green segment, binormal T̂×N̂ at the cursor.
-      - ∫τ_spin: red arrow in the N̂–B̂ plane at the cursor; Φ = total_spinning(path; s_start
+      - ∫τ_spin: red arrow in the N̂–B̂ plane at the cursor; Φ = total_spin(path; s_start
         = plot start, s_end = cursor) (same length scale as T̂/N̂/B̂ axes).
       - segment labels (optional): 3D text for each authored segment that has a nickname, when
         that segment overlaps the plotted s-interval.

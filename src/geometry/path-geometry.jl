@@ -4,7 +4,7 @@ Construct and query three-dimensional smooth space curves (fiber paths).
 This file defines a small authoring DSL for building piecewise paths from
 local-frame segment primitives, compiling them to an immutable global-frame
 form, and querying differential geometry (position, tangent/normal/binormal,
-curvature, torsion) and material spinning along arc length.
+curvature, torsion) and material spin along arc length.
 
 # Three layers
 
@@ -43,9 +43,9 @@ Interior `jumpby!` is supported as a relative jump within a Subpath. Each
 Subpath must call `start!` before any segment and seal exactly once at the end
 (`jumpto!` or `seal!`).
 
-# Spinning
+# Spin
 
-Material spinning is one spec per Subpath, set at [`start!`](@ref) via the
+Material spin is one spec per Subpath, set at [`start!`](@ref) via the
 `spin_rate` keyword. It covers the whole Subpath (interior segments and the
 terminal `jumpto!`/`seal!` connector alike):
 
@@ -77,7 +77,7 @@ continuous cross-Subpath spin phase (`_spin_phi_at_s0`).
     arc_length(path, s1, s2)
     curvature(seg_or_path, s)
     geometric_torsion(seg_or_path, s)
-    spinning_rate(path, s)
+    spin_rate(path, s)
     position(path, s)
     tangent(path, s)
     normal(path, s)
@@ -142,7 +142,8 @@ Supertype for per-segment annotations carried in a segment's
 `path-geometry.jl` is deliberately ignorant of what the bag contains;
 downstream layers define their own `AbstractMeta` subtypes (see
 `path-geometry-meta.jl`) and decide how to act on them. The geometry layer does
-not interpret any `AbstractMeta` directly.
+not interpret any `AbstractMeta` directly (spin is a `start!` keyword, not
+meta — see the file-header "Spin" section).
 """
 abstract type AbstractMeta end
 
@@ -154,6 +155,24 @@ Return the segment's `meta` annotation bag, or an empty vector if it has none.
 segment_meta(seg::AbstractPathSegment) =
     :meta ∈ fieldnames(typeof(seg)) ? seg.meta : AbstractMeta[]
 
+"""
+    _segment_twist(seg::AbstractPathSegment) -> TwistRate
+
+Return the segment's mechanical-twist rate spec, or `nothing` if it has none.
+"""
+_segment_twist(seg::AbstractPathSegment) =
+    :twist ∈ fieldnames(typeof(seg)) ? seg.twist : nothing
+
+"""
+    twist_rate(seg::AbstractPathSegment, s) -> value
+
+Return the mechanical-twist rate (rad/m) at segment-local arc length `s`. Part
+of the [`AbstractPathSegment`](@ref) interface, beside `curvature` and
+`geometric_torsion`; defaults to evaluating the segment's `twist` field (zero
+for an untwisted segment).
+"""
+twist_rate(seg::AbstractPathSegment, s) = _eval_rate(_segment_twist(seg), s)
+
 # -----------------------------------------------------------------------
 # Quadrature helper (spin-phase accumulation)
 # -----------------------------------------------------------------------
@@ -161,7 +180,7 @@ segment_meta(seg::AbstractPathSegment) =
 """
     _integrate_rate(rate, a, b; rtol=1e-8, atol=0.0)
 
-Integrate a spinning `rate` over the Subpath-local interval `[a, b]`.
+Integrate a spin `rate` over the Subpath-local interval `[a, b]`.
 
 Constant rates take the analytic branch; `Function` rates use QuadGK adaptive
 Gauss–Kronrod, which subdivides automatically for oscillatory integrands; a
@@ -170,7 +189,10 @@ Gauss–Kronrod, which subdivides automatically for oscillatory integrands; a
 _integrate_rate(::Nothing, a::Float64, b::Float64;
                 rtol::Float64 = 1e-8, atol::Float64 = 0.0) = 0.0
 
-_integrate_rate(rate::Float64, a::Float64, b::Float64;
+# `::Real` (not `::Float64`) so a `Particles` constant rate — e.g. an
+# MCM-perturbed `twist` — integrates without coercion: `rate * (b - a)`
+# promotes to `Particles`. `Float64` is `Real`, so spin still hits this branch.
+_integrate_rate(rate::Real, a::Float64, b::Float64;
                 rtol::Float64 = 1e-8, atol::Float64 = 0.0) = rate * (b - a)
 
 function _integrate_rate(rate::Function, a::Float64, b::Float64;
@@ -178,6 +200,30 @@ function _integrate_rate(rate::Function, a::Float64, b::Float64;
     val, _err = QuadGK.quadgk(rate, a, b; rtol = rtol, atol = atol)
     return val
 end
+
+# -----------------------------------------------------------------------
+# Rate evaluation (per-segment twist / spin rate at a local arc length)
+# -----------------------------------------------------------------------
+
+"""
+    TwistRate
+
+Type of a per-segment mechanical-twist rate specification: `nothing` (no twist),
+a `Real` constant (rad/m, including an MCM `Particles`), or a `Function` of the
+segment-local arc length `s_local`.
+"""
+const TwistRate = Union{Nothing, Real, Function}
+
+"""
+    _eval_rate(rate, s) -> value
+
+Evaluate a rate specification at local arc length `s`: `nothing` → `0`, a `Real`
+constant → itself, a `Function` → `rate(s)`. Branch-free per type so a
+`Particles` constant propagates without coercion.
+"""
+_eval_rate(::Nothing, s) = zero(s isa AbstractFloat ? s : Float64(s))
+_eval_rate(rate::Real, s) = rate
+_eval_rate(rate::Function, s) = rate(s)
 
 # -----------------------------------------------------------------------
 # StraightSegment
@@ -197,16 +243,18 @@ broadcasts elementwise over a `Particles` length.
 """
 struct StraightSegment{T} <: AbstractPathSegment
     length::T
+    twist::TwistRate
     meta::Vector{AbstractMeta}
 
     """
-        StraightSegment(length; meta=AbstractMeta[]) -> StraightSegment
+        StraightSegment(length, twist=nothing; meta=AbstractMeta[]) -> StraightSegment
 
-    Construct a straight segment of signed `length`. See
+    Construct a straight segment of signed `length`, optionally carrying a
+    mechanical-twist rate `twist` (see [`TwistRate`](@ref)). See
     [`AbstractPathSegment`](@ref).
     """
-    function StraightSegment(length; meta = AbstractMeta[])
-        new{typeof(length)}(length, Vector{AbstractMeta}(meta))
+    function StraightSegment(length, twist = nothing; meta = AbstractMeta[])
+        new{typeof(length)}(length, twist, Vector{AbstractMeta}(meta))
     end
 end
 
@@ -308,13 +356,14 @@ struct BendSegment{T} <: AbstractPathSegment
     radius::T
     angle::T       # total angle swept (rad)
     axis_angle::T  # orientation of inward normal in transverse plane (rad)
+    twist::TwistRate
     meta::Vector{AbstractMeta}
 
-    function BendSegment(radius, angle, axis_angle = 0.0;
+    function BendSegment(radius, angle, axis_angle = 0.0, twist = nothing;
                          meta = AbstractMeta[])
         @assert radius > 0 "BendSegment: radius must be positive"
         r, a, x = promote(radius, angle, axis_angle)
-        new{typeof(r)}(r, a, x, Vector{AbstractMeta}(meta))
+        new{typeof(r)}(r, a, x, twist, Vector{AbstractMeta}(meta))
     end
 end
 
@@ -383,14 +432,15 @@ struct CatenarySegment{T} <: AbstractPathSegment
     a::T
     length::T
     axis_angle::T
+    twist::TwistRate
     meta::Vector{AbstractMeta}
 
-    function CatenarySegment(a, length, axis_angle = 0.0;
+    function CatenarySegment(a, length, axis_angle = 0.0, twist = nothing;
                              meta = AbstractMeta[])
         @assert a > 0      "CatenarySegment: a must be positive"
         @assert length > 0 "CatenarySegment: length must be positive"
         av, L, x = promote(a, length, axis_angle)
-        new{typeof(av)}(av, L, x, Vector{AbstractMeta}(meta))
+        new{typeof(av)}(av, L, x, twist, Vector{AbstractMeta}(meta))
     end
 end
 
@@ -469,14 +519,15 @@ struct HelixSegment{T} <: AbstractPathSegment
     pitch::T
     turns::T
     axis_angle::T
+    twist::TwistRate
     meta::Vector{AbstractMeta}
 
     function HelixSegment(radius, pitch, turns,
-                          axis_angle = 0.0; meta = AbstractMeta[])
+                          axis_angle = 0.0, twist = nothing; meta = AbstractMeta[])
         @assert radius > 0 "HelixSegment: radius must be positive"
         @assert turns  > 0 "HelixSegment: turns must be positive"
         r, p, n, x = promote(radius, pitch, turns, axis_angle)
-        new{typeof(r)}(r, p, n, x, Vector{AbstractMeta}(meta))
+        new{typeof(r)}(r, p, n, x, twist, Vector{AbstractMeta}(meta))
     end
 end
 
@@ -583,25 +634,27 @@ struct JumpBy <: AbstractPathSegment
     tangent_out::Union{Nothing, NTuple{3, Float64}}
     curvature_out::Union{Nothing, NTuple{3, Float64}}
     min_bend_radius::Union{Nothing, Float64}
+    twist::TwistRate
     meta::Vector{AbstractMeta}
 
     """
         JumpBy(delta; tangent_out=nothing, curvature_out=nothing,
-                      min_bend_radius=nothing, meta=AbstractMeta[]) -> JumpBy
+                      min_bend_radius=nothing, twist=nothing, meta=AbstractMeta[]) -> JumpBy
 
     Construct a relative jump connector to `current_position + delta`, resolved
-    at `build` time. See the type docstring above for the full argument
-    semantics.
+    at `build` time. `twist` is the connector's mechanical-twist rate, carried
+    onto the resolved [`QuinticConnector`](@ref). See the type docstring above
+    for the full argument semantics.
     """
     function JumpBy(delta; tangent_out = nothing, curvature_out = nothing,
-                    min_bend_radius = nothing, meta = AbstractMeta[])
+                    min_bend_radius = nothing, twist = nothing, meta = AbstractMeta[])
         d = (Float64(delta[1]), Float64(delta[2]), Float64(delta[3]))
         t = isnothing(tangent_out) ? nothing :
             (Float64(tangent_out[1]), Float64(tangent_out[2]), Float64(tangent_out[3]))
         k = isnothing(curvature_out) ? nothing :
             (Float64(curvature_out[1]), Float64(curvature_out[2]), Float64(curvature_out[3]))
         r = isnothing(min_bend_radius) ? nothing : Float64(min_bend_radius)
-        new(d, t, k, r, Vector{AbstractMeta}(meta))
+        new(d, t, k, r, twist, Vector{AbstractMeta}(meta))
     end
 end
 
@@ -651,6 +704,7 @@ function _resolve_at_placement(seg::JumpBy, pos::AbstractVector, frame_mat::Abst
                                               collect(seg.curvature_out)
     return _build_quintic_connector(p1_local, t_hat_out, K0_local, K1_local;
                                     min_bend_radius = seg.min_bend_radius,
+                                    twist = seg.twist,
                                     meta = seg.meta)
 end
 
@@ -714,24 +768,35 @@ mutable struct SubpathBuilder
     # not interpret it; a consuming layer (the fiber) may — e.g. to thermally
     # expand the connector via build's `jumpto_target_length`.
     jumpto_meta::Vector{AbstractMeta}
+    # Mechanical-twist rate on the terminal connector (set by jumpto!/seal!),
+    # applied to the resolved connector at build (parallel to jumpto_meta).
+    jumpto_twist::TwistRate
     # Natural seal (set by seal!): seal at the natural exit with no connector
     # bending. `jumpto_natural_extra` is an optional straight lead-out length.
     jumpto_natural::Bool
     jumpto_natural_extra::Float64
-    # Material spinning over the whole Subpath, set by `start!(; spin_rate=…)`.
+    # Material spin over the whole Subpath, set by `start!(; spin_rate=…)`.
     # `nothing` = no spin; `Float64`/`Function` = concrete rate; `:inherit` =
     # copy the previous Subpath's rate (resolved at vector build).
     spin_rate::Union{Float64, Function, Nothing, Symbol}
     # Accumulated spin phase (rad) at the Subpath's s=0. Internal; not a `start!`
     # argument. `nothing` until resolved by build, then a `Float64`.
     _spin_phi_at_s0::Union{Float64, Nothing}
+    # `:inherit` start-state flags. When set (by passing `:inherit` for the
+    # corresponding `start!` keyword, or via the positional `start!(b, :inherit)`),
+    # the field is resolved at vector build from the predecessor's endpoint; the
+    # stored `start_*` value is a placeholder until then.
+    inherit_start_point::Bool
+    inherit_start_tangent::Bool
+    inherit_start_curvature::Bool
 
     SubpathBuilder(; meta::AbstractVector{<:AbstractMeta} = AbstractMeta[]) =
         new(Vector{AbstractMeta}(meta),
             nothing, nothing, nothing,
             AbstractPathSegment[],
             nothing, nothing, nothing, nothing, AbstractMeta[],
-            false, 0.0, nothing, nothing)
+            nothing, false, 0.0, nothing, nothing,
+            false, false, false)
 end
 
 """
@@ -759,7 +824,12 @@ _check_unsealed(b::SubpathBuilder) =
 Seal the Subpath start state. Throws if `start!` has already been called or
 if any interior segment has already been appended.
 
-`spin_rate` sets material spinning over the whole Subpath:
+Each of `point`, `outgoing_tangent`, and `outgoing_curvature` may be an explicit
+tuple or the `:inherit` sentinel. An `:inherit` field is resolved at vector
+build (`build([...])`) from the predecessor Subpath's endpoint; it is only valid
+for a non-first Subpath. Any other symbol is rejected.
+
+`spin_rate` sets material spin over the whole Subpath:
 
 - `nothing` (default) — no spin.
 - a `Real` — constant rate (rad/m).
@@ -769,7 +839,10 @@ if any interior segment has already been appended.
   non-first Subpath in `build([...])` whose predecessor actually spins.
 
 The spin phase is always continuous across Subpath boundaries (see the
-file-header "Spinning" section); it is resolved at build time, not here.
+file-header "Spin" section); it is resolved at build time, not here.
+
+See the two-argument [`start!(b, :inherit)`](@ref) for the expansive form that
+inherits the start state *and* the spin rate at once.
 """
 function start!(b::SubpathBuilder;
                 point = (0.0, 0.0, 0.0),
@@ -780,9 +853,18 @@ function start!(b::SubpathBuilder;
         throw(ArgumentError("SubpathBuilder: start!() already called"))
     !isempty(b.segments) &&
         throw(ArgumentError("SubpathBuilder: start!() must be called before any segments"))
-    b.start_point              = (Float64(point[1]),              Float64(point[2]),              Float64(point[3]))
-    b.start_outgoing_tangent   = (Float64(outgoing_tangent[1]),   Float64(outgoing_tangent[2]),   Float64(outgoing_tangent[3]))
-    b.start_outgoing_curvature = (Float64(outgoing_curvature[1]), Float64(outgoing_curvature[2]), Float64(outgoing_curvature[3]))
+    # Each start field may be an explicit tuple or the `:inherit` sentinel. An
+    # inherited field stores a placeholder now and is resolved at vector build
+    # from the predecessor's endpoint (see `_resolve_inherited_start`).
+    b.inherit_start_point     = _is_inherit(point,              "point")
+    b.inherit_start_tangent   = _is_inherit(outgoing_tangent,   "outgoing_tangent")
+    b.inherit_start_curvature = _is_inherit(outgoing_curvature, "outgoing_curvature")
+    b.start_point              = b.inherit_start_point     ? (0.0, 0.0, 0.0) :
+        (Float64(point[1]),              Float64(point[2]),              Float64(point[3]))
+    b.start_outgoing_tangent   = b.inherit_start_tangent   ? (0.0, 0.0, 1.0) :
+        (Float64(outgoing_tangent[1]),   Float64(outgoing_tangent[2]),   Float64(outgoing_tangent[3]))
+    b.start_outgoing_curvature = b.inherit_start_curvature ? (0.0, 0.0, 0.0) :
+        (Float64(outgoing_curvature[1]), Float64(outgoing_curvature[2]), Float64(outgoing_curvature[3]))
     if spin_rate === nothing || spin_rate === :inherit || spin_rate isa Function
         b.spin_rate = spin_rate
     elseif spin_rate isa Real
@@ -798,13 +880,30 @@ function start!(b::SubpathBuilder;
     return b
 end
 
-# Positional shorthand: start!(builder, :inherit) inherits all three start
-# fields from the previous Subpath. Only :inherit is accepted.
+"""
+    start!(builder, :inherit) -> builder
+
+Expansive inherit shorthand: continue the previous Subpath exactly. Inherits all
+three start fields (`point`, `outgoing_tangent`, `outgoing_curvature`) *and* the
+predecessor's `spin_rate`, all resolved at vector build. Only `:inherit` is
+accepted as the positional argument.
+
+Spin inheritance here is **lenient**: a non-spinning predecessor yields no spin
+(rather than erroring). This differs from the strict keyword
+`start!(b; spin_rate = :inherit)`, which requires the predecessor to actually
+spin.
+"""
 function start!(b::SubpathBuilder, mode::Symbol)
     mode === :inherit ||
         throw(ArgumentError("start!: positional argument must be :inherit; got :$mode"))
-    return start!(b; point = :inherit, outgoing_tangent = :inherit,
-                  outgoing_curvature = :inherit)
+    start!(b; point = :inherit, outgoing_tangent = :inherit,
+           outgoing_curvature = :inherit)
+    # Expansive form also carries the predecessor's spin forward. `:inherit_soft`
+    # is the lenient counterpart of the strict `:inherit` spin sentinel: it copies
+    # the predecessor's rate when present and resolves to no spin otherwise, so the
+    # geometry-only inherit cases (non-spinning predecessors) still build.
+    b.spin_rate = :inherit_soft
+    return b
 end
 
 """
@@ -828,10 +927,10 @@ Append a [`StraightSegment`](@ref) of signed `length` to `builder`.
 See also [`bend!`](@ref), [`helix!`](@ref), [`catenary!`](@ref),
 [`jumpby!`](@ref), [`seal!`](@ref), [`jumpto!`](@ref).
 """
-function straight!(spec::SubpathBuilder; length,
+function straight!(spec::SubpathBuilder; length, twist = nothing,
                    meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
     _check_started(spec); _check_unsealed(spec)
-    push!(spec.segments, StraightSegment(length; meta))
+    push!(spec.segments, StraightSegment(length, twist; meta))
     return spec
 end
 
@@ -845,9 +944,9 @@ See also [`straight!`](@ref), [`helix!`](@ref), [`catenary!`](@ref),
 [`jumpby!`](@ref).
 """
 function bend!(spec::SubpathBuilder; radius::Real, angle::Real, axis_angle::Real = 0.0,
-               meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
+               twist = nothing, meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
     _check_started(spec); _check_unsealed(spec)
-    push!(spec.segments, BendSegment(radius, angle, axis_angle; meta))
+    push!(spec.segments, BendSegment(radius, angle, axis_angle, twist; meta))
     return spec
 end
 
@@ -861,9 +960,10 @@ See also [`straight!`](@ref), [`bend!`](@ref), [`catenary!`](@ref),
 [`jumpby!`](@ref).
 """
 function helix!(spec::SubpathBuilder; radius::Real, pitch::Real, turns::Real,
-                axis_angle::Real = 0.0, meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
+                axis_angle::Real = 0.0, twist = nothing,
+                meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
     _check_started(spec); _check_unsealed(spec)
-    push!(spec.segments, HelixSegment(radius, pitch, turns, axis_angle; meta))
+    push!(spec.segments, HelixSegment(radius, pitch, turns, axis_angle, twist; meta))
     return spec
 end
 
@@ -877,9 +977,9 @@ See also [`straight!`](@ref), [`bend!`](@ref), [`helix!`](@ref),
 [`jumpby!`](@ref).
 """
 function catenary!(spec::SubpathBuilder; a::Real, length::Real, axis_angle::Real = 0.0,
-                   meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
+                   twist = nothing, meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
     _check_started(spec); _check_unsealed(spec)
-    push!(spec.segments, CatenarySegment(a, length, axis_angle; meta))
+    push!(spec.segments, CatenarySegment(a, length, axis_angle, twist; meta))
     return spec
 end
 
@@ -895,12 +995,12 @@ builders [`straight!`](@ref), [`bend!`](@ref), [`helix!`](@ref),
 [`catenary!`](@ref).
 """
 function jumpby!(spec::SubpathBuilder; delta, tangent = nothing,
-                 curvature_out = nothing, min_bend_radius = nothing,
+                 curvature_out = nothing, min_bend_radius = nothing, twist = nothing,
                  meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
     _check_started(spec); _check_unsealed(spec)
     push!(spec.segments, JumpBy(delta; tangent_out = tangent,
                                 curvature_out = curvature_out,
-                                min_bend_radius, meta))
+                                min_bend_radius, twist, meta))
     return spec
 end
 
@@ -926,6 +1026,7 @@ function jumpto!(b::SubpathBuilder;
                  incoming_tangent = nothing,
                  incoming_curvature = nothing,
                  min_bend_radius = nothing,
+                 twist = nothing,
                  meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
     isnothing(b.start_point) &&
         throw(ArgumentError("SubpathBuilder: call start!() before jumpto!()"))
@@ -938,6 +1039,7 @@ function jumpto!(b::SubpathBuilder;
         (Float64(incoming_curvature[1]), Float64(incoming_curvature[2]), Float64(incoming_curvature[3]))
     b.jumpto_min_bend_radius    = isnothing(min_bend_radius) ? nothing : Float64(min_bend_radius)
     b.jumpto_meta = Vector{AbstractMeta}(meta)
+    b.jumpto_twist = twist
     return b
 end
 
@@ -960,7 +1062,7 @@ Like `jumpto!`, this seals the builder: no further segments may be added, and a
 builder may be sealed exactly once (by either `seal!` or `jumpto!`). Throws if
 `start!` was not called, if the builder is already sealed, or if `extra < 0`.
 """
-function seal!(b::SubpathBuilder; extra::Real = 0.0,
+function seal!(b::SubpathBuilder; extra::Real = 0.0, twist = nothing,
                meta::AbstractVector{<:AbstractMeta} = AbstractMeta[])
     isnothing(b.start_point) &&
         throw(ArgumentError("SubpathBuilder: call start!() before seal!()"))
@@ -971,6 +1073,7 @@ function seal!(b::SubpathBuilder; extra::Real = 0.0,
     b.jumpto_natural = true
     b.jumpto_natural_extra = Float64(extra)
     b.jumpto_meta = Vector{AbstractMeta}(meta)
+    b.jumpto_twist = twist
     return b
 end
 
@@ -998,13 +1101,21 @@ struct Subpath
     # Meta on the terminal connector, carried verbatim and interpreted only by
     # consuming layers (e.g. the fiber's thermal expansion).
     jumpto_meta::Vector{AbstractMeta}
+    # Mechanical-twist rate on the terminal connector (see SubpathBuilder).
+    jumpto_twist::TwistRate
     # Natural seal (set by seal!): when true, jumpto_point is nothing and the
     # terminal connector is built directly at the natural exit (see build).
     jumpto_natural::Bool
     jumpto_natural_extra::Float64
-    # Whole-Subpath material spinning (see SubpathBuilder).
+    # Whole-Subpath material spin (see SubpathBuilder).
     spin_rate::Union{Float64, Function, Nothing, Symbol}
     _spin_phi_at_s0::Union{Float64, Nothing}
+    # `:inherit` start-state flags (see SubpathBuilder). Resolved (and cleared)
+    # at vector build by `_resolve_inherited_start`; `false` on a standalone or
+    # already-resolved Subpath.
+    inherit_start_point::Bool
+    inherit_start_tangent::Bool
+    inherit_start_curvature::Bool
 end
 
 """
@@ -1031,10 +1142,14 @@ function Subpath(b::SubpathBuilder)
                    b.jumpto_incoming_curvature,
                    b.jumpto_min_bend_radius,
                    deepcopy(b.jumpto_meta),
+                   b.jumpto_twist,
                    b.jumpto_natural,
                    b.jumpto_natural_extra,
                    b.spin_rate,
-                   b._spin_phi_at_s0)
+                   b._spin_phi_at_s0,
+                   b.inherit_start_point,
+                   b.inherit_start_tangent,
+                   b.inherit_start_curvature)
 end
 
 # Geometry queries on an unbuilt Subpath fail loudly.
@@ -1042,7 +1157,11 @@ arc_length(::Subpath)               = error("Subpath: call build(subpath) before
 arc_length(::Subpath, ::Real, ::Real) = error("Subpath: call build(subpath) before querying arc_length")
 curvature(::Subpath, ::Real)        = error("Subpath: call build(subpath) before querying curvature")
 geometric_torsion(::Subpath, ::Real) = error("Subpath: call build(subpath) before querying geometric_torsion")
-spinning_rate(::Subpath, ::Real)   = error("Subpath: call build(subpath) before querying spinning_rate")
+spin_rate(::Subpath, ::Real)   = error("Subpath: call build(subpath) before querying spin_rate")
+twist_rate(::Subpath, ::Real)      = error("Subpath: call build(subpath) before querying twist_rate")
+twist_phase(::Subpath, ::Real)     = error("Subpath: call build(subpath) before querying twist_phase")
+torsion_phase(::Subpath, ::Real)   = error("Subpath: call build(subpath) before querying torsion_phase")
+spin_phase(::Subpath, ::Real)      = error("Subpath: call build(subpath) before querying spin_phase")
 position(::Subpath, ::Real)         = error("Subpath: call build(subpath) before querying position")
 tangent(::Subpath, ::Real)          = error("Subpath: call build(subpath) before querying tangent")
 normal(::Subpath, ::Real)           = error("Subpath: call build(subpath) before querying normal")
@@ -1239,6 +1358,7 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
         # QuinticConnector query path (zero-speed → local ẑ tangent).
         connector = _build_straight_connector(sub.jumpto_natural_extra,
                                               eltype(K_in_global);
+                                              twist = sub.jumpto_twist,
                                               meta = sub.jumpto_meta)
     else
         # Destination is global (sub.jumpto_point); transform to local frame to
@@ -1260,6 +1380,7 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
         connector = _build_quintic_connector(p1_local, t_hat_out, K0_local, K1_local;
                                              min_bend_radius    = sub.jumpto_min_bend_radius,
                                              target_path_length = jumpto_target_length,
+                                             twist              = sub.jumpto_twist,
                                              meta               = sub.jumpto_meta)
     end
     # PlacedSegment wrapper for the terminal connector: anchor at the
@@ -1269,7 +1390,7 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
 
     # `:inherit` spin needs a predecessor; it can only be resolved by the
     # vector build. 
-    sub.spin_rate === :inherit && throw(ArgumentError(
+    (sub.spin_rate === :inherit || sub.spin_rate === :inherit_soft) && throw(ArgumentError(
         "build(::Subpath): spin_rate=:inherit requires a predecessor; it is valid " *
         "only for a non-first Subpath in build([...])."))
     # `_spin_phi_at_s0 = 0.0` provisionally (correct for a first/standalone
@@ -1278,7 +1399,7 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
 end
 
 # -----------------------------------------------------------------------
-# Spinning resolution (across Subpaths)
+# Spin resolution (across Subpaths)
 # -----------------------------------------------------------------------
 
 """
@@ -1291,17 +1412,21 @@ inherit. Throws if the predecessor has no spin (nothing to inherit).
 The phase `_spin_phi_at_s0` is fixed up separately by [`_resolve_spin_phase`](@ref).
 """
 function _resolve_inherited_spin(sub::Subpath, prev_built::SubpathBuilt)
-    sub.spin_rate === :inherit || return sub
-    prev_built.spin_rate === nothing && throw(ArgumentError(
+    (sub.spin_rate === :inherit || sub.spin_rate === :inherit_soft) || return sub
+    # Strict `:inherit` requires a spinning predecessor; lenient `:inherit_soft`
+    # (set by the expansive `start!(b, :inherit)`) copies whatever the predecessor
+    # has, including no spin.
+    sub.spin_rate === :inherit && prev_built.spin_rate === nothing && throw(ArgumentError(
         "spin_rate=:inherit: the previous Subpath has no spin (spin_rate=nothing), " *
         "so there is no rate to inherit."))
     return Subpath(
         sub.meta, sub.start_point, sub.start_outgoing_tangent,
         sub.start_outgoing_curvature, sub.segments, sub.jumpto_point,
         sub.jumpto_incoming_tangent, sub.jumpto_incoming_curvature,
-        sub.jumpto_min_bend_radius, sub.jumpto_meta,
+        sub.jumpto_min_bend_radius, sub.jumpto_meta, sub.jumpto_twist,
         sub.jumpto_natural, sub.jumpto_natural_extra,
-        prev_built.spin_rate, sub._spin_phi_at_s0)
+        prev_built.spin_rate, sub._spin_phi_at_s0,
+        sub.inherit_start_point, sub.inherit_start_tangent, sub.inherit_start_curvature)
 end
 
 """
@@ -1400,10 +1525,14 @@ function _resolve_inherited_start(cur::Subpath, prev_built::SubpathBuilt)
     else
         cur.start_outgoing_curvature
     end
+    # Preserve spin_rate (possibly still `:inherit`/`:inherit_soft`, resolved by
+    # `_resolve_inherited_spin` afterward) and clear the start-state inherit flags
+    # so the returned Subpath builds standalone.
     return Subpath(cur.meta, new_point, new_tangent, new_curvature, cur.segments,
                    cur.jumpto_point, cur.jumpto_incoming_tangent,
                    cur.jumpto_incoming_curvature, cur.jumpto_min_bend_radius,
-                   cur.jumpto_meta, cur.jumpto_natural, cur.jumpto_natural_extra,
+                   cur.jumpto_meta, cur.jumpto_twist, cur.jumpto_natural,
+                   cur.jumpto_natural_extra, cur.spin_rate, cur._spin_phi_at_s0,
                    false, false, false)
 end
 
@@ -1478,7 +1607,10 @@ function build(subpaths::Vector{Subpath}; perturb::Bool = false)
     builts = Vector{SubpathBuilt}(undef, length(subpaths))
     builts[1] = build(subpaths[1]; perturb)
     for i in 2:length(subpaths)
-        resolved = _resolve_inherited_spin(subpaths[i], builts[i-1])
+        # Resolve start-state inheritance first (needs the built predecessor's
+        # endpoint), then spin inheritance, then build the now-concrete Subpath.
+        resolved = _resolve_inherited_start(subpaths[i], builts[i-1])
+        resolved = _resolve_inherited_spin(resolved, builts[i-1])
         builts[i] = build(resolved; perturb)
     end
     return build(builts)
@@ -1584,19 +1716,116 @@ function geometric_torsion(b::SubpathBuilt, s::Real)
 end
 
 """
-    spinning_rate(b, s)
+    spin_rate(b, s)
 
 Material spin rate (rad/m) at Subpath-local arc length `s`. The Subpath carries
 a single whole-length `spin_rate`: `nothing` → `0`; a constant `Float64`; or a
 `Function` evaluated at `s` (Subpath-local, `s = 0` at the Subpath start).
 """
-function spinning_rate(b::SubpathBuilt, s)
+function spin_rate(b::SubpathBuilt, s)
     r = b.spin_rate
     r === :inherit && error(
-        "spinning_rate: unresolved :inherit spin_rate; build via build([...]) first")
+        "spin_rate: unresolved :inherit spin_rate; build via build([...]) first")
     r === nothing && return zero(s isa AbstractFloat ? s : Float64(s))
     return r isa Function ? r(s) : r
 end
+
+# -----------------------------------------------------------------------
+# Per-segment phase integrals (twist, geometric torsion) and the
+# accumulators that the fiber generators consume to orient birefringence
+# axes. These deliberately do NOT `_qc_nominalize` the integrand so an MCM
+# `Particles` twist rate propagates into the accumulated phase.
+# -----------------------------------------------------------------------
+
+"""
+    _segment_torsion_phase(seg, a, b) -> value
+
+Integral of `geometric_torsion(seg, ·)` over the segment-local interval
+`[a, b]`. Geometric torsion is constant for every authored segment type
+(zero for planar shapes, `h/(R²+h²)` for a helix), so the default evaluates it
+once and multiplies by the interval length; the `QuinticConnector` torsion
+varies and is integrated by quadrature.
+"""
+_segment_torsion_phase(seg::AbstractPathSegment, a::Float64, b::Float64) =
+    geometric_torsion(seg, a) * (b - a)
+
+_segment_torsion_phase(seg::QuinticConnector, a::Float64, b::Float64) =
+    QuadGK.quadgk(s -> geometric_torsion(seg, s), a, b; rtol = 1e-8)[1]
+
+"""
+    _accumulate_segment_phase(b::SubpathBuilt, s, seg_phase) -> value
+
+Accumulate a per-segment phase integral `seg_phase(seg, a_local, b_local)` from
+the Subpath start to global arc length `s`, walking the placed interior
+segments and the terminal connector. Segment-boundary positions are reduced to
+`Float64` for the loop bounds (so no `Particles` conditional is evaluated),
+while the integrand carries whatever element type the rate has.
+
+_accumulate_segment_phase is a generic helper — it doesn't accumulate any one kind of phase. 
+It's the shared "walk the path and integrate a rate from the start up to s" machinery. The caller 
+decides which phase by passing in a seg_phase integrand function. There are two kinds of "phase" 
+    built on top of it:
+
+    twist phase — ∫₀ˢ τ_m, the accumulated mechanical-twist angle 
+                            (how much the fiber has been physically twisted)
+    torsion phase — ∫₀ˢ τ_g, the accumulated geometric-torsion angle 
+                            (how much the path itself corkscrews through 3D space)
+"""
+function _accumulate_segment_phase(b::SubpathBuilt, s, seg_phase)
+    s_hi = Float64(_qc_nominalize(s))
+    phi = nothing
+    for ps in _all_placed_segs(b)
+        seg   = ps.segment
+        seg_s0 = Float64(_qc_nominalize(ps.s_offset_eff))
+        L      = Float64(_qc_nominalize(arc_length(seg)))
+        upper  = min(s_hi - seg_s0, L)
+        upper <= 0.0 && continue
+        contrib = seg_phase(seg, 0.0, upper)
+        phi = phi === nothing ? contrib : phi + contrib
+    end
+    return phi === nothing ? zero(s_hi) : phi
+end
+
+"""
+    twist_rate(path, s) -> value
+
+Mechanical-twist rate (rad/m) of a built `path` at global arc length `s`,
+read from the segment containing `s`.
+"""
+function twist_rate(b::SubpathBuilt, s)
+    ps, s_local = _find_placed_segment(b, s)
+    return twist_rate(ps.segment, s_local)
+end
+
+"""
+    twist_phase(path, s) -> value
+
+Accumulated mechanical-twist phase `∫₀ˢ τ_m` (rad) of a built `path`. Co-rotates
+the intrinsic linear birefringence axes with the cross section.
+"""
+twist_phase(b::SubpathBuilt, s) =
+    _accumulate_segment_phase(b, s,
+        (seg, a, bb) -> _integrate_rate(_segment_twist(seg), a, bb))
+
+"""
+    torsion_phase(path, s) -> value
+
+Accumulated geometric-torsion phase `∫₀ˢ τ_g` (rad) of a built `path`. Rotates
+the bend (curvature-direction) birefringence axis relative to the
+parallel-transport frame.
+"""
+torsion_phase(b::SubpathBuilt, s) =
+    _accumulate_segment_phase(b, s, _segment_torsion_phase)
+
+"""
+    spin_phase(path, s) -> value
+
+Accumulated material-spin phase (rad) of a built `path` at global arc length
+`s`: the Subpath's continuous start phase plus `∫₀ˢ ξ`. Rotates the intrinsic
+linear birefringence axes with the spun (relaxed) glass.
+"""
+spin_phase(b::SubpathBuilt, s) =
+    b._spin_phi_at_s0 + _integrate_rate(b.spin_rate, 0.0, Float64(_qc_nominalize(s)))
 
 """
     position(path, s) -> Vector
@@ -1644,7 +1873,7 @@ end
 
 Return all differential-geometry quantities of a built `path` at arc length
 `s` as a `NamedTuple`: `position`, `tangent`, `normal`, `binormal`,
-`curvature`, `geometric_torsion`, and `spinning_rate`.
+`curvature`, `geometric_torsion`, and `spin_rate`.
 """
 function frame(b::SubpathBuilt, s::Real)
     T = tangent(b, s)
@@ -1652,9 +1881,9 @@ function frame(b::SubpathBuilt, s::Real)
     Bi = binormal(b, s)
     κ = curvature(b, s)
     τ = geometric_torsion(b, s)
-    m = spinning_rate(b, s)
+    m = spin_rate(b, s)
     return (; position = position(b, s), tangent = T, normal = N, binormal = Bi,
-              curvature = κ, geometric_torsion = τ, spinning_rate = m)
+              curvature = κ, geometric_torsion = τ, spin_rate = m)
 end
 
 # -----------------------------------------------------------------------
@@ -1794,13 +2023,13 @@ function total_torsion(b::SubpathBuilt)
 end
 
 """
-    total_spinning(b; s_start, s_end, rtol = 1e-8, atol = 0.0) → Float64
+    total_spin(b; s_start, s_end, rtol = 1e-8, atol = 0.0) → Float64
 
-Integrated material spinning ``∫ τ_{\\mathrm{mat}}(s) \\, ds`` over local arc length
+Integrated material spin ``∫ τ_{\\mathrm{mat}}(s) \\, ds`` over local arc length
 from `s_start` to `s_end` (defaults: full Subpath). Both endpoints must lie
 in `[0, s_end(b)]`.
 """
-function total_spinning(
+function total_spin(
     b::SubpathBuilt;
     s_start::Real = 0.0,
     s_end::Real   = s_end(b),
@@ -1811,13 +2040,13 @@ function total_spinning(
     s_hi = Float64(_qc_nominalize(s_end))
     if s_lo > s_hi
         throw(ArgumentError(
-            "total_spinning: require s_start ≤ s_end; got s_start=$(s_lo), s_end=$(s_hi)"))
+            "total_spin: require s_start ≤ s_end; got s_start=$(s_lo), s_end=$(s_hi)"))
     end
     ps0 = 0.0
     ps1 = Float64(_qc_nominalize(arc_length(b)))
     if !(ps0 - 1e-12 <= s_lo <= ps1 + 1e-12) || !(ps0 - 1e-12 <= s_hi <= ps1 + 1e-12)
         throw(ArgumentError(
-            "total_spinning: require 0 ≤ s ≤ s_end(b) for both endpoints; " *
+            "total_spin: require 0 ≤ s ≤ s_end(b) for both endpoints; " *
             "got [$(s_lo), $(s_hi)] m vs subpath domain [$(ps0), $(ps1)] m"))
     end
     s_lo == s_hi && return 0.0
@@ -1890,7 +2119,7 @@ function total_frame_rotation(
         end
     end
 
-    Ω_total = total_spinning(b; s_start = s_lo, s_end = s_hi,
+    Ω_total = total_spin(b; s_start = s_lo, s_end = s_hi,
                                    rtol = rtolf, atol = atolf)
     return τ_total + Ω_total
 end
@@ -1928,7 +2157,7 @@ end
 
 One evaluated point on a path: arc-length coordinate `s` plus all frame
 quantities (position, tangent/normal/binormal, curvature, geometric torsion,
-spinning rate).
+spin rate).
 
 The frame is the propagated (parallel-transport) frame, not the textbook
 Frenet frame — see [`build`](@ref).
@@ -1941,7 +2170,7 @@ struct Sample
     binormal          :: AbstractVector
     curvature         :: Real
     geometric_torsion :: Real
-    spinning_rate    :: Real
+    spin_rate    :: Real
 end
 
 """
@@ -2005,7 +2234,7 @@ end
 
 Return the number of sample points to allocate to placed segment `ps` over the
 clamped window `[s_lo, s_hi]`, scaled by `fidelity` and the segment's geometric
-turning and spinning angle.
+turning and spin angle.
 """
 function _segment_point_budget(
     ps::PlacedSegment,
@@ -2028,11 +2257,11 @@ function _segment_point_budget(
     geom_angle  = _budget_scalar(_segment_total_angle(seg) * frac)
     geom_budget = max(2, ceil(Int, fidelity * geom_angle / (2π) * 32))
 
-    spinning_total  = total_spinning(b; s_start = a, s_end = bb, rtol = 1e-3)
-    spinning_angle  = abs(_budget_scalar(spinning_total))
-    spinning_budget = max(2, ceil(Int, fidelity * spinning_angle / (2π) * 32))
+    spin_total  = total_spin(b; s_start = a, s_end = bb, rtol = 1e-3)
+    spin_angle  = abs(_budget_scalar(spin_total))
+    spin_budget = max(2, ceil(Int, fidelity * spin_angle / (2π) * 32))
 
-    return max(geom_budget, spinning_budget)
+    return max(geom_budget, spin_budget)
 end
 
 """
@@ -2085,7 +2314,7 @@ function sample_path(b::SubpathBuilt, s1::Real, s2::Real; fidelity::Float64 = 1.
             fr.binormal,
             fr.curvature,
             fr.geometric_torsion,
-            fr.spinning_rate,
+            fr.spin_rate,
         )
     end
     return PathSample(samples, s_lo, s_hi, n)
@@ -2125,7 +2354,7 @@ end
 """
     breakpoints(path) -> Vector{Float64}
 
-Return the normalized arc-length segment breakpoints of a built `path`. Spinning
+Return the normalized arc-length segment breakpoints of a built `path`. Spin
 is constant or smooth over the whole Subpath, so it introduces no interior
 breakpoints; Subpath boundaries are already segment breakpoints. The propagator
 never steps across one of these.
@@ -2208,14 +2437,43 @@ function _find_subpath(p::PathBuilt, s)
     error("PathBuilt: s = $s out of path bounds")
 end
 
-# Forward all "point-query at s" methods through _find_subpath.
-for f in (:curvature, :geometric_torsion, :spinning_rate,
+# Forward all "point-query at s" methods through _find_subpath. `spin_phase`
+# is point-like at the PathBuilt level because each Subpath's `_spin_phi_at_s0`
+# already encodes the cross-Subpath accumulation.
+for f in (:curvature, :geometric_torsion, :spin_rate, :twist_rate, :spin_phase,
           :position, :tangent, :normal, :binormal, :frame)
     @eval function $f(p::PathBuilt, s::Real)
         sb, s_local = _find_subpath(p, s)
         return $f(sb, s_local)
     end
 end
+
+"""
+    _pathbuilt_cumulative_phase(p, s, subphase) -> value
+
+Sum a from-zero per-Subpath phase accumulator `subphase(subpath, s_local)`
+across the Subpaths preceding the one containing global arc length `s` (each
+taken over its full length) plus the partial contribution of the containing
+Subpath. Used for `twist_phase`/`torsion_phase`, which — unlike spin — carry no
+stored cross-Subpath offset. No `Particles` conditional is evaluated (loop
+bounds use the `Float64` subpath offsets).
+"""
+function _pathbuilt_cumulative_phase(p::PathBuilt, s, subphase)
+    s_hi = Float64(_qc_nominalize(s))
+    offs = s_offsets(p)
+    phi = nothing
+    for i in eachindex(p.subpaths)
+        L     = Float64(_qc_nominalize(arc_length(p.subpaths[i])))
+        upper = min(s_hi - offs[i], L)
+        upper <= 0.0 && continue
+        contrib = subphase(p.subpaths[i], upper)
+        phi = phi === nothing ? contrib : phi + contrib
+    end
+    return phi === nothing ? zero(s_hi) : phi
+end
+
+twist_phase(p::PathBuilt, s::Real)   = _pathbuilt_cumulative_phase(p, s, twist_phase)
+torsion_phase(p::PathBuilt, s::Real) = _pathbuilt_cumulative_phase(p, s, torsion_phase)
 
 # Endpoint access
 start_point(p::PathBuilt)   = position(p, 0.0)
@@ -2241,7 +2499,7 @@ total_turning_angle(p::PathBuilt) = sum(total_turning_angle(b) for b in p.subpat
 total_torsion(p::PathBuilt)       = sum(total_torsion(b)       for b in p.subpaths;
                                         init = 0.0)
 
-function total_spinning(p::PathBuilt;
+function total_spin(p::PathBuilt;
                               s_start::Real = 0.0,
                               s_end::Real   = s_end(p),
                               rtol::Real    = 1e-8,
@@ -2256,7 +2514,7 @@ function total_spinning(p::PathBuilt;
         a_local = max(0.0, s_lo - offs[i])
         b_local = min(L,   s_hi - offs[i])
         b_local <= a_local && continue
-        total += total_spinning(p.subpaths[i];
+        total += total_spin(p.subpaths[i];
                                       s_start = a_local, s_end = b_local,
                                       rtol = rtol, atol = atol)
     end
@@ -2355,7 +2613,7 @@ function sample_path(p::PathBuilt, s1::Real, s2::Real; fidelity::Float64 = 1.0)
             fr.binormal,
             fr.curvature,
             fr.geometric_torsion,
-            fr.spinning_rate,
+            fr.spin_rate,
         )
     end
     return PathSample(samples, s_lo, s_hi, n)

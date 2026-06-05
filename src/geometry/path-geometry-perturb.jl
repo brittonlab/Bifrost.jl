@@ -68,7 +68,7 @@ end
 # scaling here: pass it through, applying only the requested meta replacement.
 _scale_length_fields(seg::JumpBy, _factor, new_meta) =
     JumpBy(seg.delta; tangent_out = seg.tangent_out, curvature_out = seg.curvature_out,
-           min_bend_radius = seg.min_bend_radius, meta = new_meta)
+           min_bend_radius = seg.min_bend_radius, twist = seg.twist, meta = new_meta)
 
 """
     _apply_field_mcm(seg) -> AbstractPathSegment

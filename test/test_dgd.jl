@@ -213,8 +213,8 @@ end
     end
 end
 
-# TODO: spinning refactor — DGD fiber integration test depends on a spinning overlay
-# adding a breakpoint at s=2.0; pending per-segment-meta spinning subsystem.
+# TODO: spin refactor — DGD fiber integration test depends on a spin overlay
+# adding a breakpoint at s=2.0; pending per-segment-meta spin subsystem.
 @testset "DGD fiber integration" begin
     @test_skip true
 end

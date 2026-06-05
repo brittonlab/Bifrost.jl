@@ -61,7 +61,7 @@ end
 module FiberCS
     using LinearAlgebra
     using ..MaterialProperties
-    include("fiber/fiber-cross-section.jl")
+    include("fiber-cross-section/cross-section.jl")
 
     include("fiber-cross-section/step-index.jl")
     include("fiber-cross-section/graded-index.jl")
