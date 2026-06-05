@@ -8,8 +8,8 @@ From the repository root, start Julia with `julia --project=.`:
 using Bifrost
 
 xs = StepIndexCrossSection(
-    GermaniaSilicaGlass(0.036),
-    GermaniaSilicaGlass(0.0),
+    SilicaGermaniaGlass(0.036),
+    SilicaGermaniaGlass(0.0),
     8.2e-6,
     125e-6;
     manufacturer = "Corning",
@@ -57,8 +57,8 @@ import wrapper
 Bf = wrapper.wrap("Bifrost")
 
 xs = Bf.StepIndexCrossSection(
-    Bf.GermaniaSilicaGlass(0.036),
-    Bf.GermaniaSilicaGlass(0.0),
+    Bf.SilicaGermaniaGlass(0.036),
+    Bf.SilicaGermaniaGlass(0.0),
     8.2e-6,
     125e-6,
 )

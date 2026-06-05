@@ -59,8 +59,8 @@ def use_zoo():
 def use_bifrost():
     print("This method uses the Julia Bifrost module. \n")
     xs = Bf.FiberCrossSection(
-        Bf.GermaniaSilicaGlass(0.036),
-        Bf.GermaniaSilicaGlass(0.0),
+        Bf.SilicaGermaniaGlass(0.036),
+        Bf.SilicaGermaniaGlass(0.0),
         8.2e-6,
         125e-6,
     )
