@@ -212,13 +212,18 @@ function _resolve_thermal_and_tension(sub::Subpath, cross_section::FiberCrossSec
         (ΔT === nothing ? 1 : (1 + α_lin * ΔT)) *
         (F === nothing ? 1 : (1 + _tension_strain(F, r_clad, E_clad)))
 
-    new_segments = AbstractPathSegment[
-        let ΔT = _segment_delta_T(seg), F = _segment_tension(seg)
-            (ΔT === nothing && F === nothing) ? seg :
-                _scale_length_fields(seg, _τ(ΔT, F), segment_meta(seg))
+    # Scale one segment's length-fields by its combined τ; a segment with neither
+    # `:T_K` nor `:tension` passes through unchanged.
+    function _scaled(seg)
+        ΔT = _segment_delta_T(seg)
+        F  = _segment_tension(seg)
+        if ΔT === nothing && F === nothing
+            return seg
         end
-        for seg in sub.segments
-    ]
+        return _scale_length_fields(seg, _τ(ΔT, F), segment_meta(seg))
+    end
+
+    new_segments = AbstractPathSegment[_scaled(seg) for seg in sub.segments]
 
     # Issues #33/#74: terminal connector target = τ_seal · L0, where L0 is the
     # nominal connector length (solved without :T_K/:tension). `build` re-solves to
