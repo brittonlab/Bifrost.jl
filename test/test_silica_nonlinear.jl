@@ -14,6 +14,9 @@ anchors below break.
   overestimates beyond 20 THz) and shoulder (`:hc` has the 15.2 THz
   feature). Instead, each spectrum is reduced to three Gaussian-like 
   scalars (peak centre, peak amplitude, FWHM).
+- T-GUARDRAIL — runs the companion visual notebook
+  (`test/human/test_nonlinear.ipynb`) end-to-end so a stale public-API
+  reference in it fails the build instead of silently rotting.
 
 # Brillouin scope
 Even though one test point exercises GeO₂ doping (Niklès 1997 trend at
@@ -246,4 +249,144 @@ end
             @warn "Debug plot failed to render" exception=err
         end
     end
+end
+
+# ═════════════════════════════════════════════════════════════════════════
+# Companion-notebook guardrail
+# ═════════════════════════════════════════════════════════════════════════
+#
+# The visual notebook test/human/test_nonlinear.ipynb is not run by CI on its
+# own, so a rename or removal in the public API can leave it calling a symbol
+# that no longer exists (exactly what happened after the cross-section layer was
+# split). The guardrail below extracts the notebook's Julia code cells and runs
+# them in a throwaway module, asserting the whole notebook executes without
+# error. Plotting verbs are stubbed so it needs no Plots dependency, matching
+# this suite's no-Plots-in-CI policy; the guard is on the Bifrost API calls the
+# notebook makes, which is where the regression risk lives.
+
+const _JSON_ESCAPES = Dict('n' => '\n', 't' => '\t', 'r' => '\r', 'b' => '\b',
+                           'f' => '\f', '"' => '"', '\\' => '\\', '/' => '/')
+
+"""
+    _read_json_string(text, q) -> (String, Int)
+
+Read one JSON string from `text` whose opening quote is at index `q`. Returns the
+unescaped contents and the index just past the closing quote.
+"""
+function _read_json_string(text::String, q::Int)
+    buf = IOBuffer()
+    i = nextind(text, q)
+    while true
+        c = text[i]
+        if c == '"'
+            return String(take!(buf)), nextind(text, i)
+        elseif c == '\\'
+            i = nextind(text, i)
+            e = text[i]
+            if e == 'u'
+                hex = IOBuffer()
+                for _ in 1:4
+                    i = nextind(text, i)
+                    write(hex, text[i])
+                end
+                write(buf, Char(parse(UInt16, String(take!(hex)); base = 16)))
+            else
+                write(buf, get(_JSON_ESCAPES, e, e))
+            end
+        else
+            write(buf, c)
+        end
+        i = nextind(text, i)
+    end
+end
+
+"""
+    _read_json_string_array(text, lb) -> (String, Int)
+
+Read a JSON array of strings whose opening bracket is at index `lb`. Returns the
+concatenated contents and the index just past the closing bracket.
+"""
+function _read_json_string_array(text::String, lb::Int)
+    parts = String[]
+    i = nextind(text, lb)
+    while true
+        c = text[i]
+        if c == '"'
+            s, i = _read_json_string(text, i)
+            push!(parts, s)
+        elseif c == ']'
+            return join(parts), nextind(text, i)
+        else
+            i = nextind(text, i)
+        end
+    end
+end
+
+"""
+    _notebook_code_source(path) -> String
+
+Concatenate the Julia source of every code cell in the `.ipynb` at `path`. Relies
+only on the JSON invariant that an unescaped double quote never appears inside a
+string, so `"cell_type"` and `"source"` reliably mark object keys.
+"""
+function _notebook_code_source(path::AbstractString)
+    text = read(path, String)
+    cells = String[]
+    pos = firstindex(text)
+    while true
+        ct = findnext("\"cell_type\"", text, pos)
+        ct === nothing && break
+        vq = findnext('"', text, nextind(text, last(ct)))
+        kind, after = _read_json_string(text, vq)
+        if kind == "code"
+            sk = findnext("\"source\"", text, after)
+            sk === nothing && break
+            lb = findnext('[', text, nextind(text, last(sk)))
+            src, after = _read_json_string_array(text, lb)
+            push!(cells, src)
+        end
+        pos = after
+    end
+    return join(cells, "\n\n")
+end
+
+@testset "test_nonlinear.ipynb  (T-GUARDRAIL: notebook executes)" begin
+    notebook = joinpath(@__DIR__, "human", "test_nonlinear.ipynb")
+    @test isfile(notebook)
+
+    code = _notebook_code_source(notebook)
+    # Extraction sanity: first and last code cells must be present.
+    @test occursin("StepIndexCrossSection", code)
+    @test occursin("Relative-shift error", code)
+
+    # Drop the Plots import (verbs stubbed below) and neutralise the one display
+    # call so the notebook runs headless without a Plots dependency.
+    code = replace(code, "using Plots, Printf, Statistics" => "using Printf, Statistics")
+    code = replace(code, "display(" => "identity(")
+    @test !occursin("using Plots", code)
+
+    sandbox = Module(:NotebookGuardSandbox)
+    Core.eval(sandbox, quote
+        _nbstub(args...; kwargs...) = nothing
+        const plot      = _nbstub
+        const plot!     = _nbstub
+        const vline!    = _nbstub
+        const vspan!    = _nbstub
+        const scatter!  = _nbstub
+        const annotate! = _nbstub
+        const gr        = _nbstub
+        const Plots     = (mm = 1.0,)   # only Plots.mm is referenced
+    end)
+
+    ran = try
+        redirect_stdio(stdout = devnull, stderr = devnull) do
+            Base.include_string(sandbox, code, "test_nonlinear.ipynb")
+        end
+        true
+    catch err
+        bt = catch_backtrace()
+        @error "test_nonlinear.ipynb failed to execute" exception = (err, bt)
+        false
+    end
+    @test ran
 end
