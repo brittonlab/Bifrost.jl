@@ -25,7 +25,8 @@ cte_value = cte(glass, T_K)
 #
 #################################################
 
-# Sellmeier polynomial coefficients from Leviton and Frey.
+# Sellmeier polynomial coefficients from Leviton and Frey,
+# Optomechanical Technologies for Astronomy 2006.
 
 const SILICA_TERM_1 = SellmeierTerm(
     T -> 1.10127 - 4.94251e-5*T + 5.27414e-7*T^2 - 1.59700e-9*T^3 + 1.75949e-12*T^4,

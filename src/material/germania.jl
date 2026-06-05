@@ -25,6 +25,8 @@ cte_value = cte(glass, T_K)
 #
 #################################################
 
+# Terms from Fleming, Applied Optics (1984)
+
 const GERMANIA_TERM_1 = SellmeierTerm(0.80686642, 0.068972606)
 const GERMANIA_TERM_2 = SellmeierTerm(0.71815848, 0.15396605)
 const GERMANIA_TERM_3 = SellmeierTerm(0.85416831, 11.841931)
@@ -62,6 +64,7 @@ GeO2() = PURE_GERMANIA
 #
 #################################################
 
+# From G. M. Rego, Sensors (2024)
 function thermo_optic_index_shift(material::GeO2, T_K)
     T = validate_model_temperature(T_K)
     Tref = GERMANIA_REFERENCE_TEMPERATURE_K
