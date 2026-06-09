@@ -12,7 +12,7 @@ This is a high-level schematic. Do not update it to reflect every file.
 ├── Project.toml
 ├── Manifest.toml
 ├── src                              [8]
-│   ├── material-properties.jl       [9]
+│   ├── material                     [9]
 │   ├── path-integral.jl             [11]
 │   ├── geometry                     [10]
 │   ├── fiber                        [12, 13, 14]
@@ -48,8 +48,9 @@ legacy behavior and must not be modified without explicit user authorization.
 
 ## Architectural Intent
 
-- Separate material physics, path geometry, fiber assembly, and numerical
-  propagation.
+- Dependencies between modules is strictly limited. Here, A <= B means B depends on A. 
+  - material <= fiber-cross-section <= fiber 
+  - geometry <= fiber 
 - Keep the core propagation API usable with any callable `K(s)` and `Kω(s)`.
 - Support continuous/function-valued geometry and spinning rather than only fixed
   pre-sliced segment grids.

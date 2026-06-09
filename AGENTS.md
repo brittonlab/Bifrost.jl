@@ -166,7 +166,7 @@ Do not break these without explicit user discussion:
 
 ## Physics Scope
 
-The model is valid for:
+The model must be run only be run in the following limits. 
 
 - Single-mode fiber: V < 2.405
 - Weakly guiding fiber: Δn ≪ 1
