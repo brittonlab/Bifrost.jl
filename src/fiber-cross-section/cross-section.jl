@@ -1,14 +1,13 @@
 """
-This file provides the FiberCrossSection abstract structure for containing
-specific cross section types in the fiber-cross-sections directory.
+Shared base for the concrete cross sections in the `fiber-cross-section`
+directory. Provides the `FiberCrossSection` abstract type, the
+`BirefringenceResponse` structure, and the common validation methods used by
+those files.
 
-These files should intentionally model only quantities that are meaningful
+Files in this directory intentionally model only quantities that are meaningful
 for a single transverse slice of fiber of infinitesimal length. They exclude
-any property that depends on fiber length, path through space, accumulated phase,
-or concatenation of segments.
-
-This file also provides the BirefringenceResponse structure as well as some
-common validation methods.
+any property that depends on fiber length, path through space, accumulated
+phase, or concatenation of segments, and depend only on `material-properties.jl`.
 """
 
 #################################################
@@ -51,8 +50,8 @@ function validate_bend_radius(bend_radius_m)
 end
 
 function validate_axis_ratio(axis_ratio)
-    if !(isfinite(axis_ratio) && axis_ratio > zero(axis_ratio))
-        throw(ArgumentError("axis_ratio must be a finite positive value"))
+    if !(isfinite(axis_ratio) && axis_ratio >= one(axis_ratio))
+        throw(ArgumentError("axis_ratio must be a finite value >= 1 (major/minor)"))
     end
     return axis_ratio
 end

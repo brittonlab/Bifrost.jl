@@ -26,7 +26,7 @@ cte_value = cte(glass, T_K)
 #################################################
 #
 # Material constants:
-# All from !silica.jl and !germania.jl
+# All from silica.jl and germania.jl
 #
 #################################################
 
@@ -38,6 +38,7 @@ cte_value = cte(glass, T_K)
 
 struct SilicaGermaniaGlass <: AbstractMaterial
     x_ge::Float64
+    
     function SilicaGermaniaGlass(x_ge::Real)
         xf = validate_molar_fraction(x_ge)
         return new(xf)
@@ -80,9 +81,3 @@ poisson_ratio(glass::SilicaGermaniaGlass, _) = interpolate_scalar(SILICA_POISSON
 photoelastic_constants(glass::SilicaGermaniaGlass, _) = interpolate_pair(SILICA_PHOTOELASTIC_CONSTANTS, GERMANIA_PHOTOELASTIC_CONSTANTS, glass.x_ge)
 
 youngs_modulus(glass::SilicaGermaniaGlass, _) = interpolate_scalar(SILICA_YOUNGS_MODULUS, GERMANIA_YOUNGS_MODULUS, glass.x_ge)
-
-function nonlinear_refractive_index(glass::SilicaGermaniaGlass, λ, T_K)
-    validate_model_wavelength(λ)
-    validate_model_temperature(T_K)
-    return interpolate_scalar(SILICA_N2, GERMANIA_N2, glass.x_ge)
-end

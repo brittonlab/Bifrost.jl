@@ -23,7 +23,7 @@
 #
 # Two HTML files are written:
 #   benchmark-mcm-propagate.html  — bar chart + table for propagate_fiber
-#   benchmark-mcm-modify.html     — bar chart + table for modify + propagate_fiber
+#   benchmark-mcm-build.html      — bar chart + table for build + propagate_fiber
 #
 # `demo3benchmark_all()` runs both and writes `output/demo-index.html`.
 
@@ -95,8 +95,7 @@ function _run_benchmarks(; scenario::Symbol = :propagate)
         if scenario === :propagate
             # Benchmark: propagate_fiber only (fiber pre-built)
             fiber  = _bench_build_fiber(make_T)
-            fn     = () -> propagate_fiber(fiber; λ_m = _MCM_DEMO_λ_M,
-                              rtol = 1e-5, atol = 1e-9, h_min = 1e-12)
+            fn     = () -> propagate_fiber(fiber; λ_m = _MCM_DEMO_λ_M)
         else
             # Benchmark: fiber build (incl. :T_K thermal scaling) + propagate
             T_val  = make_T()
@@ -104,11 +103,10 @@ function _run_benchmarks(; scenario::Symbol = :propagate)
             ΔT_K   = T_K - _MCM_DEMO_T_REF_K
             fn     = () -> begin
                 # The build (with thermal scaling) happens here so the benchmark
-                # covers it, mirroring the old modify timing.
+                # covers fiber construction and propagation together.
                 f2 = Fiber(_mcm_demo_fiber(ΔT_K).path;
                            cross_section = _MCM_DEMO_XS, T_ref_K = T_K)
-                propagate_fiber(f2; λ_m = _MCM_DEMO_λ_M,
-                                rtol = 1e-5, atol = 1e-9, h_min = 1e-12)
+                propagate_fiber(f2; λ_m = _MCM_DEMO_λ_M)
             end
         end
 
@@ -242,7 +240,7 @@ function demo_benchmark_mcm_propagate(;
 )
     desc = "MCM benchmark: propagate_fiber wall time across Float64, " *
            "Particles(2000), StaticParticles(50/100/200).  " *
-           "The reference fiber now includes spinning sensitivity in addition to " *
+           "The reference fiber now includes spin sensitivity in addition to " *
            "temperature dependence.  First-call includes JIT; steady-state is " *
            "post-JIT minimum."
 
@@ -253,7 +251,7 @@ function demo_benchmark_mcm_propagate(;
     _bench_html(
         results,
         "MCM benchmark — propagate_fiber (log scale)",
-        "Fiber: straight 5 m → helix (D=0.05 m, ~10002 turns, spinning + " *
+        "Fiber: straight 5 m → helix (D=0.05 m, ~10002 turns, spin + " *
         "temperature-sensitive) → straight 5 m → helix → straight 5 m. " *
         "λ = 1550 nm.  M1: NEON 128-bit SIMD (2×f64/lane); StaticParticles " *
         "sweet spot ≈ N = 50–100.",
@@ -264,33 +262,33 @@ function demo_benchmark_mcm_propagate(;
 end
 
 """
-    demo_benchmark_mcm_modify_propagate(; output_dir = …)
+    demo_benchmark_mcm_build_propagate(; output_dir = …)
 
-Benchmark `modify + Fiber + propagate_fiber` together — the full
+Benchmark fiber construction and `propagate_fiber` together — the full
 per-sample pipeline — across Float64, Particles(2000), and
 StaticParticles(50/100/200).
 """
-function demo_benchmark_mcm_modify_propagate(;
+function demo_benchmark_mcm_build_propagate(;
     output_dir::AbstractString = joinpath(@__DIR__, "..", "..", "output"),
 )
-    desc = "MCM benchmark: modify + Fiber + propagate_fiber wall time across " *
+    desc = "MCM benchmark: Fiber + propagate_fiber wall time across " *
            "Float64, Particles(2000), StaticParticles(50/100/200).  " *
-           "The reference fiber now includes spinning sensitivity in addition to " *
-           "temperature dependence, and timing covers the full modify + " *
+           "The reference fiber now includes spin sensitivity in addition to " *
+           "temperature dependence, and timing covers the full build + " *
            "propagate pipeline."
 
-    println("Running modify + propagate_fiber benchmarks …")
-    results = _run_benchmarks(; scenario = :modify_propagate)
+    println("Running build + propagate_fiber benchmarks …")
+    results = _run_benchmarks(; scenario = :build_propagate)
 
-    out = joinpath(output_dir, "benchmark-mcm-modify-propagate.html")
+    out = joinpath(output_dir, "benchmark-mcm-build-propagate.html")
     _bench_html(
         results,
-        "MCM benchmark — modify + propagate_fiber (log scale)",
-        "Same spinning + temperature-sensitive fiber as above.  Timing includes " *
-        "modify() geometry rebuild, Fiber() construction, and propagate_fiber().",
+        "MCM benchmark — build + propagate_fiber (log scale)",
+        "Same spin + temperature-sensitive fiber as above.  Timing includes " *
+        "thermal geometry build, Fiber() construction, and propagate_fiber().",
         out,
     )
-    println("Wrote modify + propagate_fiber benchmark to: ", out)
+    println("Wrote build + propagate_fiber benchmark to: ", out)
     return (path = out, desc = desc)
 end
 
@@ -300,7 +298,7 @@ end
 
 const DEMO3BENCHMARK_INDEX = [
     (group = "benchmarks", fn = demo_benchmark_mcm_propagate,         kwargs = (;)),
-    (group = "benchmarks", fn = demo_benchmark_mcm_modify_propagate,  kwargs = (;)),
+    (group = "benchmarks", fn = demo_benchmark_mcm_build_propagate, kwargs = (;)),
 ]
 
 """

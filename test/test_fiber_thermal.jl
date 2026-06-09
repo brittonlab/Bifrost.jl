@@ -328,12 +328,12 @@ end
 end
 
 # -----------------------------------------------------------------------
-# Material spinning under thermal expansion
+# Material spin under thermal expansion
 # -----------------------------------------------------------------------
 
-@testset "Fiber :T_K — preserves constant spinning rate; total scales with length" begin
+@testset "Fiber :T_K — preserves constant spin rate; total scales with length" begin
     # T-PHYSICS: thermal expansion scales arc length by α but leaves the spin
-    # rate τ unchanged, so the integrated spinning ∫τ ds scales by α.
+    # rate τ unchanged, so the integrated spin ∫τ ds scales by α.
     α = 1.05
     τ = 1.5
     spec = sb -> straight!(sb; length = 2.0, meta = _ft_mcm(α))
@@ -348,8 +348,8 @@ end
     Ls = Float64(_qc_nominalize(arc_length(scal)))
     @test Ls ≈ α * Lb atol = 1e-9
 
-    Ωb = total_spinning(base; s_start = 0.0, s_end = Lb)
-    Ωs = total_spinning(scal; s_start = 0.0, s_end = Ls)
+    Ωb = total_spin(base; s_start = 0.0, s_end = Lb)
+    Ωs = total_spin(scal; s_start = 0.0, s_end = Ls)
     @test Ωb ≈ τ * Lb atol = 1e-9
     @test Ωs ≈ α * Ωb rtol = 1e-9
 end

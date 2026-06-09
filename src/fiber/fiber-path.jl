@@ -67,7 +67,7 @@ end
 
 # Path-backed fibers use the path's local normal/binormal frame. The bend
 # axis is the curvature normal, so the local transverse bend components are
-# (κ, 0) in that frame. Frame rotation enters through the path spinning rate.
+# (κ, 0) in that frame. Frame rotation enters through the path spin rate.
 function bend_components(path::Union{SubpathBuilt, PathBuilt}, s::Real)
     κ = curvature(path, s)
     if κ == zero(κ)
@@ -245,6 +245,7 @@ function _resolve_thermal_and_tension(sub::Subpath, cross_section::FiberCrossSec
         _scale_inverse_twist_rate(sub.jumpto_twist, seal_factor),
         sub.jumpto_natural, sub.jumpto_natural_extra,
         sub.spin_rate, sub._spin_phi_at_s0,
+        sub.inherit_start_point, sub.inherit_start_tangent, sub.inherit_start_curvature,
     )
     return (resolved, jumpto_target_length)
 end
@@ -260,8 +261,13 @@ function _build_perturbed(subs::Vector{Subpath}, cross_section::FiberCrossSectio
     # thermal+perturbed built Subpath before this one is built.
     builts = Vector{SubpathBuilt}(undef, length(subs))
     for i in eachindex(subs)
-        sub = i == 1 ? subs[1] :
-              PathGeometry._resolve_inherited_spin(subs[i], builts[i-1])
+        sub = subs[i]
+        if i > 1
+            # Resolve start-state then spin inheritance against the prior
+            # thermal+perturbed built Subpath, mirroring build(::Vector{Subpath}).
+            sub = PathGeometry._resolve_inherited_start(sub, builts[i-1])
+            sub = PathGeometry._resolve_inherited_spin(sub, builts[i-1])
+        end
         resolved, target = _resolve_thermal_and_tension(sub, cross_section, T_ref_K)
         builts[i] = build(resolved; perturb = true, jumpto_target_length = target)
     end

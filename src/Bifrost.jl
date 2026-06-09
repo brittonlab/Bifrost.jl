@@ -27,7 +27,7 @@ end
 module MaterialProperties
     using LinearAlgebra
     using Printf
-    include("material-properties.jl")
+    include("material/material-properties.jl")
 
     include("material/silica.jl")
     include("material/germania.jl")
@@ -61,7 +61,7 @@ end
 module FiberCS
     using LinearAlgebra
     using ..MaterialProperties
-    include("fiber/fiber-cross-section.jl")
+    include("fiber-cross-section/cross-section.jl")
 
     include("fiber-cross-section/step-index.jl")
     include("fiber-cross-section/graded-index.jl")
@@ -77,8 +77,8 @@ module FiberPath
     # Internal cross-module references. The geometry-layer perturbation mechanism
     # (used by the fiber's thermal :T_K interpretation) and a couple of helpers
     # are underscore-prefixed and not exported.
-    using ..PathGeometry: _scale_length_fields, _scale_inverse_twist_rate, _length_fields,
-                          _qc_nominalize
+    using ..PathGeometry: _scale_length_fields, _scale_inverse_twist_rate, _meta_without,
+                          _length_fields, _qc_nominalize, _resolve_inherited_start
     using ..FiberCS
     include("fiber/fiber-path.jl")
     import ..Bifrost: _export_public!

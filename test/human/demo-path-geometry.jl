@@ -3,13 +3,12 @@
 #
 # Geometry-only demos used as a human-in-the-loop visual debug tool for
 # `path-geometry*.jl`. Loads only the geometry layer (no fiber, no
-# cross-section, no propagation). Each demo function authors a Subpath
-# (or PathBuilt) using the new SubpathBuilder API, builds it, and writes
-# an interactive Plotly HTML to `julia-port/output/`.
+# cross-section, no propagation). Each demo function authors a SubpathBuilder
+# (or PathBuilt), builds it, and writes an interactive Plotly HTML to `output/`.
 #
 # Run all demos:
 #
-#     include("julia-port/demo-path-geometry.jl")
+#     include("test/human/demo-path-geometry.jl")
 #     demo_path_geometry_all()
 # =====================================================================
 
@@ -37,7 +36,7 @@ function _plot_full(p::PathGeometry.PathBuilt; output, title, fidelity)
 end
 
 # =====================================================================
-# 2.1 Simple multi-segment Subpath (mirrors old demo_path_geometry).
+# 2.1 Simple multi-segment Subpath.
 # =====================================================================
 
 function demo_path_geometry_simple(;
@@ -56,8 +55,7 @@ function demo_path_geometry_simple(;
     PG.bend!(sb; radius = 0.06, angle = π / 3, meta = [PG.Nickname("Bend")])
     PG.straight!(sb; length = 0.08, meta = [PG.Nickname("Straight")])
     PG.seal!(sb)
-    sub = PG.Subpath(sb)
-    b = PG.build(sub)
+    b = PG.build(sb)
     println("Arc length: ", PG.path_length(b))
     println("Writhe:     ", PG.writhe(b; n = 128))
     plot_path = _plot_full(b; output, title, fidelity)
@@ -66,7 +64,7 @@ function demo_path_geometry_simple(;
 end
 
 # =====================================================================
-# 2.2 Segment labels (mirrors old demo_path_geometry_segment_labels).
+# 2.2 Segment labels.
 # =====================================================================
 
 function demo_path_geometry_segment_labels(;
@@ -83,9 +81,10 @@ function demo_path_geometry_segment_labels(;
     PG.catenary!(sb; a = 0.04, length = 0.08, axis_angle = 0.0,
                  meta = [PG.Nickname("sag")])
     PG.helix!(sb; radius = 0.025, pitch = 0.015, turns = 1.2,
-              axis_angle = 0.0, meta = [PG.Nickname("spinning section")])
+              axis_angle = 0.0, meta = [PG.Nickname("spin section")])
     PG.straight!(sb; length = 0.06, meta = [PG.Nickname("lead-out")])
-    b = PG.build(PG.Subpath(PG.seal!(sb)))
+    PG.seal!(sb)
+    b = PG.build(sb)
     println("Arc length: ", PG.path_length(b), " m")
     plot_path = _plot_full(b; output, title, fidelity)
     println("Wrote ", plot_path)
@@ -104,7 +103,8 @@ function _demo_helix(axis_angle::Float64; output, fidelity, title)
     PG.helix!(sb; radius = 0.03, pitch = 0.02, turns = 2.0,
               axis_angle = axis_angle, meta = [PG.Nickname("Helix")])
     PG.straight!(sb; length = 0.05, meta = [PG.Nickname("Straight")])
-    b = PG.build(PG.Subpath(PG.seal!(sb)))
+    PG.seal!(sb)
+    b = PG.build(sb)
     println("Helix axis_angle=", axis_angle, ": arc_length=",
             round(PG.path_length(b); digits = 4), " m")
     plot_path = _plot_full(b; output, title, fidelity)
@@ -133,9 +133,8 @@ demo_path_geometry_helix_2pi_3(;
 # =====================================================================
 # 2.4 jumps_min_radius — paddle pattern realized as a PathBuilt.
 #
-# Old demo: alternating straight / jumpto / straight / jumpto / ...
-# In the new architecture each `jumpto!` seals a Subpath, so the
-# original 4-segment 4-jump pattern becomes 5 Subpaths.
+# Alternating straight sections and terminal connectors are represented as a
+# `PathBuilt` assembled from five sealed `SubpathBuilder`s.
 # =====================================================================
 
 function demo_path_geometry_jumps_min_radius(;
@@ -154,34 +153,31 @@ function demo_path_geometry_jumps_min_radius(;
                incoming_tangent = (0.0, 0.0, -1.0),
                min_bend_radius = 0.4)
 
-    # Subpath 2: starts at (1,0,1) heading -z, straight to (1,0,0), seals
-    # to (2,0,0) with incoming tangent (0,0,1).
+    # Subpath 2: inherits sb1's endpoint (1,0,1) heading -z via :inherit, runs
+    # straight to (1,0,0), seals to (2,0,0) with incoming tangent (0,0,1). The
+    # start coordinates flow from sb1 rather than being hand-loaded.
     sb2 = PG.SubpathBuilder()
-    PG.start!(sb2; point = (1.0, 0.0, 1.0),
-                  outgoing_tangent = (0.0, 0.0, -1.0))
+    PG.start!(sb2, :inherit)
     PG.straight!(sb2; length = 1.0, meta = [PG.Nickname("Sub2 straight")])
     PG.jumpto!(sb2; point = (2.0, 0.0, 0.0),
                incoming_tangent = (0.0, 0.0, 1.0),
                min_bend_radius = 0.1)
 
-    # Subpath 3: starts at (2,0,0) heading +z, straight to (2,0,1),
+    # Subpath 3: inherits sb2's endpoint (2,0,0) heading +z, straight to (2,0,1),
     # seals to (3,0,1) with incoming tangent (0,0,-1).
     sb3 = PG.SubpathBuilder()
-    PG.start!(sb3; point = (2.0, 0.0, 0.0),
-                  outgoing_tangent = (0.0, 0.0, 1.0))
+    PG.start!(sb3, :inherit)
     PG.straight!(sb3; length = 1.0, meta = [PG.Nickname("Sub3 straight")])
     PG.jumpto!(sb3; point = (3.0, 0.0, 1.0),
                incoming_tangent = (0.0, 0.0, -1.0),
                min_bend_radius = 0.05)
 
-    # Subpath 4: starts at (3,0,1) heading -z, straight + interior JumpBy.
-    # JumpBy delta is in the local frame; after the straight, local +z is
-    # global -z, so delta=(-1,0,0) (local) lands at (2,0,0) heading +z.
-    # Seal with an explicit jumpto! at that landing point so the endpoint is
-    # declared up front — Subpath 5 starts there directly, no probe build.
+    # Subpath 4: inherits sb3's endpoint (3,0,1) heading -z, straight + interior
+    # JumpBy. JumpBy delta is in the local frame; after the straight, local +z is
+    # global -z, so delta=(-1,0,0) (local) lands at (2,0,0) heading +z. Seal with
+    # an explicit jumpto! at that landing point.
     sb4 = PG.SubpathBuilder()
-    PG.start!(sb4; point = (3.0, 0.0, 1.0),
-                  outgoing_tangent = (0.0, 0.0, -1.0))
+    PG.start!(sb4, :inherit)
     PG.straight!(sb4; length = 1.0, meta = [PG.Nickname("Sub4 straight")])
     PG.jumpby!(sb4; delta = (-1.0, 0.0, 0.0),
                tangent = (0.0, 0.0, -1.0),
@@ -190,15 +186,14 @@ function demo_path_geometry_jumps_min_radius(;
     PG.jumpto!(sb4; point = (2.0, 0.0, 0.0),
                incoming_tangent = (0.0, 0.0, 1.0))
 
-    # Subpath 5: continues straight from sb4's landing point (2,0,0), +z.
+    # Subpath 5: inherits sb4's landing point (2,0,0) heading +z, continues
+    # straight.
     sb5 = PG.SubpathBuilder()
-    PG.start!(sb5; point = (2.0, 0.0, 0.0),
-                  outgoing_tangent = (0.0, 0.0, 1.0))
+    PG.start!(sb5, :inherit)
     PG.straight!(sb5; length = 1.0, meta = [PG.Nickname("Sub5 straight")])
     sb5 = PG.seal!(sb5)
 
-    p = PG.build([PG.Subpath(sb1), PG.Subpath(sb2), PG.Subpath(sb3),
-                  PG.Subpath(sb4), PG.Subpath(sb5)])
+    p = PG.build([sb1, sb2, sb3, sb4, sb5])
     println("PathBuilt arc length: ", PG.path_length(p), " m")
     plot_path = _plot_full(p; output, title, fidelity)
     println("Wrote ", plot_path)
@@ -223,27 +218,25 @@ function demo_path_geometry_pathbuilt(;
     PG.jumpto!(sb1; point = (0.0, 0.0, 0.2),
                incoming_tangent = (0.0, 0.0, 1.0))
 
-    # Subpath 2: starts at (0,0,0.2) tangent +z, quarter bend (axis_angle=0),
-    # so end position (R, 0, 0.2 + R) and end tangent +x.
+    # Subpath 2: inherits sb1's endpoint (0,0,0.2) tangent +z, quarter bend
+    # (axis_angle=0), so end position (R, 0, 0.2 + R) and end tangent +x.
     R2 = 0.05
     sb2 = PG.SubpathBuilder(meta = [PG.Nickname("Subpath 2: bend")])
-    PG.start!(sb2; point = (0.0, 0.0, 0.2),
-                  outgoing_tangent = (0.0, 0.0, 1.0))
+    PG.start!(sb2, :inherit)
     PG.bend!(sb2; radius = R2, angle = π / 2,
              meta = [PG.Nickname("90° bend")])
     PG.jumpto!(sb2; point = (R2, 0.0, 0.2 + R2),
                incoming_tangent = (1.0, 0.0, 0.0))
 
-    # Subpath 3: starts at (R2, 0, 0.2 + R2) tangent +x, helix in transverse
-    # plane (axis_angle=0). Seal at the helix's natural exit.
+    # Subpath 3: inherits sb2's endpoint (R2, 0, 0.2 + R2) tangent +x, helix in
+    # the transverse plane (axis_angle=0). Seal at the helix's natural exit.
     sb3 = PG.SubpathBuilder(meta = [PG.Nickname("Subpath 3: helix")])
-    PG.start!(sb3; point = (R2, 0.0, 0.2 + R2),
-                  outgoing_tangent = (1.0, 0.0, 0.0))
+    PG.start!(sb3, :inherit)
     PG.helix!(sb3; radius = 0.025, pitch = 0.02, turns = 1.5,
               axis_angle = 0.0, meta = [PG.Nickname("Helix")])
     sb3 = PG.seal!(sb3)
 
-    p = PG.build([PG.Subpath(sb1), PG.Subpath(sb2), PG.Subpath(sb3)])
+    p = PG.build([sb1, sb2, sb3])
     println("PathBuilt: ", length(p.subpaths), " subpaths")
     println("PathBuilt arc length: ", PG.path_length(p), " m")
     plot_path = _plot_full(p; output, title, fidelity)
@@ -261,10 +254,12 @@ end
 const _DEMO_PATH_GEOMETRY_INDEX = [
     (group = "Subpath",
      fn    = demo_path_geometry_simple,
-     desc  = "Single Subpath: straight + bend + straight + catenary + bend + straight, sealed at the natural exit."),
+     desc  = "Single Subpath: straight + bend + straight + catenary + " *
+             "bend + straight, sealed at the natural exit."),
     (group = "Subpath",
      fn    = demo_path_geometry_segment_labels,
-     desc  = "Same shape as 'simple' but every segment carries a Nickname so labels render in the plot."),
+     desc  = "Same shape as 'simple' but every segment carries a Nickname " *
+             "so labels render in the plot."),
     (group = "Subpath — helix",
      fn    = demo_path_geometry_helix_0,
      desc  = "HelixSegment with axis_angle = 0."),
@@ -276,10 +271,12 @@ const _DEMO_PATH_GEOMETRY_INDEX = [
      desc  = "HelixSegment with axis_angle = 2π/3."),
     (group = "PathBuilt",
      fn    = demo_path_geometry_jumps_min_radius,
-     desc  = "Paddle pattern: 5 Subpaths joined at jumpto endpoints, each with its own min_bend_radius. Includes one interior JumpBy segment."),
+     desc  = "Paddle pattern: 5 Subpaths joined at jumpto endpoints, each " *
+             "with its own min_bend_radius. Includes one interior JumpBy segment."),
     (group = "PathBuilt",
      fn    = demo_path_geometry_pathbuilt,
-     desc  = "Three Subpaths (straight, quarter-bend, helix) stitched into a PathBuilt. Demonstrates the conformity check at each Subpath boundary."),
+     desc  = "Three Subpaths (straight, quarter-bend, helix) stitched into " *
+             "a PathBuilt. Demonstrates the conformity check at each boundary."),
 ]
 
 function demo_path_geometry_all(;

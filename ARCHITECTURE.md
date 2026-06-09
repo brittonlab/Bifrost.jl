@@ -8,12 +8,12 @@ This is a high-level schematic. Do not update it to reflect every file.
 ├── AGENTS.md                        [2]
 ├── ARCHITECTURE.md
 ├── README.md                        [3]
-├── TODO.md                          [17]
 ├── Project.toml
 ├── Manifest.toml
 ├── src                              [8]
-│   ├── material                     [9]
 │   ├── path-integral.jl             [11]
+│   ├── material                     [9]
+|   ├── material/nonlinear           [9b]
 │   ├── geometry                     [10]
 │   ├── fiber                        [12, 13, 14]
 │   └── nonlinear                    [16]
@@ -27,9 +27,10 @@ This is a high-level schematic. Do not update it to reflect every file.
 - [2] Notes for tooling workflows.
 - [3] Primary project overview and scientific context.
 - [4L] Legacy Python implementation for birefringence simulation.
-- [7] Documentation, research references, and source material.
+- [7] Documenter.jl documentation, research references, and source material.
 - [8] Active Julia source tree and solver architecture.
 - [9] Standalone material models and refractive-index behavior.
+- [9b] Nonlinear material properties. 
 - [10] Standalone path construction and differential geometry.
 - [11] Generic adaptive propagation for callable Jones generators.
 - [12] Cross-sectional fiber optics and local birefringence responses.
@@ -38,7 +39,6 @@ This is a high-level schematic. Do not update it to reflect every file.
 - [15] Runnable Julia demos; visual demos write HTML files to `output/`.
 - [16] Reserved Julia nonlinear namespace; legacy Raman and Brillouin Python
   scripts remain under `test/legacy-python/`.
-- [17] TODO list for humans. Starting TODO items requires user authorization.
 - [19] Julia tests.
 - [20] Output of demo methods and generated visual artifacts.
 
@@ -52,7 +52,7 @@ legacy behavior and must not be modified without explicit user authorization.
   - material <= fiber-cross-section <= fiber 
   - geometry <= fiber 
 - Keep the core propagation API usable with any callable `K(s)` and `Kω(s)`.
-- Support continuous/function-valued geometry and spinning rather than only fixed
+- Support continuous/function-valued geometry and spin rather than only fixed
   pre-sliced segment grids.
 - Keep lossless Jones propagation isolated from any future gain/loss model.
 - Preserve MCM compatibility on uncertainty-carrying code paths.
@@ -71,8 +71,8 @@ The fiber-specific layers combine those pieces:
 
 | File | How it extends the standalone pieces |
 | --- | --- |
-| `fiber-cross-section.jl` | Adds step-index fiber optics and birefringence responses. |
-| `fiber-path.jl` | Binds path geometry to a cross section and assembles bend/spinning `K` and `Kω`. |
+| `fiber-cross-section/` | Adds step-index fiber optics and birefringence responses (`cross-section.jl` base + concrete cross sections). |
+| `fiber-path.jl` | Binds path geometry to a cross section and assembles bend/spin `K` and `Kω`. |
 
 ## Layered Design
 
@@ -88,24 +88,31 @@ The fiber-specific layers combine those pieces:
    - `build(Subpath(builder)) → SubpathBuilt` compiles to an immutable form;
      `build(::Vector{Subpath}) → PathBuilt` concatenates multiple independent
      subpaths under a shared global arc length.
+   - `start!(builder, :inherit)` (or per-field `point=:inherit`, etc.) defers a
+     subpath's start state to the previous subpath's endpoint; `:inherit`
+     is rejected on the first
+     subpath and on any standalone build (no predecessor). Hand-loaded start
+     coordinates remain valid and are still validated by the conformity check.
    - `build(...; perturb=true)` applies the field-level `MCMadd`/`MCMmul` that
      name a segment's own fields (the mechanism lives in
      `geometry/path-geometry-perturb.jl`); `perturb=false` (default) is nominal.
    - **Invariant:** the geometry layer carries any meta it cannot interpret
      blindly and never errors on it — in particular it never references `:T_K`.
      Interpretation of foreign meta is a consuming layer's job (the fiber).
-   - Resolves material spinning metadata into path-coordinate spinning runs.
+   - Resolves the per-Subpath `spin_rate` into path-coordinate material spin.
    - Resolves `JumpBy` and the terminal `jumpto!` connector into G2 quintic
      connectors at build time.
-   - The `AbstractMeta` vocabulary (`Nickname`, `MCMadd`, `MCMmul`, `Spinning`)
+   - The `AbstractMeta` vocabulary (`Nickname`, `MCMadd`, `MCMmul`)
      lives in `geometry/path-geometry-meta.jl`. It makes no reference to fiber.
+     (Material spin is a `start!(; spin_rate=…)` keyword, not meta.)
 
 1. **Material layer** (`material-properties.jl`)
 
    - Encodes intrinsic optical material properties.
    - Provides spectral responses and derivatives needed by DGD calculations.
 
-2. **Cross-section layer** (`fiber-cross-section.jl`)
+2. **Cross-section layer** (`fiber-cross-section/cross-section.jl` and concrete
+   cross sections in `fiber-cross-section/`)
 
    - Encodes transverse step-index fiber geometry.
    - Converts material properties into guided-index, dispersion, nonlinearity,
@@ -128,7 +135,7 @@ The fiber-specific layers combine those pieces:
      target length is set).
    - Keeps operating wavelength as a per-query argument rather than `Fiber`
      state.
-   - Assembles fiber-level bend and spinning generators `K(s)` and `Kω(s)`.
+   - Assembles fiber-level bend and spin generators `K(s)` and `Kω(s)`.
 
 4. **Propagation layer** (`path-integral.jl`)
 
@@ -164,7 +171,7 @@ The fiber-specific layers combine those pieces:
 
 - Path breakpoints are normalized and globally merged before piecewise
   propagation.
-- The propagator must not step across path segment or spinning-run boundaries.
+- The propagator must not step across path segment or spin-run boundaries.
 - Numerical tolerances (`rtol`, `atol`, step controls) are explicit API inputs,
   not hidden globals.
 - Global phase-insensitive error metrics are used in adaptive acceptance checks.

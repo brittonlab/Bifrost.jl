@@ -4,3 +4,28 @@ fiberinput_paddles_3d.html
 .DS_Store
 output/
 __pycache__/
+*.pyc
+
+# Documenter.jl build artifacts
+docs/build/
+docs/Manifest.toml
+actions-runner/
+
+# Local PR19 nonlinear-physics review scratch (not tracked)
+test/bifrost_pr19_review/BIFROST_PR19_nonlinear_physics_review.md
+test/bifrost_pr19_review/test_silica_nonlinear_pr19_physics_tests.jl
+test/bifrost_pr19_review/plots/brillouin_gain_lorentzian_1550.png
+test/bifrost_pr19_review/plots/brillouin_lorentzian_fwhm_check.png
+test/bifrost_pr19_review/plots/brillouin_peak_gain_vs_wavelength.png
+test/bifrost_pr19_review/plots/brillouin_shift_vs_wavelength.png
+test/bifrost_pr19_review/plots/numeric_summary.json
+test/bifrost_pr19_review/plots/raman_gain_residual_vs_reference.png
+test/bifrost_pr19_review/plots/raman_gain_spectrum_1550.png
+test/bifrost_pr19_review/plots/raman_peak_gain_vs_wavelength.png
+test/bifrost_pr19_review/sources/13_13.20151066.pdf
+test/bifrost_pr19_review/sources/276_1_online.pdf
+test/bifrost_pr19_review/sources/C__eudora_encl_RamanPumpWavelength.pdf.pdf
+test/bifrost_pr19_review/sources/download_attempts.log
+test/bifrost_pr19_review/sources/josab-19-12-2886.pdf
+test/bifrost_pr19_review/sources/Rottwitt.pdf
+test/bifrost_pr19_review/src/generate_reference_plots.jl

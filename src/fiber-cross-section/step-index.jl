@@ -46,10 +46,20 @@ struct StepIndexCrossSection{T<:Real} <: FiberCrossSection
     core_diameter_m::T
     cladding_diameter_m::T
     # Intrinsic transverse core ellipticity. `ellipticity_axis_ratio` is the
-    # positive major/minor magnitude (1 ⇒ circular ⇒ no ellipticity
-    # birefringence); `ellipticity_axis_angle` (rad) is the major-axis
-    # orientation in the local transverse frame. The cross-section returns only
-    # the birefringence *magnitude*; the fiber generator orients it.
+    # major/minor magnitude and must be ≥ 1 (1 ⇒ circular ⇒ no ellipticity
+    # birefringence). Requiring ≥ 1 makes the major axis — and hence the angle
+    # below — unambiguous: an ellipse with ratio r < 1 is the same object as
+    # ratio 1/r rotated 90°, so callers express it canonically as ratio ≥ 1.
+    # The cross-section returns only the birefringence *magnitude*; the fiber
+    # generator orients it.
+
+    # `ellipticity_axis_angle` (rad) is the **major-axis** orientation in the
+    # local transverse frame, canonical in [0, π) (an ellipse is 180°-symmetric).
+    # When ellipticity_axis_angle = 0 the core's major axis is aligned with the
+    # curvature normal (the same direction the bend birefringence picks out).
+    # Increasing the angle rotates it toward the binormal, about the propagation
+    # tangent.
+
     ellipticity_axis_ratio::T
     ellipticity_axis_angle::T
 
@@ -414,13 +424,9 @@ function cutoff_wavelength(
     return (a + b) / 2
 end
 
-function eccentricity_squared(axis_ratio; signed::Bool = false)
+function eccentricity_squared(axis_ratio)
     ε = validate_axis_ratio(axis_ratio)
-    if ε >= one(ε)
-        return one(ε) - inv(ε)^2
-    end
-    value = one(ε) - ε^2
-    return signed ? -value : value
+    return one(ε) - inv(ε)^2
 end
 
 #################################################
@@ -431,8 +437,9 @@ end
 
 # The cross-section returns the birefringence **magnitude**; the fiber generator
 # orients the eigen-axes from `ellipticity_axis_angle` (plus spin/twist phase).
-# `eccentricity_squared` is therefore taken unsigned: an axis ratio and its
-# inverse describe the same ellipse rotated by 90°, i.e. equal magnitude.
+# `axis_ratio` is canonical (≥ 1, major/minor), so `eccentricity_squared` is a
+# single nonnegative branch `1 - 1/ε²`; orientation lives in the angle, not the
+# sign of the magnitude.
 function core_noncircularity_dω(style::SpectralStyle, fiber::StepIndexCrossSection, λ, T_K;
                                 axis_ratio = fiber.ellipticity_axis_ratio)
     terms = mode_terms(style, fiber, λ, T_K)
@@ -465,10 +472,10 @@ function asymmetric_thermal_stress_dω(
     α_clad = cte(fiber.cladding_material, T_K)
     T_soft = softening_temperature(fiber.core_material, T_K)
     ν = poisson_ratio(fiber.core_material, T_K)
-    # Magnitude convention (see `core_noncircularity_dω`): the ellipse-asymmetry
-    # factor is taken unsigned so ε and 1/ε give equal magnitude (orthogonal
-    # orientation supplied by the generator).
-    const_factor = 0.5 * (p11 - p12) * (α_clad - α_core) * abs(T_soft - T_K) / (1 - ν^2) * abs((ε - 1) / (ε + 1))
+    # `axis_ratio` is canonical (≥ 1, major/minor), so the ellipse-asymmetry factor
+    # `(ε - 1)/(ε + 1)` is already ≥ 0; the generator supplies orientation from the
+    # major-axis angle (see `core_noncircularity_dω`).
+    const_factor = 0.5 * (p11 - p12) * (α_clad - α_core) * abs(T_soft - T_K) / (1 - ν^2) * ((ε - 1) / (ε + 1))
     Δβ = terms.k0 * terms.modal_prefactor * terms.n_core^3 * const_factor
     dω = const_factor * (
         terms.dk0_dω * terms.modal_prefactor * terms.n_core^3 +
@@ -529,7 +536,16 @@ end
 # polarization tracks the geometric rotation of the medium (the leading `1`)
 # reduced by the photoelastic slip `n²(p₁₁−p₁₂)/2` (negative for silica), so the
 # net rotation rate is `(1 + n²(p₁₁−p₁₂)/2)·τ_m`. The generator places this on
-# the real antisymmetric (rotation) part of K; see `circular_birefringence_generator`.
+# the real antisymmetric (rotation) part of K; see `circular_birefringence_generator
+#
+# We believe this method is correct.
+# It is wrong in v1 of our 2025 paper [1] and in the seminal 1983 Rashleigh paper [2].
+# Our implementation agrees with [3] which contains experimental validation.
+#
+# [1] arxiv.org/abs/2510.01212v1
+# [2] 10.1109/JLT.1983.1072121
+# [3] 10.1016/j.yofte.2011.10.001
+
 function twisting_dω(
     style::SpectralStyle,
     fiber::StepIndexCrossSection,

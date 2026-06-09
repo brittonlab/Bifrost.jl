@@ -2,7 +2,7 @@
 Material properties for optical glasses.
 
 This file defines base types and common algebraic methods that will
-be available to all specific materials defined in the materials folder.
+be available to all specific materials defined in the material folder.
 
 Units (SI unless noted):
 - λ                     wavelength in m
@@ -13,20 +13,39 @@ Units (SI unless noted):
 - softening_temperature  K
 - youngs_modulus        Pa
 - nonlinear_refractive_index (n_2)  m²/W
+
+
+Specific materials should define all of the following.
+
+refractive_index(::ValueOnly, material::AbstractMaterial, λ, T_K)
+refractive_index(::WithDerivative, material::AbstractMaterial, λ, T_K)
+cte(material::AbstractMaterial, T_K)
+softening_temperature(material::AbstractMaterial, T_K)
+poisson_ratio(material::AbstractMaterial, T_K)
+photoelastic_constants(material::AbstractMaterial, T_K)
+youngs_modulus(material::AbstractMaterial, T_K)
+nonlinear_refractive_index(material::AbstractMaterial, λ, T_K)
+
 """
+
+const SPEED_OF_LIGHT_M_PER_S = 299_792_458.0
 
 abstract type AbstractMaterial end
 abstract type SpectralStyle end
 
-struct ValueOnly <: SpectralStyle end
-struct WithDerivative <: SpectralStyle end
-
+# dω is the ω-derivative at the parameters that produce value.
 struct SpectralResponse{T}
     value::T
     dω::T
 end
 
-const SPEED_OF_LIGHT_M_PER_S = 299_792_458.0
+struct ValueOnly <: SpectralStyle end
+struct WithDerivative <: SpectralStyle end
+
+# Shared by all materials to simplify the ValueOnly() case;
+# Users do not need to copy or override.
+refractive_index(material::AbstractMaterial, λ, T_K) =
+    refractive_index(ValueOnly(), material, λ, T_K)
 
 #################################################
 #
@@ -34,7 +53,6 @@ const SPEED_OF_LIGHT_M_PER_S = 299_792_458.0
 #
 #################################################
 
-# TODO Banner... validate ranges
 const MIN_VALID_TEMPERATURE_K = 243.0
 const MAX_VALID_TEMPERATURE_K = 373.0
 const MIN_VALID_WAVELENGTH_M = 1300e-9
@@ -99,49 +117,43 @@ end
 #
 #################################################
 
-struct TemperaturePolynomial
-    coeffs::NTuple{5, Float64}
-    TemperaturePolynomial(coeffs::NTuple{5, <:Real}) = new(map(Float64, coeffs))
+"""
+Most materials are modeled with the Sellmeier equation:
+``n^2 = 1 + \\sum_{i=1}^n B_i\\lambda^2/(\\lambda^2 - C_i^2)`` where ``B_i`` and ``C_i`` are
+strength and wavelength properties of each resonance used in the
+calculation. The functions
+
+    sellmeier_index_from_coefficients(coeffs, λ) -> Float64
+    sellmeier_index_from_coefficients_dω(coeffs, λ) -> SpectralResponse
+
+provide the refractive index given the Sellmeier coefficients B and C and the wavelength λ, with
+coeffs specified as an n-tuple of 2-tuples (B, C). Thus, if appropriate, your material could
+simply implement
+
+    refractive_index(::ValueOnly, material::YourMaterial, λ, T_K) = 
+        sellmeier_index_from_coefficients(YOUR_COEFFICIENTS, λ)
+    refractive_index(::WithDerivative, material::YourMaterial, λ, T_K) = 
+        sellmeier_index_from_coefficients_dω(YOUR_COEFFICIENTS, λ)
+
+Sellmeier coefficients are often functions of other parameters such as temperature or molar 
+fraction of a dopant. We provide the _evaluate_sellmeier_polynomials(B_coeffs, C_coeffs, x)
+and _evaluate_sellmeier_constants(coeffs, x) utilities; see silica.jl and germania.jl for
+examples of their use. 
+
+Note also that any implemented material must ensure compatibility with `Particles` to allow
+Monte Carlo calculation. This happens naturally through the Sellmeier structure included here.
+"""
+
+function _evaluate_sellmeier_polynomials(B_coeffs, C_coeffs, x)
+    return map((B, C) -> (evalpoly(x, B), evalpoly(x, C)), B_coeffs, C_coeffs)
 end
 
-function (poly::TemperaturePolynomial)(T_K)
-    value = zero(T_K)
-    power = one(T_K)
-    for coeff in poly.coeffs
-        value += coeff * power
-        power *= T_K
+function _evaluate_sellmeier_constants(coeffs, x)
+    scale = one(x)
+    return map(coeffs) do (B, C)
+        (B * scale, C * scale)
     end
-    return value
 end
-
-struct SellmeierConstantLaw
-    value::Float64
-    SellmeierConstantLaw(value::Real) = new(Float64(value))
-end
-
-(law::SellmeierConstantLaw)(x) = law.value * one(x)
-
-struct SellmeierQuadraticMolarLaw
-    quadratic::Float64
-    linear::Float64
-    SellmeierQuadraticMolarLaw(quadratic::Real, linear::Real) = new(Float64(quadratic), Float64(linear))
-end
-
-(law::SellmeierQuadraticMolarLaw)(x) = law.quadratic * x^2 + law.linear * x
-
-struct SellmeierTerm{TB, TC}
-    B_law::TB
-    C_law::TC
-end
-
-evaluate(term::SellmeierTerm, temperature_like) = (term.B_law(temperature_like), term.C_law(temperature_like))
-
-struct SellmeierCorrectionTerm
-    ΔB_law::SellmeierQuadraticMolarLaw
-    ΔC_law::SellmeierQuadraticMolarLaw
-end
-
-evaluate(term::SellmeierCorrectionTerm, molar_fraction) = (term.ΔB_law(molar_fraction), term.ΔC_law(molar_fraction))
 
 function sellmeier_index_from_coefficients(coeffs, λ)
     λ_m = validate_model_wavelength(λ)
@@ -169,24 +181,3 @@ function sellmeier_index_from_coefficients_dω(coeffs, λ)
     dλ_dω = -(λ_m^2) / (2π * SPEED_OF_LIGHT_M_PER_S)
     return SpectralResponse(n, dn_dλ * dλ_dω)
 end
-
-"""
-
-Generic interface documentation:
-Specific materials should define all of the following.
-
-refractive_index(::ValueOnly, material::AbstractMaterial, λ, T_K)
-refractive_index(::WithDerivative, material::AbstractMaterial, λ, T_K)
-cte(material::AbstractMaterial, T_K)
-softening_temperature(material::AbstractMaterial, T_K)
-poisson_ratio(material::AbstractMaterial, T_K)
-photoelastic_constants(material::AbstractMaterial, T_K)
-youngs_modulus(material::AbstractMaterial, T_K)
-nonlinear_refractive_index(material::AbstractMaterial, λ, T_K)
-
-"""
-
-# Shared by all materials to simplify the ValueOnly() case;
-# Users do not need to copy or override.
-refractive_index(material::AbstractMaterial, λ, T_K) =
-    refractive_index(ValueOnly(), material, λ, T_K)

@@ -25,63 +25,62 @@ n = refractive_index(glass, λ, T_K)
 cte_value = cte(glass, T_K)
 """
 
-const FLUORINE_TERM_1 = SellmeierCorrectionTerm(
-    SellmeierQuadraticMolarLaw(-61.25, 0.2565),
-    SellmeierQuadraticMolarLaw(-23.0, 0.101)
+const _FLUORINE_SELLMEIER_B_CORRECTION_COEFFS = (
+    (0.0, 0.2565, -61.25),
+    (0.0, -1.836, 73.9),
+    (0.0, -5.82, 233.5)
 )
 
-const FLUORINE_TERM_2 = SellmeierCorrectionTerm(
-    SellmeierQuadraticMolarLaw(73.9, -1.836),
-    SellmeierQuadraticMolarLaw(10.7, -0.005)
+const _FLUORINE_SELLMEIER_C_CORRECTION_COEFFS = (
+    (0.0, 0.101, -23.0),
+    (0.0, -0.005, 10.7),
+    (0.0, -24.695, 1090.5)
 )
-
-const FLUORINE_TERM_3 = SellmeierCorrectionTerm(
-    SellmeierQuadraticMolarLaw(233.5, -5.82),
-    SellmeierQuadraticMolarLaw(1090.5, -24.695)
-)
-
-const FLUORINE_CORRECTION_TERMS = (FLUORINE_TERM_1, FLUORINE_TERM_2, FLUORINE_TERM_3)
 
 struct SilicaFluorinatedGlass <: AbstractMaterial
     x_f::Float64
+
     function SilicaFluorinatedGlass(x_f::Real)
         xf = validate_molar_fraction(x_f)
         return new(xf)
     end
 end
 
-function sellmeier_coefficients(glass::SilicaFluorinatedGlass, T_K)
-    silica_coeffs = sellmeier_coefficients(PURE_SILICA, T_K)
+function _sellmeier_coefficients(glass::SilicaFluorinatedGlass, T_K)
+    silica_coeffs = _sellmeier_coefficients(PURE_SILICA, T_K)
     x_f = glass.x_f
-    return ntuple(i -> begin
-        B0, C0 = silica_coeffs[i]
-        ΔB, ΔC = evaluate(FLUORINE_CORRECTION_TERMS[i], x_f)
+    corrections = _evaluate_sellmeier_polynomials(
+        _FLUORINE_SELLMEIER_B_CORRECTION_COEFFS,
+        _FLUORINE_SELLMEIER_C_CORRECTION_COEFFS,
+        x_f
+    )
+    return map(silica_coeffs, corrections) do (B0, C0), (ΔB, ΔC)
         (B0 + ΔB, C0 + ΔC)
-    end, 3)
+    end
 end
 
-function refractive_index(::ValueOnly, glass::SilicaFluorinatedGlass, λ, T_K)
-    coeffs = sellmeier_coefficients(glass, T_K)
-    return sellmeier_index_from_coefficients(coeffs, λ)
+function refractive_index(::ValueOnly, material::SilicaFluorinatedGlass, λ, T_K)
+    return sellmeier_index_from_coefficients(_sellmeier_coefficients(material, T_K), λ)
 end
 
-function refractive_index(::WithDerivative, glass::SilicaFluorinatedGlass, λ, T_K)
-    coeffs = sellmeier_coefficients(glass, T_K)
-    return sellmeier_index_from_coefficients_dω(coeffs, λ)
+function refractive_index(::WithDerivative, material::SilicaFluorinatedGlass, λ, T_K)
+    return sellmeier_index_from_coefficients_dω(_sellmeier_coefficients(material, T_K), λ)
 end
 
 cte(::SilicaFluorinatedGlass, _) = unsupported_fluorine_property("cte")
 
-softening_temperature(::SilicaFluorinatedGlass, _) = unsupported_fluorine_property("softening_temperature")
+softening_temperature(::SilicaFluorinatedGlass, _) =
+    unsupported_fluorine_property("softening_temperature")
 
 poisson_ratio(::SilicaFluorinatedGlass, _) = unsupported_fluorine_property("poisson_ratio")
 
-photoelastic_constants(::SilicaFluorinatedGlass, _) = unsupported_fluorine_property("photoelastic_constants")
+photoelastic_constants(::SilicaFluorinatedGlass, _) =
+    unsupported_fluorine_property("photoelastic_constants")
 
-youngs_modulus(::SilicaFluorinatedGlass, _) = unsupported_fluorine_property("youngs_modulus")
-
-nonlinear_refractive_index(::SilicaFluorinatedGlass, _, _) = unsupported_fluorine_property("nonlinear_refractive_index")
+youngs_modulus(::SilicaFluorinatedGlass, _) =
+    unsupported_fluorine_property("youngs_modulus")
 
 function unsupported_fluorine_property(name::AbstractString)
-    throw(ArgumentError("$(name) is not defined for fluorine-doped silica in the current model"))
+    msg = "$(name) is not defined for fluorine-doped silica in the current model"
+    throw(ArgumentError(msg))
 end

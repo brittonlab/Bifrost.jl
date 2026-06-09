@@ -84,16 +84,19 @@ const _MCM_DEMO_HELIX1_TURNS = 10001.892069208387
 # Build the 5-segment fiber spec.  `ΔT_K` is the temperature offset applied
 # to the first helix via MCMadd(:T_K, ΔT_K); pass 0.0 for the baseline.
 function _mcm_demo_fiber(ΔT_K)
-    # Sinusoidal spinning over the whole Subpath: amplitude 1 rad/m, period 100 m,
+    # Sinusoidal spin over the whole Subpath: amplitude 1 rad/m, period 100 m,
     # set once at the Subpath start and covering every segment to the fiber end.
     spec = PathSpecBuilder(; spin_rate = s -> sin(2π * s / 100.0))
     straight!(spec; length = 5.0)
     helix!(spec; radius = 0.025, pitch = 0.05, turns = _MCM_DEMO_HELIX1_TURNS,
            axis_angle = 0.0,
-           meta = AbstractMeta[MCMadd(:T_K, ΔT_K)])
-    straight!(spec; length = 5.0)
-    helix!(spec; radius = 0.025, pitch = 0.05, turns = 10000.0, axis_angle = 0.0)
-    straight!(spec; length = 5.0)
+           meta = AbstractMeta[Nickname("temperature-sensitive helix"),
+                               MCMadd(:T_K, ΔT_K)])
+    straight!(spec; length = 5.0, meta = [Nickname("spacer")])
+    helix!(spec; radius = 0.025, pitch = 0.05, turns = 10000.0,
+           axis_angle = 0.0, meta = [Nickname("reference helix")])
+    straight!(spec; length = 5.0, meta = [Nickname("lead-out")])
+    seal!(spec)
     # Fiber(builder) applies the :T_K thermal scaling (via the cladding CTE at
     # T_ref) during the single build; no separate modify step.
     return Fiber(spec; cross_section = _MCM_DEMO_XS, T_ref_K = _MCM_DEMO_T_REF_K)
@@ -134,8 +137,10 @@ function demo_mcm_temperature_ptf(;
     fiber_mcm     = _mcm_demo_fiber(ΔT_K_particles)
     modified_path = fiber_mcm.path  # thermal already applied at construction
     fiber_mod     = Fiber(modified_path; cross_section = _MCM_DEMO_XS, T_ref_K = T_K_particles)
-    J_p, _        = propagate_fiber(fiber_mod; λ_m = _MCM_DEMO_λ_M,
-                                    rtol = 1e-5, atol = 1e-9, h_min = 1e-12)
+    J_p, _        = propagate_fiber(
+        fiber_mod;
+        λ_m = _MCM_DEMO_λ_M,
+    )
     MonteCarloMeasurements.unsafe_comparisons(false)
 
     N = 50
@@ -271,8 +276,10 @@ function demo_mcm_temperature_ptf_scatter(;
                       cross_section = _MCM_DEMO_XS,
                       T_ref_K       = T_K_particles)
 
-    J_p, _ = propagate_fiber(fiber_mod; λ_m = _MCM_DEMO_λ_M,
-                             rtol = 1e-5, atol = 1e-9, h_min = 1e-12)
+    J_p, _ = propagate_fiber(
+        fiber_mod;
+        λ_m = _MCM_DEMO_λ_M,
+    )
     MonteCarloMeasurements.unsafe_comparisons(false)
 
     # Extract per-particle output state: apply J to [1,0] for each particle.
