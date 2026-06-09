@@ -26,7 +26,7 @@ cte_value = cte(glass, T_K)
 #################################################
 #
 # Material constants:
-# All from !silica.jl and !germania.jl
+# All from silica.jl and germania.jl
 #
 #################################################
 

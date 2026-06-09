@@ -13,6 +13,19 @@ Units (SI unless noted):
 - softening_temperature  K
 - youngs_modulus        Pa
 - nonlinear_refractive_index (n_2)  m²/W
+
+
+Specific materials should define all of the following.
+
+refractive_index(::ValueOnly, material::AbstractMaterial, λ, T_K)
+refractive_index(::WithDerivative, material::AbstractMaterial, λ, T_K)
+cte(material::AbstractMaterial, T_K)
+softening_temperature(material::AbstractMaterial, T_K)
+poisson_ratio(material::AbstractMaterial, T_K)
+photoelastic_constants(material::AbstractMaterial, T_K)
+youngs_modulus(material::AbstractMaterial, T_K)
+nonlinear_refractive_index(material::AbstractMaterial, λ, T_K)
+
 """
 
 const SPEED_OF_LIGHT_M_PER_S = 299_792_458.0
@@ -104,6 +117,33 @@ end
 #
 #################################################
 
+"""
+Most materials are modeled with the Sellmeier equation:
+``n^2 = 1 + \\sum_{i=1}^n B_i\\lambda^2/(\\lambda^2 - C_i^2)`` where ``B_i`` and ``C_i`` are
+strength and wavelength properties of each resonance used in the
+calculation. The functions
+
+    sellmeier_index_from_coefficients(coeffs, λ) -> Float64
+    sellmeier_index_from_coefficients_dω(coeffs, λ) -> SpectralResponse
+
+provide the refractive index given the Sellmeier coefficients B and C and the wavelength λ, with
+coeffs specified as an n-tuple of 2-tuples (B, C). Thus, if appropriate, your material could
+simply implement
+
+    refractive_index(::ValueOnly, material::YourMaterial, λ, T_K) = 
+        sellmeier_index_from_coefficients(YOUR_COEFFICIENTS, λ)
+    refractive_index(::WithDerivative, material::YourMaterial, λ, T_K) = 
+        sellmeier_index_from_coefficients_dω(YOUR_COEFFICIENTS, λ)
+
+Sellmeier coefficients are often functions of other parameters such as temperature or molar 
+fraction of a dopant. We provide the _evaluate_sellmeier_polynomials(B_coeffs, C_coeffs, x)
+and _evaluate_sellmeier_constants(coeffs, x) utilities; see silica.jl and germania.jl for
+examples of their use. 
+
+Note also that any implemented material must ensure compatibility with `Particles` to allow
+Monte Carlo calculation. This happens naturally through the Sellmeier structure included here.
+"""
+
 function _evaluate_sellmeier_polynomials(B_coeffs, C_coeffs, x)
     return map((B, C) -> (evalpoly(x, B), evalpoly(x, C)), B_coeffs, C_coeffs)
 end
@@ -141,19 +181,3 @@ function sellmeier_index_from_coefficients_dω(coeffs, λ)
     dλ_dω = -(λ_m^2) / (2π * SPEED_OF_LIGHT_M_PER_S)
     return SpectralResponse(n, dn_dλ * dλ_dω)
 end
-
-"""
-
-Generic interface documentation:
-Specific materials should define all of the following.
-
-refractive_index(::ValueOnly, material::AbstractMaterial, λ, T_K)
-refractive_index(::WithDerivative, material::AbstractMaterial, λ, T_K)
-cte(material::AbstractMaterial, T_K)
-softening_temperature(material::AbstractMaterial, T_K)
-poisson_ratio(material::AbstractMaterial, T_K)
-photoelastic_constants(material::AbstractMaterial, T_K)
-youngs_modulus(material::AbstractMaterial, T_K)
-nonlinear_refractive_index(material::AbstractMaterial, λ, T_K)
-
-"""

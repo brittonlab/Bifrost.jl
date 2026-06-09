@@ -26,6 +26,7 @@ cte_value = cte(glass, T_K)
 #################################################
 
 # Sellmeier coefficients from Fleming, Applied Optics (1984).
+# doi:10.1364/AO.23.004486
 const _GERMANIA_SELLMEIER_COEFFICIENTS = (
     (0.80686642, 0.068972606),
     (0.71815848, 0.15396605),
@@ -62,7 +63,7 @@ const PURE_GERMANIA = GeO2()
 #
 #################################################
 
-# From G. M. Rego, Sensors (2024)
+# From G. M. Rego, Sensors (2024), doi:10.3390/s24154857
 function thermo_optic_index_shift(material::GeO2, T_K)
     T = validate_model_temperature(T_K)
     Tref = GERMANIA_REFERENCE_TEMPERATURE_K
