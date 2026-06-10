@@ -27,7 +27,7 @@ makedocs(
     ],
     format = Documenter.HTML(;
         prettyurls = get(ENV, "CI", "false") == "true",
-        assets = ["assets/expand-modules.js"],
+        assets = ["assets/expand-docstrings.js"],
     ),
     pages = [
         "Home" => "index.md",
