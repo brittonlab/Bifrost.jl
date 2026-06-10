@@ -1,27 +1,5 @@
-"""
-path-geometry-plot.jl
-
-Interactive Plotly HTML for a `SubpathBuilt`: 3D centerline, a draggable cursor
-driven by horizontal mouse position, a movable transverse square (normal–binormal plane),
-short tangent/normal/binormal axes at the cursor, and optional per-segment nickname labels when
-authoring segments with a `Nickname` meta.
-
-This file depends only on the `PathGeometry` submodule and the Plotly CDN. It is loaded as
-part of the `Bifrost.Plots` submodule and references its sibling `PathGeometry` via `..`.
-
-# Usage
-
-    using Bifrost.Plots
-
-    sb = PathGeometry.SubpathBuilder()
-    PathGeometry.start!(sb)
-    PathGeometry.straight!(sb; length = 0.2)
-    PathGeometry.bend!(sb; radius = 0.4, angle = π / 2)
-    PathGeometry.jumpto!(sb; point = (0.0, 0.0, 0.6))
-    b = PathGeometry.build(sb)
-    write_path_geometry_plot3d(b, 0.0, PathGeometry.s_end(b); title = "Demo",
-                               fidelity = 1.0, output = "path.html")
-"""
+# Interactive Plotly HTML for a `SubpathBuilt`; see write_path_geometry_plot3d.
+# This file depends only on the `PathGeometry` submodule and the Plotly CDN.
 
 using LinearAlgebra
 
@@ -269,6 +247,20 @@ plane points along `cos(Φ) N̂ + sin(Φ) B̂`, where `Φ` is `PathGeometry.tota
   bounding-box diagonal.
 - `spin_n_quad`: quadrature point count passed to `total_spin` for the Φ overlay
   (default 128).
+
+# Examples
+```julia
+using Bifrost.Plots
+
+sb = PathGeometry.SubpathBuilder()
+PathGeometry.start!(sb)
+PathGeometry.straight!(sb; length = 0.2)
+PathGeometry.bend!(sb; radius = 0.4, angle = π / 2)
+PathGeometry.jumpto!(sb; point = (0.0, 0.0, 0.6))
+b = PathGeometry.build(sb)
+write_path_geometry_plot3d(b, 0.0, PathGeometry.s_end(b); title = "Demo",
+                           fidelity = 1.0, output = "path.html")
+```
 """
 function write_path_geometry_plot3d(
     path::Union{PathGeometry.SubpathBuilt, PathGeometry.PathBuilt},

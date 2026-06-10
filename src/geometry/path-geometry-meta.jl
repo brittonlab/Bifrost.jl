@@ -1,39 +1,10 @@
-"""
-path-geometry-meta.jl
-
-Concrete `AbstractMeta` subtypes for per-segment and per-Subpath annotations.
-`path-geometry.jl` defines only the abstract slot (`AbstractMeta`) and the
-`meta` fields; the concrete vocabulary lives here.
-
-## Vocabulary
-
-- `Nickname(label)` — a human-readable label for the segment (used by plotting
-  helpers).
-- `MCMadd(symbol, distribution)` — an **additive** MCM perturbation:
-  consumers apply `baseline + sample` (e.g. `length = length₀ + Δℓ`).
-- `MCMmul(symbol, distribution)` — a **multiplicative** MCM perturbation:
-  consumers apply `baseline * sample` (direct scale factor, so e.g.
-  `MCMmul(:length, 0.5)` halves `length`; `MCMmul(:length, -0.4)` flips the
-  sign and shortens).
-
-`symbol` is a `Symbol` (e.g. `:length`). `distribution` is any object a consumer
-knows how to sample from (scalar, `Particles`, `Distributions.*`). The
-additive vs. multiplicative distinction is encoded in the type itself, so
-consumers dispatch on it rather than looking up a mode table.
-
-This file contains no sampling or interpretation logic — that belongs with
-whichever layer acts on the annotation.
-
-## Deferred interpretation of foreign meta
-
-Segments and Subpaths may carry meta this layer does not interpret. The geometry
-layer stores all meta verbatim and acts only on what pertains to its own geometry:
-`Nickname` and `MCMadd`/`MCMmul` whose symbol names one of a
-segment's own fields. Any other annotation is carried through inertly — its
-meaning is defined and applied by a consuming layer (for example, the fiber
-assembly interprets a thermal annotation it alone can resolve), never here.
-"""
-
+# Concrete `AbstractMeta` subtypes (`Nickname`, `MCMadd`, `MCMmul`) for
+# per-segment and per-Subpath annotations; path-geometry.jl defines only the
+# abstract slot and the `meta` fields. This file contains no sampling or
+# interpretation logic — that belongs with whichever layer acts on the
+# annotation; foreign meta is carried through inertly (see the
+# Bifrost.PathGeometry module docstring in src/Bifrost.jl).
+#
 # `AbstractMeta` is defined in path-geometry.jl, which includes this file. When
 # loaded as part of the Bifrost package, path-geometry.jl is already in scope.
 
@@ -70,7 +41,11 @@ end
 Attach a multiplicative Monte Carlo perturbation to `symbol`.
 
 Consumers combine matching entries as `baseline * product(mul) + sum(add)`;
-`MCMmul` contributes a direct scale factor to the multiplicative product.
+`MCMmul` contributes a direct scale factor to the multiplicative product (so
+`MCMmul(:length, 0.5)` halves `length`, and `MCMmul(:length, -0.4)` flips the
+sign and shortens). The additive vs. multiplicative distinction is encoded in
+the type itself, so consumers dispatch on it rather than looking up a mode
+table.
 """
 struct MCMmul{D} <: AbstractMeta
     symbol::Symbol

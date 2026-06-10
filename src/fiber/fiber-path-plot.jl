@@ -1,10 +1,21 @@
 using LinearAlgebra
 
+"""
+    rotate_about_axis(v, u, α)
 
+Return `v` rotated about the unit axis `u` by angle `α` (rad), via Rodrigues'
+rotation formula.
+"""
 function rotate_about_axis(v::Vector{Float64}, u::Vector{Float64}, α::Float64)
     return v * cos(α) + cross(u, v) * sin(α) + u * dot(u, v) * (1 - cos(α))
 end
 
+"""
+    stokes_from_jones(ψ) -> (s1, s2, s3)
+
+Return the normalized Stokes parameters of the Jones vector `ψ`; a null vector
+returns `(0.0, 0.0, 0.0)`.
+"""
 function stokes_from_jones(ψ::AbstractVector{ComplexF64})
     s0 = real(abs2(ψ[1]) + abs2(ψ[2]))
     if s0 == 0.0
@@ -17,27 +28,16 @@ function stokes_from_jones(ψ::AbstractVector{ComplexF64})
     return (s1, s2, s3)
 end
 
-""" Explain sampled_path_* methods here.
-
-The sampled path methods provide utilities for working with a discretely sampled fiber path, 
-  where the geometry and polarization state are defined at specific arc-length coordinates. These 
-  methods allow for interpolation of scalar and vector fields along the path, as well as computation 
-  of the Frenet-Serret frame, which describes the local geometric properties of the path. 
-  
-  - The `render_pol_circle` method generates a visual representation of the polarization state at a given 
-  point along the path.
-  - The `render_poincare_sphere` method creates a visualization of the polarization state on the Poincare sphere. 
-  
-sample_path_bracket, sasmpled_path_scalar, and sampled_path_vector are helper functions for interpolating values along 
-the path based on the arc-length parameter `s`. The frenet_serret_frame function computes the tangent, normal, and 
-binormal vectors at a given point on the path, which are essential for understanding the local geometry of the fiber.
-"""
+# Sampled-path helpers: a "sampled path" is any object exposing geometry and
+# polarization-state arrays at discrete arc-length coordinates (an `s` array
+# plus per-field arrays). The `sampled_path_*` functions interpolate fields
+# along such a path; `frenet_serret_frame` recovers the local frame.
 
 """
     sampled_path_bracket(path, s)
 
-Given a sampled path with arc-length parameter `s`, find the indices of the two sample points that 
-bracket `s` and the interpolation parameter `t` for linear interpolation.
+Return the indices of the two sample points that bracket arc length `s` and the
+parameter `t` for linear interpolation between them, as `(left, right, t)`.
 """
 function sampled_path_bracket(path, s::Real)
     ss = path.s
@@ -57,12 +57,24 @@ function sampled_path_bracket(path, s::Real)
     return (left = idx, right = idx + 1, t = t)
 end
 
+"""
+    sampled_path_scalar(path, field, s)
+
+Return the linear interpolation of the sampled array `getproperty(path, field)`
+at arc length `s`.
+"""
 function sampled_path_scalar(path, field::Symbol, s::Real)
     br = sampled_path_bracket(path, s)
     vals = getproperty(path, field)
     return (1 - br.t) * vals[br.left] + br.t * vals[br.right]
 end
 
+"""
+    sampled_path_vector(path, fields, s)
+
+Return the length-3 vector interpolated componentwise from the three sampled
+arrays named by `fields` at arc length `s`.
+"""
 function sampled_path_vector(path, fields::NTuple{3,Symbol}, s::Real)
     return [
         sampled_path_scalar(path, fields[1], s),
@@ -231,13 +243,14 @@ function render_pol_circle(path, s::Real, rep::NamedTuple; npts::Int = 181)
 end
 
 """
-    render_poincare_sphere(rep; trail = nothing, title = "Poincare Sphere")
+    render_poincare_sphere(rep; trail = nothing)
 
 Build a renderable specification for a Poincare sphere with a graphical state vector.
 
-`rep` should be the output of [`poincare_vector_representation`](fiber-path-plot.jl).
-The returned named tuple contains the sphere surface, guide circles, the vector, the point,
-and any optional trail data, ready to be consumed by the HTML/Plotly renderer.
+`rep` should be the output of [`poincare_vector_representation`](@ref). The
+returned named tuple contains the sphere surface, guide circles, the vector, the
+point, and any optional trail data, ready to be consumed by the HTML/Plotly
+renderer.
 """
 function render_poincare_sphere(
     rep::NamedTuple;
