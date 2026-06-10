@@ -24,9 +24,16 @@ function _export_public!(mod::Module)
     end
 end
 
+module Constants
+    include("natural-constants.jl")
+    import ..Bifrost: _export_public!
+    _export_public!(@__MODULE__)
+end
+
 module MaterialProperties
     using LinearAlgebra
     using Printf
+    using ..Constants
     include("material/material-properties.jl")
 
     include("material/silica.jl")
@@ -60,6 +67,7 @@ end
 
 module FiberCS
     using LinearAlgebra
+    using ..Constants
     using ..MaterialProperties
     include("fiber-cross-section/cross-section.jl")
 
@@ -98,13 +106,14 @@ end
 
 # Umbrella re-export: each core submodule's exported names are surfaced at
 # the top level so `using Bifrost` is enough for typical use.
+using .Constants
 using .MaterialProperties
 using .FiberCS
 using .PathGeometry
 using .FiberPath
 using .PathIntegral
 
-for m in (MaterialProperties, FiberCS, PathGeometry, FiberPath, PathIntegral)
+for m in (Constants, MaterialProperties, FiberCS, PathGeometry, FiberPath, PathIntegral)
     for n in names(m)
         n === nameof(m) && continue
         @eval export $n
@@ -113,7 +122,7 @@ end
 
 # Also export the submodule names themselves so callers can write
 # `PG = PathGeometry` (or qualified `PathGeometry.X`) after `using Bifrost`.
-export MaterialProperties, FiberCS, PathGeometry, FiberPath, PathIntegral
+export Constants, MaterialProperties, FiberCS, PathGeometry, FiberPath, PathIntegral
 
 # Plotting lives in a separate `Plots` submodule, opt-in via
 # `using Bifrost.Plots`, so plain `using Bifrost` does not pull plotting

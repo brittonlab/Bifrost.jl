@@ -164,7 +164,7 @@ function mode_terms(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K)
     r_core = core_radius(fiber)
     r_clad = cladding_radius(fiber)
     k0 = 2π / λ
-    dk0_dω = one(λ) / SPEED_OF_LIGHT_M_PER_S
+    dk0_dω = one(λ) / u.c
     na = sqrt(n_core^2 - n_clad^2)
     V = r_core * k0 * na
     g = waveguide_factor(V)
@@ -207,7 +207,7 @@ function mode_terms(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K)
     r_core = core_radius(fiber)
     r_clad = cladding_radius(fiber)
     k0 = 2π / λ
-    dk0_dω = one(λ) / SPEED_OF_LIGHT_M_PER_S
+    dk0_dω = one(λ) / u.c
     na = sqrt(n_core^2 - n_clad^2)
     dna_dω = (n_core * n_core_resp.dω - n_clad * n_clad_resp.dω) / na
     V = r_core * k0 * na
@@ -308,7 +308,7 @@ function effective_group_index(
 )
 
     n_eff = effective_mode_index(WithDerivative(), fiber, λ, T_K)
-    ω = 2*pi*SPEED_OF_LIGHT_M_PER_S/λ
+    ω = 2*pi*u.c/λ
     return n_eff.value + ω*n_eff.dω
 end
 
@@ -350,7 +350,7 @@ function chromatic_dispersion_parameter(
     n_center = effective_mode_index(fiber, λ, T_K)
     n_minus = effective_mode_index(fiber, λ - dλ, T_K)
     n_plus = effective_mode_index(fiber, λ + dλ, T_K)
-    return -λ / SPEED_OF_LIGHT_M_PER_S * (n_plus - 2 * n_center + n_minus) / dλ^2 * 1e6
+    return -λ / u.c * (n_plus - 2 * n_center + n_minus) / dλ^2 * 1e6
 end
 
 # This is β_2 = d^2k/dω^2, the second derivative with respect to *angular frequency*
@@ -363,7 +363,7 @@ function group_velocity_dispersion_parameter(
     dλ = 0.1e-9
 )
     D_SI = chromatic_dispersion_parameter(fiber, λ, T_K; dλ = dλ) * 1e-6
-    return -(λ^2 / (2π * SPEED_OF_LIGHT_M_PER_S)) * D_SI * 1e27
+    return -(λ^2 / (2π * u.c)) * D_SI * 1e27
 end
 
 is_single_mode(fiber::StepIndexCrossSection, λ, T_K) =
