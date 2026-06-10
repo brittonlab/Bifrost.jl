@@ -10,4 +10,5 @@ the fiber assembly layer.
 
 ```@autodocs
 Modules = [Bifrost.FiberCS]
+Filter = is_public_api
 ```

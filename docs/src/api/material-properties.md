@@ -10,4 +10,5 @@ calculations. No path or fiber geometry lives here.
 
 ```@autodocs
 Modules = [Bifrost.MaterialProperties]
+Filter = is_public_api
 ```

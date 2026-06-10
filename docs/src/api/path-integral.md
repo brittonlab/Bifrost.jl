@@ -11,4 +11,5 @@ Theory section derives the underlying generators.
 
 ```@autodocs
 Modules = [Bifrost.PathIntegral]
+Filter = is_public_api
 ```

@@ -10,4 +10,5 @@ plotting symbols into scope.
 
 ```@autodocs
 Modules = [Bifrost.Plots]
+Filter = is_public_api
 ```

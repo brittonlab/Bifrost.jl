@@ -12,4 +12,5 @@ quantities (turning angle, torsion, material twist, frame rotation).
 
 ```@autodocs
 Modules = [Bifrost.PathGeometry]
+Filter = is_public_api
 ```

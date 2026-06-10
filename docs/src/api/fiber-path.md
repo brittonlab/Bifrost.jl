@@ -10,4 +10,5 @@ applies meta-driven perturbations and thermal length scaling through `modify(fib
 
 ```@autodocs
 Modules = [Bifrost.FiberPath]
+Filter = is_public_api
 ```
