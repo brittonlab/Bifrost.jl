@@ -106,6 +106,8 @@ They are currently implemented in demo*.jl.
 
 Do not break these without explicit user discussion:
 
+- **No Manifest.toml commits**: Never commit `Manifest.toml`; it is gitignored and only
+  snapshotted on tagged releases (issue #77). CI rejects PRs that track it.
 - **Source coverage**: Every `AbstractBirefringenceSource` must cover the full fiber
   domain `[s_start, s_end]`. Gaps are a hard error, not silent zero.
 - **Breakpoints**: Each source declares its own breakpoints. The `Fiber` merges them

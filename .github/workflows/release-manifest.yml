@@ -1,0 +1,23 @@
+name: Release manifest snapshot
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  attach-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - name: Resolve dependencies
+        run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
+      - name: Upload Manifest.toml as release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload '${{ github.event.release.tag_name }}' Manifest.toml
