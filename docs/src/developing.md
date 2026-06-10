@@ -123,7 +123,7 @@ is the contract for keeping it that way.
 
 - bend, twist, tension, and axis-ratio properties,
 - segment shrinkage and field-level `MCMadd`/`MCMmul` perturbations,
-- the per-entry eltype of the Jones matrix `J` and sensitivity `G`.
+- the per-entry element type of the Jones matrix `J` and sensitivity `G`.
 
 The files on those paths — all of `src/material/`, `src/fiber-cross-section/`,
 `src/geometry/path-geometry*.jl`, `src/fiber/fiber-path.jl`, and
