@@ -1,9 +1,25 @@
-# Material-agnostic perturbation mechanism for the geometry layer:
-# `build(sub; perturb=true)` applies field-level MCM via `_apply_field_mcm`,
-# and `_scale_length_fields` is the reusable isotropic-scaling transform that
-# consuming layers (the fiber assembly) drive. Nothing here references
-# temperature or material properties.
-#
+"""
+path-geometry-perturb.jl
+
+Material-agnostic perturbation mechanism for the geometry layer.
+
+`build(sub; perturb=true)` applies the meta the geometry layer can interpret on
+its own — `MCMadd`/`MCMmul` whose symbol names one of a segment's *own* struct
+fields (`:length`, `:radius`, …) — via [`_apply_field_mcm`](@ref). Any meta this
+layer does not recognize (e.g. a foreign thermal annotation) is carried through
+untouched; interpretation of foreign meta is the consuming layer's job.
+
+The companion transform [`_scale_length_fields`](@ref) multiplies a segment's
+length-dimensioned fields by a scalar factor. It is the reusable mechanism that a
+consuming layer (the fiber assembly) uses to apply isotropic expansion, supplying
+both the factor and the replacement meta. Nothing here references temperature or
+material properties.
+
+Which fields are length-dimensioned is declared per segment type by
+[`_length_fields`](@ref); a new `AbstractPathSegment` that omits it errors loudly
+when perturbed, so the extension point is self-documenting.
+"""
+
 # Segment types (StraightSegment, …, JumpBy), the meta vocabulary (MCMcombine,
 # segment_meta), and AbstractPathSegment are all defined in path-geometry.jl /
 # path-geometry-meta.jl, which are in scope when this file is included.

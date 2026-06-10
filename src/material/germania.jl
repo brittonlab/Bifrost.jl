@@ -1,3 +1,24 @@
+"""
+Material properties for pure germania GeO2 glass.
+
+Units (SI unless noted):
+- λ                     wavelength in m
+- T_K                   temperature in K
+- refractive indices, Poisson ratio, photoelastic constants: dimensionless
+- cte                   1/K
+- softening_temperature  K
+- youngs_modulus        Pa
+- nonlinear_refractive_index (n_2)  m²/W
+
+[Example usage]
+
+glass = GeO2()
+T_K = 297.15
+λ = 1550e-9
+n = refractive_index(glass, λ, T_K)
+cte_value = cte(glass, T_K)
+"""
+
 #################################################
 #
 # Material constants

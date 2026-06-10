@@ -1,6 +1,76 @@
-# Three-dimensional path authoring and differential-geometry queries. See the
-# Bifrost.PathGeometry module docstring (src/Bifrost.jl) for the overview of
-# the authoring DSL, the Subpath/SubpathBuilt/PathBuilt layers, spin, and meta.
+"""
+Construct and query three-dimensional smooth space curves (fiber paths).
+
+This file defines a small authoring DSL for building piecewise paths from
+local-frame segment primitives, compiling them to an immutable global-frame
+form, and querying differential geometry (position, tangent/normal/binormal,
+curvature, torsion) and material spin along arc length.
+
+# Three layers
+
+- `SubpathBuilder` (mutable) — authoring target for the bang-DSL below. A
+  Subpath specification begins with `start!(...)` and ends with a seal:
+  `jumpto!(...)` (bend toward a global target) or `seal!(...)` (end at the
+  natural exit, no bending).
+- `Subpath` (immutable) — frozen snapshot of user-supplied data only.
+- `SubpathBuilt` (immutable) — derived layout: `subpath` + `placed_segments`
+  + `jumpto_quintic_connector` + whole-Subpath `spin_rate`/`_spin_phi_at_s0`.
+- `PathBuilt` (immutable) — ordered container of `SubpathBuilt`s.
+
+`build(builder_or_subpath) → SubpathBuilt` runs the placement loop on one
+Subpath. `build(::Vector{Subpath})` or `build(::Vector{SubpathBuilt})`
+produces a `PathBuilt`.
+
+# Authoring
+
+Sliding-frame interior segments + a global terminal jumpto:
+
+    sb = SubpathBuilder()
+    start!(sb; point=(0,0,0), outgoing_tangent=(0,0,1))
+    straight!(sb; length=1.0)
+    bend!(sb; radius=0.05, angle=π/2)
+    jumpto!(sb; point=(0.05, 0.0, 1.05))     # seals the Subpath
+    sub = Subpath(sb)
+    sb_built = build(sub)
+
+To end a Subpath exactly as authored (no terminal connector bending), seal with
+`seal!` instead of `jumpto!`:
+
+    seal!(sb)             # end at the natural exit
+    seal!(sb; extra=0.02) # ...plus a 2 cm straight lead-out
+
+Interior `jumpby!` is supported as a relative jump within a Subpath. Each
+Subpath must call `start!` before any segment and seal exactly once at the end
+(`jumpto!` or `seal!`).
+
+# Spin
+
+Material spin is one spec per Subpath, set at [`start!`](@ref) via the
+`spin_rate` keyword. It covers the whole Subpath (interior segments and the
+terminal `jumpto!`/`seal!` connector alike):
+
+- `spin_rate = nothing` (default) — no spin on this Subpath.
+- `spin_rate::Real` — constant rate (rad/m).
+- `spin_rate::Function` — `rate(s_local)` of Subpath-local arc length, with
+  `s_local = 0` at the Subpath start.
+- `spin_rate = :inherit` — copy the previous Subpath's `spin_rate` (valid only
+  for a non-first Subpath in `build([...])`).
+
+The spin **phase** `_spin_phi_at_s0` (accumulated rad at the Subpath's `s = 0`)
+is always continuous across Subpath boundaries: it is `0` on the first Subpath
+and `prev._spin_phi_at_s0 + ∫ prev.spin_rate · ds` on every later Subpath
+(carried unchanged through a no-spin Subpath). It is computed by
+`build(::Vector{SubpathBuilt})`. The phase is bookkeeping only — the fiber
+generator consumes the spin *rate*, not the absolute phase.
+
+# Independence
+
+Each `Subpath` and `SubpathBuilt` is fully independent of all others. The
+Subpath holds its `start_point` and `jumpto_point` as the only globally-anchored
+values. `build(::Vector{SubpathBuilt})` is the first ordering-aware layer; it
+checks endpoint conformity between adjacent Subpaths and resolves the
+continuous cross-Subpath spin phase (`_spin_phi_at_s0`).
+"""
 
 using LinearAlgebra
 using QuadGK
