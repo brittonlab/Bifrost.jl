@@ -148,8 +148,7 @@ cladding_radius(fiber::StepIndexCrossSection) = fiber.cladding_diameter_m / 2
 """
     core_refractive_index([style], fiber, λ, T_K)
 
-Return the refractive index of the core material; `style` defaults to
-`ValueOnly()`.
+Return the refractive index of the core material.
 """
 function core_refractive_index(style::SpectralStyle, fiber::StepIndexCrossSection, λ, T_K)
     return refractive_index(style, fiber.core_material, λ, T_K)
@@ -161,8 +160,7 @@ core_refractive_index(fiber::StepIndexCrossSection, λ, T_K) =
 """
     cladding_refractive_index([style], fiber, λ, T_K)
 
-Return the refractive index of the cladding material; `style` defaults to
-`ValueOnly()`.
+Return the refractive index of the cladding material.
 """
 function cladding_refractive_index(
     style::SpectralStyle,
@@ -342,7 +340,7 @@ end
     relative_index_difference([style], fiber, λ, T_K)
 
 Return the relative index difference `Δ = (n_core - n_clad) / n_clad`
-(dimensionless); `style` defaults to `ValueOnly()`.
+(dimensionless).
 """
 function relative_index_difference(style::ValueOnly, fiber::StepIndexCrossSection, λ, T_K)
     n_core = core_refractive_index(fiber, λ, T_K)
@@ -356,8 +354,8 @@ relative_index_difference(fiber::StepIndexCrossSection, λ, T_K) =
 """
     numerical_aperture([style], fiber, λ, T_K)
 
-Return the numerical aperture `√(n_core² - n_clad²)`; `style` defaults to
-`ValueOnly()`, and `WithDerivative()` returns a `SpectralResponse`.
+Return the numerical aperture `√(n_core² - n_clad²)`. `WithDerivative()`
+returns a `SpectralResponse`.
 """
 numerical_aperture(style::ValueOnly, fiber::StepIndexCrossSection, λ, T_K) =
     mode_terms(style, fiber, λ, T_K).na
@@ -373,8 +371,8 @@ numerical_aperture(fiber::StepIndexCrossSection, λ, T_K) =
 """
     normalized_frequency([style], fiber, λ, T_K)
 
-Return the normalized frequency `V = r_core · k0 · NA`; `style` defaults to
-`ValueOnly()`, and `WithDerivative()` returns a `SpectralResponse`.
+Return the normalized frequency `V = r_core · k0 · NA`. `WithDerivative()`
+returns a `SpectralResponse`.
 """
 normalized_frequency(style::ValueOnly, fiber::StepIndexCrossSection, λ, T_K) =
     mode_terms(style, fiber, λ, T_K).V
@@ -390,8 +388,8 @@ normalized_frequency(fiber::StepIndexCrossSection, λ, T_K) =
 """
     propagation_constant([style], fiber, λ, T_K)
 
-Return the LP01 propagation constant `β` (rad/m); `style` defaults to
-`ValueOnly()`, and `WithDerivative()` returns a `SpectralResponse`.
+Return the LP01 propagation constant `β` (rad/m). `WithDerivative()` returns a
+`SpectralResponse`.
 """
 propagation_constant(style::ValueOnly, fiber::StepIndexCrossSection, λ, T_K) =
     mode_terms(style, fiber, λ, T_K).β
@@ -407,8 +405,8 @@ propagation_constant(fiber::StepIndexCrossSection, λ, T_K) =
 """
     effective_mode_index([style], fiber, λ, T_K)
 
-Return the effective mode index `n_eff = β / k0`; `style` defaults to
-`ValueOnly()`, and `WithDerivative()` returns a `SpectralResponse`.
+Return the effective mode index `n_eff = β / k0`. `WithDerivative()` returns a
+`SpectralResponse`.
 """
 function effective_mode_index(style::ValueOnly, fiber::StepIndexCrossSection, λ, T_K)
     terms = mode_terms(style, fiber, λ, T_K)

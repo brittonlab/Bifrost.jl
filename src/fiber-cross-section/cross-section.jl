@@ -36,9 +36,6 @@ end
 
 """
     validate_positive_length(value, name) -> Float64
-
-Return `value` as a `Float64`, throwing an `ArgumentError` naming `name` unless
-it is a finite positive length (m).
 """
 function validate_positive_length(value::Real, name::AbstractString)
     x = float(value)
