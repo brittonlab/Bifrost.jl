@@ -6,12 +6,9 @@ invariants that should guide implementation.
 
 ## Agent Skills
 
-This repo owns reusable agent skills under `skills/`. The Julia documentation skill lives
-at `skills/julia-docstrings/` and should be used when creating, revising, or auditing
-inline documentation for Julia code.
-
-The skill is registered at the claude.ai/code account level and is available to all
-sessions on this repository without any local installation step.
+The `julia-docstrings` skill is registered at the claude.ai/code account level and is
+available to all sessions on this repository. Use it when creating, revising, or
+auditing inline documentation for Julia code.
 
 ## Tests
 

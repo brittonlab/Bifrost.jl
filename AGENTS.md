@@ -187,7 +187,8 @@ scattering.
 - Modules, methods, and structs should have inline documentation following Julia norms.
   Write for package users and current behavior; avoid development history, migration
   notes, and references to retired APIs or design choices.
-- Use `skills/julia-docstrings` for Julia docstring creation, revision, and audits.
+- Use the `julia-docstrings` skill (registered at the account level) for Julia docstring
+  creation, revision, and audits.
 - Obey the rule JuliaIndexFromLength. Use eachindex() not length() for iterating over
   vectors/tensors in loops.
 - Citations of literature should include doi in only this format doi:xxxxx

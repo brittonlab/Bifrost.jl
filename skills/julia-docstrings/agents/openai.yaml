@@ -1,4 +1,0 @@
-interface:
-  display_name: "Julia Docstrings"
-  short_description: "Write Julia docstrings by the manual"
-  default_prompt: "Use $julia-docstrings to add Julia manual-style docstrings to this code."
