@@ -89,32 +89,9 @@ refractive_index(material::AbstractMaterial, λ, T_K) =
 #
 #################################################
 
-"""
-    MIN_VALID_TEMPERATURE_K
-
-Lower bound (K) of the temperature range the material models are valid for.
-"""
 const MIN_VALID_TEMPERATURE_K = 243.0
-
-"""
-    MAX_VALID_TEMPERATURE_K
-
-Upper bound (K) of the temperature range the material models are valid for.
-"""
 const MAX_VALID_TEMPERATURE_K = 373.0
-
-"""
-    MIN_VALID_WAVELENGTH_M
-
-Lower bound (m) of the wavelength range the material models are valid for.
-"""
 const MIN_VALID_WAVELENGTH_M = 1300e-9
-
-"""
-    MAX_VALID_WAVELENGTH_M
-
-Upper bound (m) of the wavelength range the material models are valid for.
-"""
 const MAX_VALID_WAVELENGTH_M = 1700e-9
 
 """
