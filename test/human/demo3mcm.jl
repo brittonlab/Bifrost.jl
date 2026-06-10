@@ -14,6 +14,14 @@
 # This file expects to be `include`d after demo2.jl is in scope (it
 # reuses `_sample_segment_xyz` and the path-builder API).
 
+# Direct library dependencies so this file loads standalone regardless of the
+# index's include order (it no longer free-rides on demo2/demo1's `using`).
+using Bifrost
+using MonteCarloMeasurements
+using Distributions
+
+# The scene renderers and `_sample_segment_xyz` live in demo1.jl (reached via
+# demo2.jl), not in Bifrost — pull them in if not already loaded.
 if !isdefined(Main, :_sample_segment_xyz)
     include(joinpath(@__DIR__, "demo2.jl"))
 end

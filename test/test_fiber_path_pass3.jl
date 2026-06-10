@@ -3,7 +3,7 @@ using Bifrost.PathGeometry: _qc_nominalize
 # Fiber assembly tests for `fiber-path.jl`: low-level binding of a built path,
 # and the builder-accepting constructors that apply perturbation meta during the
 # single build (thermal `:T_K` via the cladding CTE, field-level MCM, and the
-# terminal-connector thermal expansion of issue #33).
+# terminal-connector thermal expansion).
 
 using Test
 using LinearAlgebra
@@ -111,11 +111,11 @@ end
 end
 
 # ----------------------------
-# 3d. Fiber(builder) — issue #33: terminal connector thermal expansion
+# 3d. Fiber(builder) — terminal connector thermal expansion
 # ----------------------------
 
 @testset "Fiber — :T_K on jumpto! expands the connector by τ, endpoint fixed" begin
-    # T-PHYSICS (issue #33): a jumpto! seal carrying :T_K thermally expands the
+    # T-PHYSICS: a jumpto! seal carrying :T_K thermally expands the
     # terminal connector — its arc length scales by τ = 1 + α·ΔT — while still
     # landing at the fixed jumpto_point.
     L  = 0.5

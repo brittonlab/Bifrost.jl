@@ -316,7 +316,8 @@ module PlotRuntime
     # two parents up. In-file helpers (rotate_about_axis, frenet_serret_frame,
     # poincare_vector_representation, render_pol_circle, render_poincare_sphere)
     # live in `Bifrost.Plots`, reachable as `..Plots`.
-    using ...FiberPath: Fiber, bend_geometry, spin_rate, fiber_path
+    using ...FiberPath: Fiber, bend_geometry, fiber_path
+    using ...PathGeometry: spin_rate, geometric_torsion
     using ...PathIntegral: generator_K, generator_Kω,
                            exp_sensitivity_midpoint_step, output_dgd
     using ...PathGeometry: frame
@@ -508,7 +509,9 @@ module PlotRuntime
             bend = bend_geometry(f, si)
             R = Float64(bend.Rb)
             θ = Float64(bend.theta_b)
-            τ = Float64(spin_rate(f, si))
+            # Geometric frame rotation rate (torsion + material spin) for display.
+            τ = Float64(geometric_torsion(fiber_path(f), si) +
+                        spin_rate(fiber_path(f), si))
 
             Rb[i] = R
             theta_b[i] = θ

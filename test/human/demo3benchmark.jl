@@ -27,12 +27,18 @@
 #
 # `demo3benchmark_all()` runs both and writes `output/demo-index.html`.
 
+# Direct library dependencies so this file loads standalone regardless of the
+# index's include order (it no longer free-rides on the demo3mcm/demo1 `using`).
+using Bifrost
+using MonteCarloMeasurements
+using BenchmarkTools
+using Distributions
+
+# `_mcm_demo_fiber` and the scene helpers live in demo3mcm.jl/demo1.jl, not in
+# Bifrost — pull them in if not already loaded.
 if !isdefined(Main, :_mcm_demo_fiber)
     include(joinpath(@__DIR__, "demo3mcm.jl"))
 end
-
-using BenchmarkTools
-using Distributions
 
 # =====================================================================
 # Helpers

@@ -465,7 +465,7 @@ search over the handle scale λ until the sampled peak curvature falls below
 If `target_path_length` is set, instead searches λ
 until the connector's arc length matches the target — supplied via
 `build(...; jumpto_target_length=…)` (a consuming layer, the fiber, uses it to
-thermally expand the terminal connector, issue #33) while the endpoint stays a
+thermally expand the terminal connector) while the endpoint stays a
 lab-frame invariant.
 
 The two constraints can be

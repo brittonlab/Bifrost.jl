@@ -68,7 +68,8 @@ end
 
 @testset "Fiber :T_K — BendSegment preserves angle, scales radius" begin
     # T-PHYSICS: α scales R_eff = α·R; swept angle preserved.
-    spec = sb -> bend!(sb; radius = 0.1, angle = π / 3, axis_angle = 0.0, meta = _ft_mcm(1.1))
+    spec = sb -> bend!(sb; radius = 0.1, angle = π / 3, axis_angle = 0.0,
+                        meta = _ft_mcm(1.1))
     seg1 = _ft_baseline(spec).placed_segments[1].segment
     seg2 = _ft_scaled(spec).placed_segments[1].segment
     @test seg2.radius ≈ 1.1 * seg1.radius
@@ -107,6 +108,24 @@ end
     end
     @test arc_length(path.placed_segments[1].segment) ≈ 1.0
     @test arc_length(path.placed_segments[2].segment) ≈ 0.5
+end
+
+@testset "Fiber :T_K — temperature derived on demand from segment meta" begin
+    # T-GUARDRAIL: `temperature(f, s)` recovers each segment's `:T_K` excursion at
+    # query time via `local_segment(f.path, s)` — no thermal state on `Fiber`.
+    ΔT = 12.0
+    sub = _ft_subpath() do sb
+        straight!(sb; length = 1.0, meta = [MCMadd(:T_K, ΔT)])
+        straight!(sb; length = 1.0)
+    end
+    f = Fiber(sub; cross_section = _FT_XS, T_ref_K = _FT_T_REF)
+    ps = f.path.placed_segments
+    s1 = 0.5 * arc_length(ps[1].segment)
+    s2 = Float64(_qc_nominalize(ps[2].s_offset_eff)) +
+         0.5 * Float64(_qc_nominalize(arc_length(ps[2].segment)))
+
+    @test temperature(f, s1) ≈ _FT_T_REF + ΔT
+    @test temperature(f, s2) ≈ _FT_T_REF
 end
 
 @testset "Fiber :T_K — segments without MCM annotations default to α = 1.0" begin
@@ -170,12 +189,12 @@ end
 end
 
 # -----------------------------------------------------------------------
-# Issue #33 — terminal jumpto! connector thermal expansion
+# Terminal jumpto! connector thermal expansion
 # -----------------------------------------------------------------------
 
 @testset "Fiber :T_K — jumpto! seal expands the connector by τ, endpoint fixed" begin
     # T-PHYSICS: a :T_K on the jumpto! seal scales the terminal connector's arc
-    # length by τ (issue #33), still landing at the fixed jumpto_point.
+    # length by τ, still landing at the fixed jumpto_point.
     ΔT = 100.0
     P  = (0.1, 0.0, 0.5)
     sb = SubpathBuilder(); start!(sb)
@@ -195,7 +214,7 @@ end
     # T-GUARDRAIL: Fiber([sb1, sb2]) must freeze builders to Subpaths and reuse
     # the Vector{Subpath} thermal path, NOT build([sb1, sb2]) first (which would
     # bypass per-subpath jumpto_target_length). A terminal jumpto! :T_K on the
-    # last subpath proves the connector expansion (#33) still applies.
+    # last subpath proves the connector expansion still applies.
     ΔT = 100.0
     P1 = (0.0, 0.0, 0.5)
     P2 = (0.1, 0.0, 1.0)
@@ -240,13 +259,14 @@ end
 # -----------------------------------------------------------------------
 
 @testset "Fiber — field MCM on a jumpto! seal errors; :T_K / Nickname are fine" begin
-    # T-GUARDRAIL: the terminal connector supports only MCMadd(:T_K, …) (#33).
+    # T-GUARDRAIL: the terminal connector supports only MCMadd(:T_K, …).
     # A field-level MCMadd/MCMmul (or a multiplicative :T_K) on the seal is
     # rejected at Fiber construction rather than silently ignored.
     mk(meta) = begin
         sb = SubpathBuilder(); start!(sb)
         straight!(sb; length = 0.5)
-        jumpto!(sb; point = (0.1, 0.0, 0.5), incoming_tangent = (1.0, 0.0, 0.0), meta = meta)
+        jumpto!(sb; point = (0.1, 0.0, 0.5),
+                incoming_tangent = (1.0, 0.0, 0.0), meta = meta)
         sb
     end
     @test_throws ArgumentError Fiber(mk([MCMadd(:length, 0.01)]);
@@ -254,8 +274,10 @@ end
     @test_throws ArgumentError Fiber(mk([MCMmul(:T_K, 1.1)]);
                                      cross_section = _FT_XS, T_ref_K = _FT_T_REF)
     # Supported: thermal :T_K, and a plain Nickname.
-    @test Fiber(mk([MCMadd(:T_K, 10.0)]); cross_section = _FT_XS, T_ref_K = _FT_T_REF) isa Fiber
-    @test Fiber(mk([Nickname("seal")]);  cross_section = _FT_XS, T_ref_K = _FT_T_REF) isa Fiber
+    @test Fiber(mk([MCMadd(:T_K, 10.0)]);
+                cross_section = _FT_XS, T_ref_K = _FT_T_REF) isa Fiber
+    @test Fiber(mk([Nickname("seal")]);
+                cross_section = _FT_XS, T_ref_K = _FT_T_REF) isa Fiber
 end
 
 # -----------------------------------------------------------------------
@@ -271,11 +293,12 @@ end
     f = Fiber(sb; cross_section = _FT_XS, T_ref_K = _FT_T_REF)
     conn = f.path.jumpto_quintic_connector
     L = arc_length(conn)
-    κ_peak = maximum(curvature(conn, s) for s in range(0.0, Float64(_qc_nominalize(L)); length = 64))
+    ss = range(0.0, Float64(_qc_nominalize(L)); length = 64)
+    κ_peak = maximum(curvature(conn, s) for s in ss)
     @test κ_peak <= 1 / 0.02 + 1e-6
 end
 
-@testset "Fiber — jumpto! min_bend_radius honored under :T_K (#33)" begin
+@testset "Fiber — jumpto! min_bend_radius honored under :T_K" begin
     # T-GUARDRAIL: a seal carrying :T_K thermally expands the connector
     # (target-length solve) yet still respects a feasible min_bend_radius — the
     # solver validates peak curvature against the limit post-hoc.
@@ -299,7 +322,8 @@ end
     f = Fiber(sb; cross_section = _FT_XS, T_ref_K = _FT_T_REF)
     conn = f.path.placed_segments[1].segment
     L = arc_length(conn)
-    κ_peak = maximum(curvature(conn, s) for s in range(0.0, Float64(_qc_nominalize(L)); length = 64))
+    ss = range(0.0, Float64(_qc_nominalize(L)); length = 64)
+    κ_peak = maximum(curvature(conn, s) for s in ss)
     @test κ_peak <= 1 / 0.02 + 1e-6
 end
 
@@ -328,4 +352,82 @@ end
     Ωs = total_spin(scal; s_start = 0.0, s_end = Ls)
     @test Ωb ≈ τ * Lb atol = 1e-9
     @test Ωs ≈ α * Ωb rtol = 1e-9
+end
+
+# -----------------------------------------------------------------------
+# Mechanical twist under thermal expansion (inverse-length scaling)
+# -----------------------------------------------------------------------
+
+@testset "Fiber :T_K — divides twist rate by α; conserves total turns" begin
+    # T-PHYSICS: mechanical twist τ_m is an inverse-length rate (rad/m). Thermal
+    # expansion scales arc length by α, so the *rate* divides by α and the total
+    # accumulated twist Φ = ∫τ_m ds is conserved (the frozen-in turns just stretch
+    # over a longer length — no turns are added). Contrast material spinning above,
+    # whose rate is preserved and whose total therefore scales with length.
+    α   = 1.05
+    τm0 = 3.0
+    spec = sb -> straight!(sb; length = 2.0, twist = τm0, meta = _ft_mcm(α))
+
+    base = _ft_baseline(spec)
+    scal = _ft_scaled(spec)
+
+    Lb = Float64(_qc_nominalize(arc_length(base)))
+    Ls = Float64(_qc_nominalize(arc_length(scal)))
+    @test Ls ≈ α * Lb atol = 1e-9
+
+    # Rate divides by α.
+    @test twist_rate(base, 0.5 * Lb) ≈ τm0
+    @test twist_rate(scal, 0.5 * Ls) ≈ τm0 / α rtol = 1e-12
+
+    # Total twist Φ = ∫τ_m ds is conserved across the expansion.
+    Φb = twist_phase(base, Lb)
+    Φs = twist_phase(scal, Ls)
+    @test Φb ≈ τm0 * Lb atol = 1e-9
+    @test Φs ≈ Φb rtol = 1e-9
+end
+
+@testset "Fiber :T_K — function-valued twist conserves turns (reparametrized)" begin
+    # T-PHYSICS: a function rate τ_m(s_local) is reparametrized onto the stretched
+    # local arc length, g(s) = τ_m(s/α)/α, so ∫g over the elongated segment equals
+    # ∫τ_m over the original — turns conserved for non-constant twist too.
+    α    = 1.1
+    rate = s -> 1.0 + s          # rad/m, linear in segment-local arc length
+    spec = sb -> straight!(sb; length = 2.0, twist = rate, meta = _ft_mcm(α))
+
+    base = _ft_baseline(spec)
+    scal = _ft_scaled(spec)
+    Lb = Float64(_qc_nominalize(arc_length(base)))
+    Ls = Float64(_qc_nominalize(arc_length(scal)))
+
+    @test twist_phase(base, Lb) ≈ twist_phase(scal, Ls) rtol = 1e-9
+end
+
+@testset "Fiber — non-thermal fiber leaves twist rate untouched" begin
+    # T-GUARDRAIL: with no :T_K/:tension meta the scaling factor is never applied,
+    # so the twist rate is bit-for-bit the authored value.
+    τm0 = 2.5
+    f = Fiber(_ft_subpath(sb -> straight!(sb; length = 1.0, twist = τm0));
+              cross_section = _FT_XS, T_ref_K = _FT_T_REF)
+    L = Float64(_qc_nominalize(arc_length(f.path)))
+    @test twist_rate(f.path, 0.5 * L) == τm0
+    @test twist_phase(f.path, L) ≈ τm0 * L
+end
+
+@testset "Fiber :T_K — twist rate divides under Particles ΔT" begin
+    # MCM: a Particles-valued ΔT lifts the twist rate to Particles, dividing by the
+    # Particles factor α = 1 + α_lin·ΔT (no ::Real slot, no coercion).
+    MonteCarloMeasurements.unsafe_comparisons(true)
+    try
+        τm0 = 4.0
+        ΔT  = 0.0 ± (0.01 / _FT_ALPHA)        # α = 1 ± 0.01
+        f = Fiber(_ft_subpath(sb -> straight!(sb; length = 1.0, twist = τm0,
+                                              meta = [MCMadd(:T_K, ΔT)]));
+                  cross_section = _FT_XS, T_ref_K = _FT_T_REF)
+        L = Float64(_qc_nominalize(arc_length(f.path)))
+        r = twist_rate(f.path, 0.5 * L)
+        @test r isa Particles
+        @test pmean(r) ≈ τm0 rtol = 1e-3      # 1/α with zero-mean α centers on τm0
+    finally
+        MonteCarloMeasurements.unsafe_comparisons(false)
+    end
 end

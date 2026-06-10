@@ -1277,7 +1277,7 @@ is carried through untouched.
 `jumpto_target_length`, when given, constrains the terminal `jumpto!` connector's
 arc length to that value while still landing at the fixed `jumpto_point` (a plain
 length, layer-agnostic). It is supplied by a consuming layer — the fiber uses it
-to thermally expand the connector (issue #33). It combines with
+to thermally expand the connector. It combines with
 `jumpto_min_bend_radius`: when a target length is set the solver picks the handle
 scale by arc length and validates peak curvature against the radius limit.
 
@@ -1373,7 +1373,7 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
             zeros(eltype(K0_local), 3) :
             frame' * collect(sub.jumpto_incoming_curvature)
         # The caller may constrain the terminal connector's arc length (the fiber
-        # supplies this to thermally expand the connector — issue #33).
+        # supplies this to thermally expand the connector).
         # `min_bend_radius` is always honored: with a target set the
         # solver picks the handle by arc length and validates the radius limit
         # post-hoc; with no target it drives the handle selection.
@@ -1649,6 +1649,21 @@ function _find_placed_segment(b::SubpathBuilt, s)
     seg_len_t = arc_length(ps_t.segment)
     s_local   = clamp(s - s_eff, zero(seg_len_t), seg_len_t)
     return ps_t, s_local
+end
+
+"""
+    local_segment(b::SubpathBuilt, s) -> AbstractPathSegment
+    local_segment(p::PathBuilt, s)    -> AbstractPathSegment
+
+Return the `AbstractPathSegment` (interior segment or terminal connector)
+containing arc length `s`, retaining its meta. A point-like query sibling of
+`curvature`/`twist_rate`/`position`; consuming layers use it to recover
+per-segment annotations (e.g. the fiber's `:T_K`) at query time.
+"""
+local_segment(b::SubpathBuilt, s::Real) = _find_placed_segment(b, s)[1].segment
+function local_segment(p::PathBuilt, s::Real)
+    sb, s_local = _find_subpath(p, s)
+    return local_segment(sb, s_local)
 end
 
 """
