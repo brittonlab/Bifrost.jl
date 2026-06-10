@@ -1,3 +1,7 @@
+```@meta
+CollapsedDocStrings = true
+```
+
 # [PathGeometry](@id path-geometry-api)
 
 Three-dimensional path authoring and differential geometry: straight, bend, catenary,

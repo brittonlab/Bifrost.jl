@@ -424,6 +424,7 @@ reduces to a circular arc (BendSegment) in the n̂ direction.
     arc_length = turns · 2π · √(R² + h²)
 
 Local-frame basis vectors:
+
     n̂  = [cos(axis_angle), sin(axis_angle), 0]     (toward helix axis)
     r̂₀ = [-sin(axis_angle), cos(axis_angle), 0]    (outward radial at s=0)
     ê_φ = (R·ẑ - h·n̂) / ℓ'                        (tangential at s=0, ⊥ axis)

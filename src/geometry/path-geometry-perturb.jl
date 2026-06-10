@@ -32,11 +32,15 @@ _length_fields(seg::AbstractPathSegment) = error(
 _reconstruct_segment(seg::AbstractPathSegment, vals, new_meta) =
     (Base.typename(typeof(seg)).wrapper)(vals...; meta = new_meta)
 
-# Scale a `TwistRate` (rad/m) inversely by `factor`. Mechanical twist is an
-# inverse-length rate: under an isotropic length scaling by `factor`, the total
-# turns `∫τ_m ds` are conserved, so the rate divides by `factor`. A function rate
-# `τ_m(s_local)` is also reparametrized onto the stretched local arc length:
-# `g(s) = τ_m(s/factor)/factor`, so `∫₀^{factor·L} g = ∫₀^L τ_m` (turns conserved).
+"""
+    _scale_inverse_twist_rate(rate, factor)
+
+Scale a `TwistRate` (rad/m) inversely by `factor`. Mechanical twist is an
+inverse-length rate: under an isotropic length scaling by `factor`, the total
+turns `∫τ_m ds` are conserved, so the rate divides by `factor`. A function rate
+`τ_m(s_local)` is also reparametrized onto the stretched local arc length:
+`g(s) = τ_m(s/factor)/factor`, so `∫₀^{factor·L} g = ∫₀^L τ_m` (turns conserved).
+"""
 _scale_inverse_twist_rate(::Nothing, _factor) = nothing
 _scale_inverse_twist_rate(rate::Real, factor) = rate / factor
 _scale_inverse_twist_rate(rate::Function, factor) = s -> rate(s / factor) / factor

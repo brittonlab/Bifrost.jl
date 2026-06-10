@@ -1,3 +1,7 @@
+```@meta
+CollapsedDocStrings = true
+```
+
 # [FiberPath](@id fiber-path)
 
 Fiber assembly: binds a built `PathSpecCached` to a `FiberCrossSection` and reference

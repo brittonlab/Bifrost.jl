@@ -1,3 +1,7 @@
+```@meta
+CollapsedDocStrings = true
+```
+
 # [PathIntegral](@id path-integral)
 
 Adaptive propagation of the Jones equation `dJ/ds = K(s)J` and the coupled sensitivity

@@ -1,3 +1,7 @@
+```@meta
+CollapsedDocStrings = true
+```
+
 # [FiberCS](@id fiber-cross-section)
 
 Transverse step-index fiber geometry: converts material properties into guided index,

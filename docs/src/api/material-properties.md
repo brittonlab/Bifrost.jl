@@ -1,3 +1,7 @@
+```@meta
+CollapsedDocStrings = true
+```
+
 # [MaterialProperties](@id material-properties)
 
 Intrinsic optical material properties — refractive index, thermo-optic behavior, CTE, and
