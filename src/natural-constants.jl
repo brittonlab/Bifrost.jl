@@ -18,6 +18,8 @@ field access constant-folds and is type-stable with no runtime overhead.
 import PhysicalConstants.CODATA2022 as CODATA
 using Unitful: ustrip, @u_str
 
+export NaturalConstants, u
+
 """
     NaturalConstants
 
@@ -49,7 +51,7 @@ julia> u.c
 
 See [`NaturalConstants`](@ref) for the available fields (`c`, `ħ`, `kB`).
 """
-const u = let
+const u::NaturalConstants = let
     c  = ustrip(u"m/s", float(CODATA.SpeedOfLightInVacuum))
     ħ  = ustrip(u"J*s", float(CODATA.ReducedPlanckConstant))
     kB = ustrip(u"J/K", float(CODATA.BoltzmannConstant))

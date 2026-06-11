@@ -106,7 +106,9 @@ end
 
 # Umbrella re-export: each core submodule's exported names are surfaced at
 # the top level so `using Bifrost` is enough for typical use.
-using .Constants
+const NaturalConstants = Constants.NaturalConstants
+const u::NaturalConstants = Constants.u
+
 using .MaterialProperties
 using .FiberCS
 using .PathGeometry
@@ -119,6 +121,8 @@ for m in (Constants, MaterialProperties, FiberCS, PathGeometry, FiberPath, PathI
         @eval export $n
     end
 end
+
+export NaturalConstants, u
 
 # Also export the submodule names themselves so callers can write
 # `PG = PathGeometry` (or qualified `PathGeometry.X`) after `using Bifrost`.
