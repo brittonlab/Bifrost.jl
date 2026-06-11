@@ -46,10 +46,11 @@ xs = bf.StepIndexCrossSection(
 )
 
 # Build a simple path: straight 1 meter
-spec = bf.PathSpecBuilder()
+spec = bf.SubpathBuilder(); bf.start_b(spec)
 bf.straight_b(spec, length = 0.5)
-bf.bend_b(spec, radius = 0.01, angle = bf.pi / 2)
+bf.bend_b(spec, radius = 0.05, angle = bf.pi / 2)
 bf.straight_b(spec, length = 0.5)
+bf.seal_b(spec)
 path = bf.build(spec)
 
 # Reference temperature
@@ -79,7 +80,6 @@ print("Propagating fiber with uncertain temperature...")
 J_particles, stats = bf.propagate_fiber(
     fiber_mcm,
     lambda_m=1550e-9,
-    rtol=1e-9,
     verbose=False,
 )
 
