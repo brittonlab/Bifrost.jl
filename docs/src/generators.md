@@ -34,7 +34,7 @@ K(z) = -\frac{i}{2} \frac{k_0}{\bar{n}} (\epsilon - \bar{n}^2).
 
 ## The Permittivity Tensor
 
-The permittivity tensor has contributions from every birefringence mechanism available. It explicitly describes how the two modes gain phase, so we can use our physical intuition to write it down. We must pick a basis for doing so; let's choose the $N,B$ basis where $N$ and $B$ are the normal and binormal of the Frenet-Serret frame. Then, as a starting point, we can write
+The permittivity tensor has contributions from every birefringence mechanism available. It explicitly describes how the two modes gain phase, so we can use our physical intuition to write it down. We must pick a basis for doing so: BIFROST uses the parallel-transported (Bishop) pair $(e_1, e_2)$ — zero twist about the tangent, continuous along the whole path — which is the gauge in which free propagation contributes no frame term at all (see [The transverse frame and the birefringence gauge](frame-and-gauge.md)). On a straight fiber, where the distinction is invisible, we can write as a starting point
 
 ```math
 \epsilon = \bar{\epsilon} + i\epsilon_c \left( \begin{array}{cc} 0 & -1 \\ 1 & 0 \end{array} \right) + \epsilon_i \left( \begin{array}{cc} \cos 2\xi z & \sin 2\xi z \\ \sin 2\xi z & -\cos 2\xi z \end{array} \right).
@@ -42,9 +42,19 @@ The permittivity tensor has contributions from every birefringence mechanism ava
 
 Here $\bar{\epsilon} = \bar{n}^2$ is the average permittivity, $\epsilon_c$ is the circular birefringence, and $\epsilon_i$ is the intrinsic linear birefringence, which is rotating with the spin of the fiber at spin rate $\xi$. Writing $\xi = 2\pi/L_s$ with a single spin pitch $L_s$ is the constant-rate special case used here for clarity. In general the spin rate is an arbitrary function of arc length, $\xi = \xi(z)$, and the implementation treats it that way: a Subpath's `spin_rate` (set at `start!`) in `src/geometry/path-geometry.jl` is a `Union{Float64, Function, Nothing, Symbol}`, and the integrator (`_integrate_rate`) takes the analytic branch for a constant rate and adaptive Gauss–Kronrod quadrature for a function rate. Replace $2\xi z$ below with $2\int_0^z \xi(z')\,dz'$ for the function-valued case.
 
-This is a only starting point because the choice of the $N,B$ frame doesn't really mean anything. Without the curvature of bending, the direction of the normal vector is arbitrary. In this case, the normal vector direction is evidently set by the fact that the first component of the Jones vector here is along the slow axis and the second component is along the fast axis. Thus the normal vector is set along the slow axis at $z=0$ (and doesn't rotate with the spin). That's a loose constraint because we sort of don't care about these overall rotations for our problems where we'll be sending in light of all polarizations. 
+The remaining freedom in the basis is a single constant rotation — the anchor
+$e_1(0)$, fixed by a static lab-frame convention (see
+[the frame page, Section 7](frame-and-gauge.md)). We mostly don't care about
+this overall rotation because we send in light of all polarizations and the
+observables (DGD in particular) are gauge-invariant.
 
-Where things get really complicated is when we introduce bending, because now we have to keep track of the linear birefringence direction and the spin relative to the bend plane, and the curvature means the normal vector is rotating for actual physical reasons. **To be continued...**
+With bending, the linear birefringence direction of the bend is the projection
+of the curvature vector onto $(e_1, e_2)$:
+$\theta_b = \operatorname{atan2}(\vec k\cdot e_2,\ \vec k\cdot e_1)$, while the
+intrinsic (ellipticity/stress) axes sit at their frozen angle plus the
+accumulated spin and twist phases. No geometric quantity ever rotates the basis
+itself — the bookkeeping that the Frenet–Serret basis would require (and that
+historically produced the issue #88/#89 family of bugs) does not arise.
 
 If there were no spin, then we would say 
 
@@ -70,31 +80,30 @@ approach is simple, but it is difficult to attach a meaningful error bound when
 linear birefringence, spinning, and other non-commuting terms vary along the
 path.
 
-The Julia implementation instead assembles a local generator:
+The Julia implementation instead assembles a local generator as a sum over
+mechanisms (all axes expressed in the transported frame):
 
 ```math
-K(s,\omega)=K_{\mathrm{bend}}(s,\omega)+K_{\mathrm{spin}}(s,\omega).
+K(s,\omega)=K_{\mathrm{bend}}+K_{\mathrm{twist}}+K_{\mathrm{ellipticity}}
++K_{\mathrm{tension}}.
 ```
 
 The bending contribution comes from path curvature. For a local bend radius
 `R(s)`, the implemented perturbation uses the bending birefringence response
-from `src/fiber/fiber-cross-section.jl`; in the simplest stress model the
-magnitude scales like `1/R(s)^2`.
-
-The spinning contribution uses the total frame rotation rate:
-
-```math
-\tau_{\mathrm{path}}(s)=\tau_{\mathrm{geom}}(s)+\Omega(s).
-```
-
-Here `geometric_torsion(path, s)` comes from the centerline, while
-`spinning_rate(path, s)` comes from resolved `Spinning` metadata.
+from the cross-section layer; in the simplest stress model the magnitude
+scales like `1/R(s)^2`, and its axis is the curvature direction projected onto
+the frame (`bend_components`). The intrinsic contribution's axes co-rotate
+with the material: `spin_phase(path, s) + twist_phase(path, s)`. Twist
+additionally contributes photoelastic circular birefringence. Geometric
+torsion appears in none of these — see
+[the frame page](frame-and-gauge.md).
 
 The same decomposition exists for the frequency derivative:
 
 ```math
 K_\omega(s,\omega)
-=K_{\mathrm{bend},\omega}(s,\omega)+K_{\mathrm{spin},\omega}(s,\omega).
+=K_{\mathrm{bend},\omega}+K_{\mathrm{twist},\omega}
++K_{\mathrm{ellipticity},\omega}+K_{\mathrm{tension},\omega}.
 ```
 
 That keeps ordinary Jones propagation and DGD sensitivity propagation aligned:

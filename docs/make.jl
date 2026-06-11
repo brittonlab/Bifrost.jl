@@ -21,6 +21,7 @@ makedocs(
         "Examples" => "examples.md",
         "Usage" => "usage.md",
         "Theory" => [
+            "Frame and gauge" => "frame-and-gauge.md",
             "Deriving the generators" => "generators.md",
             "Path geometry" => "path-geometry.md",
             "Monte Carlo Measurements" => "mcm.md",
