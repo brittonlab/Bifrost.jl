@@ -6,19 +6,20 @@ Converts Python Particles objects to Julia equivalents before passing to Julia.
 
 from typing import Any, Optional
 from .bifrost_py import get_jl
+from ._meta import AbstractMeta, validate_meta, _meta_list_to_julia
 
 
 def Fiber(path, cross_section, T_ref_K=None):
     """
-    Create a Fiber with automatic Particles conversion.
+    Create a Fiber with automatic Particles and meta conversion.
     
     Parameters
     ----------
-    path : Path
-        PathSpecCached from builder.build()
+    path : PathBuilt
+        Built path from SubpathBuilder.build()
     cross_section : StepIndexCrossSection or GradedIndexCrossSection
         Fiber cross-section
-    temperature_k : float or Particles, optional
+    T_ref_K : float or Particles, optional
         Reference temperature in Kelvin. Can be a scalar or Particles ensemble.
     
     Returns
@@ -27,10 +28,23 @@ def Fiber(path, cross_section, T_ref_K=None):
     
     Examples
     --------
-    >>> fiber = bf.Fiber(path, cross_section=xs, temperature_k=297.15)
-    >>> # With uncertain temperature:
-    >>> T = bf.mcm.Particles(50, norm(297.15, 5))
-    >>> fiber_mcm = bf.Fiber(path, cross_section=xs, temperature_k=T)
+    >>> spec = bf.SubpathBuilder()
+    >>> bf.start_b(spec)
+    >>> bf.straight_b(spec, length_m=1.0)
+    >>> bf.seal_b(spec)
+    >>> path = bf.build(spec)
+    
+    >>> xs = bf.StepIndexCrossSection(...)
+    
+    >>> # Deterministic fiber:
+    >>> fiber = bf.Fiber(path, cross_section=xs, T_ref_K=297.15)
+    
+    >>> # Fiber with uncertain temperature (100 samples):
+    >>> T = bf.mcm.Particles(100, norm(297.15, 5))
+    >>> fiber_mcm = bf.Fiber(path, cross_section=xs, T_ref_K=T)
+    
+    >>> # Propagate
+    >>> J, stats = bf.propagate_fiber(fiber, wavelength_m=1550e-9)
     """
     jl = get_jl()
     

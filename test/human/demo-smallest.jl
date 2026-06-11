@@ -18,6 +18,7 @@ straight!(sb; length = 0.5, meta = [Nickname("lead-in")])
 bend!(sb;     radius = 0.05, angle = π / 2, meta = [Nickname("90 deg bend")])
 straight!(sb; length = 0.5, meta = [Nickname("lead-out")])
 seal!(sb)
+#println(segment_nickname(sb.segments[2]))
 
 fiber = Fiber(build(sb); cross_section = xs, T_ref_K = 297.15)
 
