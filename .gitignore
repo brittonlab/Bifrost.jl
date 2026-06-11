@@ -5,6 +5,7 @@ fiberinput_paddles_3d.html
 output/
 __pycache__/
 *.pyc
+bifrost.egg-info/
 
 # Dependency snapshot; only included on tagged releases (issue #77)
 /Manifest.toml
