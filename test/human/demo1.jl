@@ -37,11 +37,13 @@ function _all_placed(path::Union{SubpathBuilt, PathBuilt})
         for (i, sp) in enumerate(path.subpaths)
             for ps in sp.placed_segments
                 push!(result, PlacedSegment(ps.segment,
-                    offs[i] + ps.s_offset_eff, ps.origin, ps.frame))
+                    offs[i] + ps.s_offset_eff, ps.origin, ps.frame,
+                    ps.bishop_e1))
             end
             push!(result, PlacedSegment(sp.jumpto_placed.segment,
                 offs[i] + sp.jumpto_placed.s_offset_eff,
-                sp.jumpto_placed.origin, sp.jumpto_placed.frame))
+                sp.jumpto_placed.origin, sp.jumpto_placed.frame,
+                sp.jumpto_placed.bishop_e1))
         end
         return result
     end

@@ -32,7 +32,7 @@ using LinearAlgebra
 using ..PathGeometry
 
 # ---------------------------------------------------------------------------
-# Sampling (uses `frame` from PathGeometry — analytic Frenet data on `Path`)
+# Sampling (uses `frame` from PathGeometry — transported (Bishop) frame data)
 # ---------------------------------------------------------------------------
 
 """
@@ -249,7 +249,7 @@ view.
 
 Open-circle markers mark effective arc-length joins between authored segments that fall
 within `[s1, s2]`. Each authored segment carrying a `Nickname` meta gets a 3D text label at
-its midpoint arc length, nudged along the principal normal. A red arrow in the local N̂–B̂
+its midpoint arc length, nudged along the transported normal. A red arrow in the local N̂–B̂
 plane points along `cos(Φ) N̂ + sin(Φ) B̂`, where `Φ` is `PathGeometry.total_spin` from
 `s1` to the cursor arc length.
 
@@ -338,8 +338,8 @@ function write_path_geometry_plot3d(
       - normal–binormal plane: semi-transparent square in the local plane spanned by N̂ and B̂
         at the cursor (moves with scrub).
       - T̂: orange segment, unit tangent at the cursor.
-      - N̂: blue segment, principal normal at the cursor.
-      - B̂: green segment, binormal T̂×N̂ at the cursor.
+      - N̂: blue segment, transported (Bishop) e1 at the cursor.
+      - B̂: green segment, transported e2 = T̂×N̂ at the cursor.
       - ∫τ_spin: red arrow in the N̂–B̂ plane at the cursor; Φ = total_spin(path; s_start
         = plot start, s_end = cursor) (same length scale as T̂/N̂/B̂ axes).
       - segment labels (optional): 3D text for each authored segment that has a nickname, when

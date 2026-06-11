@@ -19,18 +19,19 @@ end
 
 """ Explain sampled_path_* methods here.
 
-The sampled path methods provide utilities for working with a discretely sampled fiber path, 
-  where the geometry and polarization state are defined at specific arc-length coordinates. These 
-  methods allow for interpolation of scalar and vector fields along the path, as well as computation 
-  of the Frenet-Serret frame, which describes the local geometric properties of the path. 
-  
-  - The `render_pol_circle` method generates a visual representation of the polarization state at a given 
-  point along the path.
-  - The `render_poincare_sphere` method creates a visualization of the polarization state on the Poincare sphere. 
-  
-sample_path_bracket, sasmpled_path_scalar, and sampled_path_vector are helper functions for interpolating values along 
-the path based on the arc-length parameter `s`. The frenet_serret_frame function computes the tangent, normal, and 
-binormal vectors at a given point on the path, which are essential for understanding the local geometry of the fiber.
+The sampled path methods provide utilities for working with a discretely sampled
+fiber path, where the geometry and polarization state are defined at specific
+arc-length coordinates. The sampled frame columns (`nx..bz`, aliased `e1*`/`e2*`)
+are the path's transported (Bishop) pair.
+
+  - The `render_pol_circle` method generates a visual representation of the
+  polarization state at a given point along the path.
+  - The `render_poincare_sphere` method creates a visualization of the
+  polarization state on the Poincare sphere.
+
+sampled_path_bracket, sampled_path_scalar, and sampled_path_vector are helper
+functions for interpolating values along the path based on the arc-length
+parameter `s`.
 """
 
 """
@@ -72,48 +73,6 @@ function sampled_path_vector(path, fields::NTuple{3,Symbol}, s::Real)
 end
 
 """
-    frenet_serret_frame(path, s; curvature_tol = 1e-8)
-
-Return the Frenet-Serret frame of a sampled path at arc-length coordinate `s`.
-
-The `path` input must provide `s`, `x`, `y`, and `zc` arrays, where `s` is the arc-length
-parameter. On locally straight sections, where the classical Frenet normal is undefined, the
-function falls back to the path's transported frame `e1/e2` when available.
-"""
-function frenet_serret_frame(path, s::Real; curvature_tol::Float64 = 1e-8)
-    ss = path.s
-    @assert first(ss) <= s <= last(ss) "s out of bounds"
-
-    idx = searchsortedfirst(ss, Float64(s))
-    i = clamp(idx, 2, length(ss) - 1)
-
-    rL = sampled_path_vector(path, (:x, :y, :zc), ss[i - 1])
-    r0 = sampled_path_vector(path, (:x, :y, :zc), ss[i])
-    rR = sampled_path_vector(path, (:x, :y, :zc), ss[i + 1])
-    dsL = ss[i] - ss[i - 1]
-    dsR = ss[i + 1] - ss[i]
-
-    t_raw = (rR - rL) / (ss[i + 1] - ss[i - 1])
-    tangent = t_raw / norm(t_raw)
-    d2r = 2 * (((rR - r0) / dsR) - ((r0 - rL) / dsL)) / (dsL + dsR)
-    normal_raw = d2r - dot(d2r, tangent) * tangent
-    curvature = norm(normal_raw)
-
-    if curvature > curvature_tol
-        normal = normal_raw / curvature
-        binormal = cross(tangent, normal)
-        binormal /= norm(binormal)
-    elseif all(hasproperty(path, p) for p in (:e1x, :e1y, :e1z, :e2x, :e2y, :e2z))
-        normal = [path.e1x[i], path.e1y[i], path.e1z[i]]
-        binormal = [path.e2x[i], path.e2y[i], path.e2z[i]]
-    else
-        error("Frenet normal undefined on a straight section and no fallback frame is available")
-    end
-
-    return (; tangent, normal, binormal, curvature)
-end
-
-"""
     poincare_vector_representation(ψ)
 
 Convert a Jones state vector `ψ` into a Poincare-sphere vector and its equatorial projection.
@@ -138,20 +97,16 @@ end
 
 Build Plotly-ready traces for a unit polarization circle centered on the fiber centerline at `s`.
 
-The circle lies in the plane spanned by the Frenet-Serret normal and binormal vectors.
-The arrow starts at the circle center and points along the equatorial projection of the
-Poincare vector, with angle `rep.linear.angle_rad` and length `rep.linear.radius`.
+The circle lies in the plane spanned by the path's transported (Bishop) frame pair
+`(e1, e2)` — the gauge in which the Jones state is expressed. The arrow starts at the
+circle center and points along the equatorial projection of the Poincare vector, with
+angle `rep.linear.angle_rad` and length `rep.linear.radius`. The `path` input must
+provide the sampled frame columns `nx..bz`.
 """
 function render_pol_circle(path, s::Real, rep::NamedTuple; npts::Int = 181)
     center = sampled_path_vector(path, (:x, :y, :zc), s)
-    if all(hasproperty(path, p) for p in (:nx, :ny, :nz, :bx, :by, :bz))
-        n̂ = sampled_path_vector(path, (:nx, :ny, :nz), s)
-        b̂ = sampled_path_vector(path, (:bx, :by, :bz), s)
-    else
-        fs = frenet_serret_frame(path, s)
-        n̂ = fs.normal
-        b̂ = fs.binormal
-    end
+    n̂ = sampled_path_vector(path, (:nx, :ny, :nz), s)
+    b̂ = sampled_path_vector(path, (:bx, :by, :bz), s)
 
     ts = collect(range(0.0, 2π, length = npts))
     circle_x = center[1] .+ cos.(ts) .* n̂[1] .+ sin.(ts) .* b̂[1]
@@ -313,15 +268,15 @@ module PlotRuntime
     using LinearAlgebra
     # Bring in runtime API from sibling Bifrost submodules. PlotRuntime lives at
     # depth Bifrost.Plots.PlotRuntime, so `...FiberPath` (= Bifrost.FiberPath) is
-    # two parents up. In-file helpers (rotate_about_axis, frenet_serret_frame,
+    # two parents up. In-file helpers (rotate_about_axis,
     # poincare_vector_representation, render_pol_circle, render_poincare_sphere)
     # live in `Bifrost.Plots`, reachable as `..Plots`.
     using ...FiberPath: Fiber, bend_geometry, fiber_path
-    using ...PathGeometry: spin_rate, geometric_torsion
+    using ...PathGeometry: spin_rate
     using ...PathIntegral: generator_K, generator_Kω,
                            exp_sensitivity_midpoint_step, output_dgd
     using ...PathGeometry: frame
-    using ..Plots: rotate_about_axis, frenet_serret_frame,
+    using ..Plots: rotate_about_axis,
                    poincare_vector_representation,
                    render_pol_circle, render_poincare_sphere
 
@@ -416,20 +371,18 @@ module PlotRuntime
     """
         sample_fiber_centerline(f::Fiber, s1, s2; n = 1001)
 
-    Reconstruct a fiber centerline from a [`Fiber`](path-integral.jl)
+    Sample a fiber centerline from a [`Fiber`](path-integral.jl)
     on the interval `[s1, s2]`, treating the input coordinate as arc length.
 
-    The bend field defines the local curvature vector
+    The sampled transverse frame (`nx..bz`, aliased `e1*`/`e2*`) is the path's
+    transported (Bishop) pair — the gauge of the Jones state. `kx`/`ky` are the
+    curvature-vector components on that pair and `theta_b = atan(ky, kx)` is the
+    bend birefringence axis angle. `spin_rate` (rad/m) is included for display
+    and does not affect the centerline geometry.
 
-    `κ(s) = (cos(θ_b(s))/Rb(s), sin(θ_b(s))/Rb(s), 0)`
-
-    in the lab frame, and the centerline is recovered by integrating the tangent vector.
-    `frame_rate` is included in the returned metadata in rad/m but does not affect the centerline
-    geometry.
-
-    Returns a named tuple containing `s`, `x`, `y`, `zc`, `tx`, `ty`, `tz`, Frenet-Serret
-    `nx`, `ny`, `nz`, `bx`, `by`, `bz`, the transported frame `e1x`, `e1y`, `e1z`, `e2x`,
-    `e2y`, `e2z`, `Rb`, `theta_b`, `frame_rate`, `kx`, `ky`, and `k2`.
+    Returns a named tuple containing `s`, `x`, `y`, `zc`, `tx`, `ty`, `tz`,
+    `nx`, `ny`, `nz`, `bx`, `by`, `bz`, the aliases `e1x`, `e1y`, `e1z`, `e2x`,
+    `e2y`, `e2z`, `Rb`, `theta_b`, `spin_rate`, `kx`, `ky`, and `k2`.
     """
     function sample_fiber_centerline(f::Fiber, s1::Real, s2::Real; n::Int = 1001)
         @assert s2 > s1 "Require s2 > s1"
@@ -458,15 +411,20 @@ module PlotRuntime
             e2x = copy(bx)
             e2y = copy(by)
             e2z = copy(bz)
-            kx = [Float64(fr.curvature) for fr in frames]
-            ky = zeros(Float64, n)
-            k2 = [κ^2 for κ in kx]
-            Rb = [iszero(fr.curvature) ? Inf : Float64(inv(fr.curvature)) for fr in frames]
-            theta_b = zeros(Float64, n)
-            frame_rate = [Float64(fr.geometric_torsion + fr.spin_rate) for fr in frames]
+            kx = [Float64(fr.curvature_vector[1] * fr.normal[1] +
+                          fr.curvature_vector[2] * fr.normal[2] +
+                          fr.curvature_vector[3] * fr.normal[3]) for fr in frames]
+            ky = [Float64(fr.curvature_vector[1] * fr.binormal[1] +
+                          fr.curvature_vector[2] * fr.binormal[2] +
+                          fr.curvature_vector[3] * fr.binormal[3]) for fr in frames]
+            k2 = [kx[i]^2 + ky[i]^2 for i in eachindex(kx)]
+            Rb = [k2[i] == 0.0 ? Inf : inv(sqrt(k2[i])) for i in eachindex(k2)]
+            theta_b = [atan(ky[i], kx[i]) for i in eachindex(kx)]
+            spin_rate_vals = [Float64(fr.spin_rate) for fr in frames]
 
             return (; s = ss, x, y, zc, tx, ty, tz, e1x, e1y, e1z, e2x, e2y, e2z,
-                      Rb, theta_b, frame_rate, kx, ky, k2, nx, ny, nz, bx, by, bz)
+                      Rb, theta_b, spin_rate = spin_rate_vals, kx, ky, k2,
+                      nx, ny, nz, bx, by, bz)
         end
 
         ss = collect(range(Float64(s1), Float64(s2), length = n))
@@ -475,7 +433,7 @@ module PlotRuntime
         zc = zeros(Float64, n)
         Rb = Vector{Float64}(undef, n)
         theta_b = Vector{Float64}(undef, n)
-        frame_rate = Vector{Float64}(undef, n)
+        spin_rate_vals = Vector{Float64}(undef, n)
         kx = zeros(Float64, n)
         ky = zeros(Float64, n)
         k2 = zeros(Float64, n)
@@ -509,13 +467,13 @@ module PlotRuntime
             bend = bend_geometry(f, si)
             R = Float64(bend.Rb)
             θ = Float64(bend.theta_b)
-            # Geometric frame rotation rate (torsion + material spin) for display.
-            τ = Float64(geometric_torsion(fiber_path(f), si) +
-                        spin_rate(fiber_path(f), si))
+            # Material spin rate for display (the transported frame itself has
+            # zero twist about the tangent, so there is no geometric rate).
+            τ = Float64(spin_rate(fiber_path(f), si))
 
             Rb[i] = R
             theta_b[i] = θ
-            frame_rate[i] = τ
+            spin_rate_vals[i] = τ
 
             kx[i] = bend.kx
             ky[i] = bend.ky
@@ -557,14 +515,16 @@ module PlotRuntime
             end
         end
 
-        path = (; s = ss, x, y, zc, tx, ty, tz, e1x, e1y, e1z, e2x, e2y, e2z, Rb, theta_b, frame_rate, kx, ky, k2)
+        # The reconstruction loop above already integrates a transported
+        # (zero-twist) frame E1/E2; the sampled n*/b* columns are that pair.
         for i in eachindex(ss)
-            fs = frenet_serret_frame(path, ss[i])
-            nx[i], ny[i], nz[i] = fs.normal
-            bx[i], by[i], bz[i] = fs.binormal
+            nx[i], ny[i], nz[i] = e1x[i], e1y[i], e1z[i]
+            bx[i], by[i], bz[i] = e2x[i], e2y[i], e2z[i]
         end
 
-        return (; path..., nx, ny, nz, bx, by, bz)
+        return (; s = ss, x, y, zc, tx, ty, tz, e1x, e1y, e1z, e2x, e2y, e2z,
+                  Rb, theta_b, spin_rate = spin_rate_vals, kx, ky, k2,
+                  nx, ny, nz, bx, by, bz)
     end
 
     sample_fiber_input = sample_fiber_centerline
@@ -703,7 +663,7 @@ module PlotRuntime
             "z=$(samples.zc[i]) m<br>" *
             "Rb=$(samples.Rb[i]) m<br>" *
             "theta_b=$(samples.theta_b[i]) rad<br>" *
-            "frame_rate=$(samples.frame_rate[i]) rad/m<br>" *
+            "spin_rate=$(samples.spin_rate[i]) rad/m<br>" *
             "DGD=$(dgd.dgd[i]) s<br>" *
             "S1=$(pol.s1[i])<br>" *
             "S2=$(pol.s2[i])<br>" *
@@ -797,7 +757,7 @@ module PlotRuntime
             const bz = $(js_array(samples.bz));
             const rb = $(js_array(samples.Rb));
             const theta = $(js_array(samples.theta_b));
-            const frame_rate = $(js_array(samples.frame_rate));
+            const spinRate = $(js_array(samples.spin_rate));
             const dgd = $(js_array(dgd.dgd));
             const hoverText = $(js_string_array(hover_text));
             const linearAngle = $(js_array(pol.linear_angle_rad));
@@ -1184,7 +1144,7 @@ module PlotRuntime
                 "z = " + zs[index].toFixed(4) + " m",
                 "Rb = " + (Number.isFinite(rb[index]) ? rb[index].toFixed(4) : "Inf") + " m",
                 "theta_b = " + theta[index].toFixed(4) + " rad",
-                "frame_rate = " + frame_rate[index].toFixed(4) + " rad/m",
+                "spin_rate = " + spinRate[index].toFixed(4) + " rad/m",
                 "DGD = " + dgd[index].toExponential(6) + " s",
                 "S1 = " + s1[index].toFixed(4),
                 "S2 = " + s2[index].toFixed(4),

@@ -1,7 +1,9 @@
 using Test
 using LinearAlgebra
 using Bifrost
-using Bifrost.PathGeometry: _qc_nominalize
+using Bifrost.PathGeometry: _qc_nominalize, _normal_local, _binormal_local,
+                            _end_frame_local, _parallel_transport_local,
+                            _curvature_vector_local
 
 
 # -----------------------------------------------------------------------
@@ -48,8 +50,8 @@ end
 
     # frame is orthonormal at any s
     T = tangent_local(seg, 1.0)
-    N = normal_local(seg, 1.0)
-    B = binormal_local(seg, 1.0)
+    N = _normal_local(seg, 1.0)
+    B = _binormal_local(seg, 1.0)
     @test is_orthonormal(T, N, B)
 end
 
@@ -85,7 +87,7 @@ end
     pos_end = end_position_local(seg)
     @test pos_end ≈ [R, 0.0, R] atol = 1e-12
 
-    (T_end, N_end, B_end) = end_frame_local(seg)
+    (T_end, N_end, B_end) = _end_frame_local(seg)
     @test T_end ≈ [1.0, 0.0, 0.0] atol = 1e-12   # tangent rotated 90° toward +x
     @test is_orthonormal(T_end, N_end, B_end)
 end
@@ -98,7 +100,7 @@ end
     pos_end = end_position_local(seg)
     @test pos_end ≈ [2R, 0.0, 0.0] atol = 1e-12
 
-    (T_end, _, _) = end_frame_local(seg)
+    (T_end, _, _) = _end_frame_local(seg)
     @test T_end ≈ [0.0, 0.0, -1.0] atol = 1e-12   # reversed
 end
 
@@ -116,8 +118,8 @@ end
     seg = BendSegment(0.08, 2π / 3, π / 6)
     for s in range(0.0, arc_length(seg); length = 9)
         T = tangent_local(seg, s)
-        N = normal_local(seg, s)
-        B = binormal_local(seg, s)
+        N = _normal_local(seg, s)
+        B = _binormal_local(seg, s)
         @test is_orthonormal(T, N, B)
     end
 end
@@ -160,8 +162,8 @@ end
     seg = CatenarySegment(0.3, 1.0, π / 4)
     for s in range(0.0, arc_length(seg); length = 9)
         T = tangent_local(seg, s)
-        N = normal_local(seg, s)
-        B = binormal_local(seg, s)
+        N = _normal_local(seg, s)
+        B = _binormal_local(seg, s)
         @test is_orthonormal(T, N, B)
     end
 end
@@ -770,13 +772,16 @@ end
     @test frame(b, 0.4).spin_rate == 2.5
 end
 
-@testset "Spin — total_frame_rotation = τ_geom + Ω_spin" begin
-    # straight segment has τ_geom = 0, so total_frame_rotation = ∫τ_spin ds.
+@testset "Spin — material spin does not rotate the transported frame" begin
+    # T-PHYSICS: spin is a material property; the transported (Bishop) frame is
+    # purely geometric, so on a spun straight segment `normal` is constant while
+    # `total_spin` still accumulates ∫τ_spin ds = 0.5 · 2.0 = 1.0.
     sb = SubpathBuilder(); start!(sb; spin_rate = 0.5)
     straight!(sb; length = 2.0)
     _seal_at_z(sb, 2.0)
     b = build(sb)
-    @test isapprox(total_frame_rotation(b; s_start = 0.0, s_end = 2.0), 1.0; atol = 1e-12)
+    @test normal(b, 1.9) ≈ normal(b, 0.1) atol = 1e-12
+    @test isapprox(total_spin(b; s_start = 0.0, s_end = 2.0), 1.0; atol = 1e-12)
 end
 
 @testset "Spin — spin covers the whole Subpath including the seal lead-out" begin
