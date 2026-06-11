@@ -12,6 +12,7 @@ end
 
 _run_test_file(joinpath(@__DIR__, "test_path_geometry_connector.jl"))
 _run_test_file(joinpath(@__DIR__, "test_path_geometry.jl"))
+_run_test_file(joinpath(@__DIR__, "test_bishop_frame.jl"))
 _run_test_file(joinpath(@__DIR__, "test_path_geometry_perturb.jl"))
 _run_test_file(joinpath(@__DIR__, "test_fiber_thermal.jl"))
 _run_test_file(joinpath(@__DIR__, "test_fiber_tension.jl"))
