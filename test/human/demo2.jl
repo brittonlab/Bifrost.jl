@@ -56,10 +56,17 @@ mutable struct _PathSequence
     current::Union{SubpathBuilder, Nothing}
 end
 
+# Several call sites below still use the proxy's former name; keep it as an
+# alias of the sequence type so both spellings construct/dispatch identically.
+const _PathProxy = _PathSequence
+
 function PathSpecBuilder(; spin_rate = nothing)
     sb = SubpathBuilder(); start!(sb; spin_rate = spin_rate)
     return _PathProxy(SubpathBuilder[], sb)
 end
+
+# Former constructor name still used by `_path` below; same object.
+_path_sequence(; kwargs...) = PathSpecBuilder(; kwargs...)
 
 # Forward interior-segment builders to the current Subpath.
 function straight!(p::_PathSequence; kwargs...)

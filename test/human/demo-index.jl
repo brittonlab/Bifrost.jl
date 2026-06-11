@@ -19,6 +19,7 @@ const DEMO_INDEX_DEMO_FILES = [
 #    "demo3mcm.jl",
 #    "demo3benchmark.jl",
     "demo-path-geometry.jl",
+    "demo-frame-birefringence.jl",
 ]
 
 const DEMO_INDEX_SECTION_REGISTRY = Dict(
@@ -51,6 +52,13 @@ const DEMO_INDEX_SECTION_REGISTRY = Dict(
         entry_fn_name = :demo3benchmark_entries,
         group_titles_name = nothing,
         group_titles = Dict("benchmarks" => "Speed benchmarks"),
+    ),
+    "demo-frame-birefringence.jl" => (
+        title = "Transported (Bishop) frame and birefringence",
+        entry_fn_name = :demo_frame_birefringence_entries,
+        group_titles_name = nothing,
+        group_titles = Dict(
+            "frame" => "Frame gauge: primer, sources, pathologies, anchor"),
     ),
 )
 
