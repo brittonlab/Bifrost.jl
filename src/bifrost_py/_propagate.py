@@ -19,8 +19,6 @@ def propagate_fiber(
     fiber: Any,
     *,
     lambda_m: float,
-    rtol: float = 1e-9,
-    atol: float = 1e-12,
     verbose: bool = False,
 ) -> Union[tuple[np.ndarray, dict], tuple["ParticlesMatrix", dict]]:
     """
@@ -179,17 +177,13 @@ def propagate_fiber(
     # Input validation
     if not isinstance(lambda_m, (int, float)) or lambda_m <= 0:
         raise ValueError(f"wavelength_m must be positive, got {lambda_m}")
-    if rtol <= 0 or atol <= 0:
-        raise ValueError(f"Tolerances must be positive, got rtol={rtol}, atol={atol}")
     
     # Call Julia
     jl = get_jl()
     J_jl, stats_jl = jl.Bifrost.propagate_fiber(
         fiber,
         λ_m=lambda_m,
-        rtol=rtol,
-        atol=atol,
-        verbose=verbose,
+        verbose=verbose
     )
     
     # Convert: handles both deterministic and ensemble automatically
