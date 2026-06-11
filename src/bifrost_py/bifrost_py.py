@@ -28,7 +28,6 @@ def julia_exe() -> str:
         if julia is None:
             sys.exit("No `julia` found on PATH. Install Julia (e.g. via juliaup).")
         os.environ["PYTHON_JULIAPKG_EXE"] = julia
-    print("The thing is at ", julia)
 
     _julia_exe = julia
     return _julia_exe
@@ -40,9 +39,8 @@ def start(
     instantiate: bool = True,
     project: Optional[str | os.PathLike] = None,
 ):
-    """Boot juliacall against this repo and return the Julia `Main` handle.
-    
-    [... your existing docstring ...]
+    """
+    Boot juliacall against this repo and return the Julia `Main` handle.
     """
     print("Starting Julia environment...", end=" ")
     global _jl, _start_kwargs
