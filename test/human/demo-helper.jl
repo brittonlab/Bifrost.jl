@@ -55,7 +55,8 @@ _nom(x) = Float64(_qc_nominalize(x))
 
 Shared dark 3D scene layout: equal aspect, muted axes, legend styled for dark.
 """
-function _dark3d(title::AbstractString; height::Int = 560, ranges = nothing)
+function _dark3d(title::AbstractString; height::Int = 560, ranges = nothing,
+                 camera_eye = nothing)
     xax = merge(_DARK_AX3, attr(title = "x (m)"))
     yax = merge(_DARK_AX3, attr(title = "y (m)"))
     zax = merge(_DARK_AX3, attr(title = "z (m)"))
@@ -74,6 +75,11 @@ function _dark3d(title::AbstractString; height::Int = 560, ranges = nothing)
             aspectmode = "manual",
             aspectratio = attr(x = spans[1] / m, y = spans[2] / m, z = spans[3] / m))
     end
+    # A larger camera eye distance zooms the initial view out. `camera_eye`
+    # overrides Plotly's default eye of (1.25, 1.25, 1.25) when supplied.
+    camera_eye === nothing ||
+        (scene[:camera] = attr(eye = attr(x = camera_eye[1], y = camera_eye[2],
+                                          z = camera_eye[3])))
     return Layout(
         title = attr(text = title, font = attr(color = "#eee", size = 15)),
         paper_bgcolor = _DARK_BG,
@@ -376,7 +382,9 @@ function dh_variant_row(variants::Vector; spacing::Real = 2.5,
     push!(traces, scatter3d(x = lx, y = ly, z = lz, mode = "text", text = ltxt,
         textfont = attr(color = "#ddd", size = 13), showlegend = false,
         hoverinfo = "skip"))
-    return plot(traces, _dark3d(title; height = height))
+    # Start 25% more zoomed out than Plotly's default eye of (1.25, 1.25, 1.25).
+    return plot(traces, _dark3d(title; height = height,
+                                camera_eye = (1.5625, 1.5625, 1.5625)))
 end
 
 """
