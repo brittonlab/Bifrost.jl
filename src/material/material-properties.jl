@@ -66,19 +66,19 @@ struct ValidityRange
 end
 
 """
-    check_range(value, range::ValidityRange) -> value
-    check_range(values::NamedTuple, ranges::NamedTuple) -> nothing
+    _check_range(value, range::ValidityRange) -> value
+    _check_range(values::NamedTuple, ranges::NamedTuple) -> nothing
 
 Validate `value` against `range`.
 """
-function check_range(value, r::ValidityRange)
+function _check_range(value, r::ValidityRange)
     isfinite(value) && r.lo <= value <= r.hi ||
         throw(ArgumentError("$(r.name) = $(value) outside [$(r.lo), $(r.hi)]"))
     return value
 end
 
-check_range(values::NamedTuple, ranges::NamedTuple) =
-    foreach(k -> check_range(getfield(values, k), getfield(ranges, k)), keys(ranges))
+_check_range(values::NamedTuple, ranges::NamedTuple) =
+    foreach(k -> _check_range(getfield(values, k), getfield(ranges, k)), keys(ranges))
 
 """
     runtime_range(material) -> NamedTuple
@@ -109,13 +109,13 @@ end
 #################################################
 
 # Used for simple scalar interpolation
-interpolate_scalar(a, b, x) = (one(x) - x) * a + x * b
+_interpolate_scalar(a, b, x) = (one(x) - x) * a + x * b
 
 # Used for photoelastic_constants which are paired
-function interpolate_pair(a::Tuple, b::Tuple, x)
+function _interpolate_pair(a::Tuple, b::Tuple, x)
     return (
-        interpolate_scalar(a[1], b[1], x),
-        interpolate_scalar(a[2], b[2], x)
+        _interpolate_scalar(a[1], b[1], x),
+        _interpolate_scalar(a[2], b[2], x)
     )
 end
 
@@ -131,17 +131,17 @@ Most materials are modeled with the Sellmeier equation:
 strength and wavelength properties of each resonance used in the
 calculation. The functions
 
-    sellmeier_index_from_coefficients(coeffs, λ) -> Float64
-    sellmeier_index_from_coefficients_dω(coeffs, λ) -> SpectralResponse
+    _sellmeier_index_from_coefficients(coeffs, λ) -> Float64
+    _sellmeier_index_from_coefficients_dω(coeffs, λ) -> SpectralResponse
 
 provide the refractive index given the Sellmeier coefficients B and C and the wavelength λ, with
 coeffs specified as an n-tuple of 2-tuples (B, C). Thus, if appropriate, your material could
 simply implement
 
     refractive_index(::ValueOnly, material::YourMaterial, λ, T_K) = 
-        sellmeier_index_from_coefficients(YOUR_COEFFICIENTS, λ)
+        _sellmeier_index_from_coefficients(YOUR_COEFFICIENTS, λ)
     refractive_index(::WithDerivative, material::YourMaterial, λ, T_K) = 
-        sellmeier_index_from_coefficients_dω(YOUR_COEFFICIENTS, λ)
+        _sellmeier_index_from_coefficients_dω(YOUR_COEFFICIENTS, λ)
 
 Sellmeier coefficients are often functions of other parameters such as temperature or molar 
 fraction of a dopant. We provide the _evaluate_sellmeier_polynomials(B_coeffs, C_coeffs, x)
@@ -149,7 +149,7 @@ and _evaluate_sellmeier_constants(coeffs, x) utilities; see silica.jl and german
 examples of their use. 
 
 These evaluators are pure numerics and do no domain validation: callers validate their
-inputs at the `refractive_index` entry via `check_range` against the material's
+inputs at the `refractive_index` entry via `_check_range` against the material's
 `runtime_range`.
 
 Note also that any implemented material must ensure compatibility with `Particles` to allow
@@ -167,7 +167,7 @@ function _evaluate_sellmeier_constants(coeffs, x)
     end
 end
 
-function sellmeier_index_from_coefficients(coeffs, λ)
+function _sellmeier_index_from_coefficients(coeffs, λ)
     λ_um = λ * 1e6
     total = one(λ_um)
     for (B, C) in coeffs
@@ -176,7 +176,7 @@ function sellmeier_index_from_coefficients(coeffs, λ)
     return sqrt(total)
 end
 
-function sellmeier_index_from_coefficients_dω(coeffs, λ)
+function _sellmeier_index_from_coefficients_dω(coeffs, λ)
     λ_um = λ * 1e6
     total = one(λ_um)
     dtotal_dλm = zero(λ_um)

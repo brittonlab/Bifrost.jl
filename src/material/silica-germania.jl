@@ -31,7 +31,7 @@ struct SilicaGermaniaGlass <: AbstractMaterial
     x_ge::Float64
 
     SilicaGermaniaGlass(x_ge::Real) =
-        new(check_range(Float64(x_ge), GERMANIA_FRACTION_RANGE))
+        new(_check_range(Float64(x_ge), GERMANIA_FRACTION_RANGE))
 end
 
 runtime_range(::SilicaGermaniaGlass) = runtime_range((SiO2(), GeO2()))
@@ -43,19 +43,19 @@ runtime_range(::SilicaGermaniaGlass) = runtime_range((SiO2(), GeO2()))
 #################################################
 
 function refractive_index(::ValueOnly, glass::SilicaGermaniaGlass, λ, T_K)
-    check_range((; T_K, λ), (SILICA_VALIDITY, GERMANIA_VALIDITY))
+    _check_range((; T_K, λ), (SILICA_VALIDITY, GERMANIA_VALIDITY))
     n_silica = refractive_index(ValueOnly(), SiO2(), λ, T_K)
     n_germania = refractive_index(ValueOnly(), GeO2(), λ, T_K)
-    return interpolate_scalar(n_silica, n_germania, glass.x_ge)
+    return _interpolate_scalar(n_silica, n_germania, glass.x_ge)
 end
 
 function refractive_index(::WithDerivative, glass::SilicaGermaniaGlass, λ, T_K)
-    check_range((; T_K, λ), (SILICA_VALIDITY, GERMANIA_VALIDITY))
+    _check_range((; T_K, λ), (SILICA_VALIDITY, GERMANIA_VALIDITY))
     n_silica = refractive_index(WithDerivative(), SiO2(), λ, T_K)
     n_germania = refractive_index(WithDerivative(), GeO2(), λ, T_K)
     return SpectralResponse(
-        interpolate_scalar(n_silica.value, n_germania.value, glass.x_ge),
-        interpolate_scalar(n_silica.dω, n_germania.dω, glass.x_ge)
+        _interpolate_scalar(n_silica.value, n_germania.value, glass.x_ge),
+        _interpolate_scalar(n_silica.dω, n_germania.dω, glass.x_ge)
     )
 end
 
@@ -65,12 +65,12 @@ end
 #
 #################################################
 
-cte(glass::SilicaGermaniaGlass, _) = interpolate_scalar(SILICA_CTE, GERMANIA_CTE, glass.x_ge)
+cte(glass::SilicaGermaniaGlass, _) = _interpolate_scalar(SILICA_CTE, GERMANIA_CTE, glass.x_ge)
 
-softening_temperature(glass::SilicaGermaniaGlass, _) = interpolate_scalar(SILICA_SOFTENING_TEMPERATURE_K, GERMANIA_SOFTENING_TEMPERATURE_K, glass.x_ge)
+softening_temperature(glass::SilicaGermaniaGlass, _) = _interpolate_scalar(SILICA_SOFTENING_TEMPERATURE_K, GERMANIA_SOFTENING_TEMPERATURE_K, glass.x_ge)
 
-poisson_ratio(glass::SilicaGermaniaGlass, _) = interpolate_scalar(SILICA_POISSON_RATIO, GERMANIA_POISSON_RATIO, glass.x_ge)
+poisson_ratio(glass::SilicaGermaniaGlass, _) = _interpolate_scalar(SILICA_POISSON_RATIO, GERMANIA_POISSON_RATIO, glass.x_ge)
 
-photoelastic_constants(glass::SilicaGermaniaGlass, _) = interpolate_pair(SILICA_PHOTOELASTIC_CONSTANTS, GERMANIA_PHOTOELASTIC_CONSTANTS, glass.x_ge)
+photoelastic_constants(glass::SilicaGermaniaGlass, _) = _interpolate_pair(SILICA_PHOTOELASTIC_CONSTANTS, GERMANIA_PHOTOELASTIC_CONSTANTS, glass.x_ge)
 
-youngs_modulus(glass::SilicaGermaniaGlass, _) = interpolate_scalar(SILICA_YOUNGS_MODULUS, GERMANIA_YOUNGS_MODULUS, glass.x_ge)
+youngs_modulus(glass::SilicaGermaniaGlass, _) = _interpolate_scalar(SILICA_YOUNGS_MODULUS, GERMANIA_YOUNGS_MODULUS, glass.x_ge)

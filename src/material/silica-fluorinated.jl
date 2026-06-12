@@ -45,7 +45,7 @@ struct SilicaFluorinatedGlass <: AbstractMaterial
     x_f::Float64
 
     SilicaFluorinatedGlass(x_f::Real) =
-        new(check_range(Float64(x_f), FLUORINE_MOLAR_FRACTION_RANGE))
+        new(_check_range(Float64(x_f), FLUORINE_MOLAR_FRACTION_RANGE))
 end
 
 runtime_range(::SilicaFluorinatedGlass) = runtime_range(SiO2())
@@ -64,29 +64,29 @@ function _sellmeier_coefficients(glass::SilicaFluorinatedGlass, T_K)
 end
 
 function refractive_index(::ValueOnly, material::SilicaFluorinatedGlass, λ, T_K)
-    check_range((; T_K, λ), SILICA_VALIDITY)
-    return sellmeier_index_from_coefficients(_sellmeier_coefficients(material, T_K), λ)
+    _check_range((; T_K, λ), SILICA_VALIDITY)
+    return _sellmeier_index_from_coefficients(_sellmeier_coefficients(material, T_K), λ)
 end
 
 function refractive_index(::WithDerivative, material::SilicaFluorinatedGlass, λ, T_K)
-    check_range((; T_K, λ), SILICA_VALIDITY)
-    return sellmeier_index_from_coefficients_dω(_sellmeier_coefficients(material, T_K), λ)
+    _check_range((; T_K, λ), SILICA_VALIDITY)
+    return _sellmeier_index_from_coefficients_dω(_sellmeier_coefficients(material, T_K), λ)
 end
 
-cte(::SilicaFluorinatedGlass, _) = unsupported_fluorine_property("cte")
+cte(::SilicaFluorinatedGlass, _) = _unsupported_fluorine_property("cte")
 
 softening_temperature(::SilicaFluorinatedGlass, _) =
-    unsupported_fluorine_property("softening_temperature")
+    _unsupported_fluorine_property("softening_temperature")
 
-poisson_ratio(::SilicaFluorinatedGlass, _) = unsupported_fluorine_property("poisson_ratio")
+poisson_ratio(::SilicaFluorinatedGlass, _) = _unsupported_fluorine_property("poisson_ratio")
 
 photoelastic_constants(::SilicaFluorinatedGlass, _) =
-    unsupported_fluorine_property("photoelastic_constants")
+    _unsupported_fluorine_property("photoelastic_constants")
 
 youngs_modulus(::SilicaFluorinatedGlass, _) =
-    unsupported_fluorine_property("youngs_modulus")
+    _unsupported_fluorine_property("youngs_modulus")
 
-function unsupported_fluorine_property(name::AbstractString)
+function _unsupported_fluorine_property(name::AbstractString)
     msg = "$(name) is not defined for fluorine-doped silica in the current model"
     throw(ArgumentError(msg))
 end

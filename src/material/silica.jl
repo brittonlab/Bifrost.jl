@@ -68,13 +68,13 @@ function _sellmeier_coefficients(::SiO2, T_K)
 end
 
 function refractive_index(::ValueOnly, material::SiO2, λ, T_K)
-    check_range((; T_K, λ), SILICA_VALIDITY)
-    return sellmeier_index_from_coefficients(_sellmeier_coefficients(material, T_K), λ)
+    _check_range((; T_K, λ), SILICA_VALIDITY)
+    return _sellmeier_index_from_coefficients(_sellmeier_coefficients(material, T_K), λ)
 end
 
 function refractive_index(::WithDerivative, material::SiO2, λ, T_K)
-    check_range((; T_K, λ), SILICA_VALIDITY)
-    return sellmeier_index_from_coefficients_dω(_sellmeier_coefficients(material, T_K), λ)
+    _check_range((; T_K, λ), SILICA_VALIDITY)
+    return _sellmeier_index_from_coefficients_dω(_sellmeier_coefficients(material, T_K), λ)
 end
 
 #################################################
