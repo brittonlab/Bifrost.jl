@@ -42,6 +42,10 @@ const COLOR_BASE    = "#111111"   # black: baseline curve in overlays
 
 const _DARK_BG  = "#111111"
 const _DARK_AX  = attr(gridcolor = "#333", zerolinecolor = "#333", color = "#aaa")
+# 3D scene axes also need their background panes darkened (the default template
+# draws light panes that override scene.bgcolor).
+const _DARK_AX3 = attr(gridcolor = "#333", zerolinecolor = "#333", color = "#aaa",
+                       showbackground = true, backgroundcolor = _DARK_BG)
 
 _nom(x) = Float64(_qc_nominalize(x))
 
@@ -56,9 +60,9 @@ function _dark3d(title::AbstractString; height::Int = 560)
         paper_bgcolor = _DARK_BG,
         scene = attr(
             bgcolor = _DARK_BG,
-            xaxis = merge(_DARK_AX, attr(title = "x (m)")),
-            yaxis = merge(_DARK_AX, attr(title = "y (m)")),
-            zaxis = merge(_DARK_AX, attr(title = "z (m)")),
+            xaxis = merge(_DARK_AX3, attr(title = "x (m)")),
+            yaxis = merge(_DARK_AX3, attr(title = "y (m)")),
+            zaxis = merge(_DARK_AX3, attr(title = "z (m)")),
             aspectmode = "data",
         ),
         height = height,
@@ -275,7 +279,9 @@ function path_inspector(path; title::AbstractString = "", fidelity::Float64 = 1.
 
     steps = []
     for k in 1:nsteps
-        i = clamp(round(Int, 1 + (k - 1) * (n - 1) / (nsteps - 1)), 1, n)
+        # Step targets are uniform in arc length (sample density is not).
+        s_target = hi * (k - 1) / (nsteps - 1)
+        i = clamp(searchsortedfirst(sv, s_target), 1, n)
         gi = cursor_geo(i)
         seg_x(v) = [gi.p[1], gi.p[1] + axlen * v[1]]
         seg_y(v) = [gi.p[2], gi.p[2] + axlen * v[2]]
