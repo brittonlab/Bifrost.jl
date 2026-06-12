@@ -53,8 +53,31 @@ const GERMANIA_N2 = 4.6e-20
 #
 #################################################
 
+"""
+    GeO2()
+
+Pure germania (GeO₂) glass.
+
+Implements the [`AbstractMaterial`](@ref) property interface (SI units). The
+refractive index combines room-temperature Sellmeier coefficients from Fleming,
+doi:10.1364/AO.23.004486, with the thermo-optic shift of
+[`thermo_optic_index_shift`](@ref).
+
+# Examples
+```julia
+glass = GeO2()
+n = refractive_index(glass, 1550e-9, 297.15)
+α = cte(glass, 297.15)
+```
+"""
 struct GeO2 <: AbstractMaterial end
 
+"""
+    PURE_GERMANIA
+
+Shared singleton `GeO2()` instance, used as the dopant endmember of
+silica–germania mixtures.
+"""
 const PURE_GERMANIA = GeO2()
 
 #################################################
@@ -63,7 +86,14 @@ const PURE_GERMANIA = GeO2()
 #
 #################################################
 
-# From G. M. Rego, Sensors (2024), doi:10.3390/s24154857
+"""
+    thermo_optic_index_shift(material::GeO2, T_K)
+
+Return the thermo-optic refractive-index shift of germania relative to the
+reference temperature `GERMANIA_REFERENCE_TEMPERATURE_K`.
+
+Polynomial model from G. M. Rego, Sensors (2024), doi:10.3390/s24154857.
+"""
 function thermo_optic_index_shift(material::GeO2, T_K)
     T = validate_model_temperature(T_K)
     Tref = GERMANIA_REFERENCE_TEMPERATURE_K

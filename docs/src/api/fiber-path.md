@@ -1,3 +1,7 @@
+```@meta
+CollapsedDocStrings = true
+```
+
 # [FiberPath](@id fiber-path)
 
 Fiber assembly: binds a built `PathSpecCached` to a `FiberCrossSection` and reference
@@ -6,4 +10,5 @@ applies meta-driven perturbations and thermal length scaling through `modify(fib
 
 ```@autodocs
 Modules = [Bifrost.FiberPath]
+Filter = is_public_api
 ```

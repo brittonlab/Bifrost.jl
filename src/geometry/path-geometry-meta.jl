@@ -70,7 +70,11 @@ end
 Attach a multiplicative Monte Carlo perturbation to `symbol`.
 
 Consumers combine matching entries as `baseline * product(mul) + sum(add)`;
-`MCMmul` contributes a direct scale factor to the multiplicative product.
+`MCMmul` contributes a direct scale factor to the multiplicative product (so
+`MCMmul(:length, 0.5)` halves `length`, and `MCMmul(:length, -0.4)` flips the
+sign and shortens). The additive vs. multiplicative distinction is encoded in
+the type itself, so consumers dispatch on it rather than looking up a mode
+table.
 """
 struct MCMmul{D} <: AbstractMeta
     symbol::Symbol

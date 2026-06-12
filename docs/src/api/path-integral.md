@@ -1,3 +1,7 @@
+```@meta
+CollapsedDocStrings = true
+```
+
 # [PathIntegral](@id path-integral)
 
 Adaptive propagation of the Jones equation `dJ/ds = K(s)J` and the coupled sensitivity
@@ -7,4 +11,5 @@ Theory section derives the underlying generators.
 
 ```@autodocs
 Modules = [Bifrost.PathIntegral]
+Filter = is_public_api
 ```

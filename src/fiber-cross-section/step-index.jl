@@ -1,13 +1,70 @@
-"""
-Local optical properties of an ideal step-index fiber cross section.
+#################################################
+#
+# Base Constants and Structure
+#
+#################################################
 
-The baseline object is a circular step-index fiber cross section described by
-core/cladding materials and diameters. Perturbations such as core ellipticity,
-bending, axial tension, and twist are handled by separate functions with
+"""
+    STEP_INDEX_GLASS
+
+Union of the glass types accepted as step-index core or cladding material.
+"""
+const STEP_INDEX_GLASS = Union{SilicaGermaniaGlass, SilicaFluorinatedGlass}
+
+"""
+    LP11_CUTOFF_V
+
+Normalized frequency `V = 2.405` of the LP11 cutoff; the fiber is single-mode
+below this value.
+"""
+const LP11_CUTOFF_V = 2.405
+
+"""
+    MARCUSE_V_MIN
+
+Lower bound of the `V` range for which the modified Marcuse mode-area
+approximation in [`effective_mode_area`](@ref) is calibrated.
+"""
+const MARCUSE_V_MIN = 1.2
+
+"""
+    MARCUSE_V_MAX
+
+Upper bound of the `V` range for which the modified Marcuse mode-area
+approximation in [`effective_mode_area`](@ref) is calibrated.
+"""
+const MARCUSE_V_MAX = 2.4
+
+"""
+    StepIndexCrossSection(core_material, cladding_material, core_diameter_m,
+                          cladding_diameter_m; manufacturer = nothing,
+                          model_number = nothing, ellipticity_axis_ratio = 1.0,
+                          ellipticity_axis_angle = 0.0)
+
+Ideal step-index fiber cross section.
+
+The baseline object is a circular step-index cross section described by
+core/cladding materials ([`STEP_INDEX_GLASS`](@ref)) and diameters (m); the core
+diameter must be smaller than the cladding diameter. Environmental perturbations
+such as bending, axial tension, and twist are handled by response functions with
 explicit arguments rather than stored on the type.
 
-Example
--------
+Intrinsic transverse core ellipticity is described by two fields:
+
+- `ellipticity_axis_ratio` is the major/minor magnitude and must be `≥ 1`
+  (`1` ⇒ circular ⇒ no ellipticity birefringence). Requiring `≥ 1` makes the
+  major axis — and hence the angle below — unambiguous: an ellipse with ratio
+  `r < 1` is the same object as ratio `1/r` rotated 90°, so callers express it
+  canonically as ratio `≥ 1`. The cross-section returns only the birefringence
+  *magnitude*; the fiber generator orients it.
+- `ellipticity_axis_angle` (rad) is the **major-axis** orientation in the local
+  transverse frame, canonical in `[0, π)` (an ellipse is 180°-symmetric). At
+  angle `0` the major axis is aligned with the curvature normal (the same
+  direction the bend birefringence picks out); increasing the angle rotates it
+  toward the binormal, about the propagation tangent.
+
+# Examples
+```julia
 fiber = StepIndexCrossSection(
     SilicaGermaniaGlass(0.036),
     SilicaGermaniaGlass(0.0),
@@ -20,24 +77,12 @@ fiber = StepIndexCrossSection(
 λ = 1550e-9
 T = 297.15
 
-v = normalized_frequency(fiber, λ, T)
+V = normalized_frequency(fiber, λ, T)
 β = propagation_constant(fiber, λ, T)
 Aeff = effective_mode_area(fiber, λ, T)
-Δβ_bend = bending_birefringence(fiber, λ, T; bend_radius_m = 0.03) +
-    axial_tension_birefringence(fiber, λ, T; bend_radius_m = 0.03, axial_tension_N = 0.5)
+Δβ = bending_birefringence(fiber, λ, T; bend_radius_m = 0.03)
+```
 """
-
-#################################################
-#
-# Base Constants and Structure
-#
-#################################################
-
-const STEP_INDEX_GLASS = Union{SilicaGermaniaGlass, SilicaFluorinatedGlass}
-const LP11_CUTOFF_V = 2.405
-const MARCUSE_V_MIN = 1.2
-const MARCUSE_V_MAX = 2.4
-
 struct StepIndexCrossSection{T<:Real} <: FiberCrossSection
     manufacturer::Union{Nothing, String}
     model_number::Union{Nothing, String}
@@ -45,21 +90,6 @@ struct StepIndexCrossSection{T<:Real} <: FiberCrossSection
     cladding_material::STEP_INDEX_GLASS
     core_diameter_m::T
     cladding_diameter_m::T
-    # Intrinsic transverse core ellipticity. `ellipticity_axis_ratio` is the
-    # major/minor magnitude and must be ≥ 1 (1 ⇒ circular ⇒ no ellipticity
-    # birefringence). Requiring ≥ 1 makes the major axis — and hence the angle
-    # below — unambiguous: an ellipse with ratio r < 1 is the same object as
-    # ratio 1/r rotated 90°, so callers express it canonically as ratio ≥ 1.
-    # The cross-section returns only the birefringence *magnitude*; the fiber
-    # generator orients it.
-
-    # `ellipticity_axis_angle` (rad) is the **major-axis** orientation in the
-    # local transverse frame, canonical in [0, π) (an ellipse is 180°-symmetric).
-    # When ellipticity_axis_angle = 0 the core's major axis is aligned with the
-    # curvature normal (the same direction the bend birefringence picks out).
-    # Increasing the angle rotates it toward the binormal, about the propagation
-    # tangent.
-
     ellipticity_axis_ratio::T
     ellipticity_axis_angle::T
 
@@ -101,9 +131,32 @@ end
 #
 #################################################
 
+"""
+    core_radius(fiber)
+
+Return the core radius (m).
+"""
 core_radius(fiber::StepIndexCrossSection) = fiber.core_diameter_m / 2
+
+"""
+    cladding_radius(fiber)
+
+Return the cladding radius (m).
+"""
 cladding_radius(fiber::StepIndexCrossSection) = fiber.cladding_diameter_m / 2
 
+"""
+    core_refractive_index([style], fiber, λ, T_K)
+
+Return the refractive index of the core material.
+
+Many spectral queries here take an optional leading `style::SpectralStyle`,
+written `[style]` in their signatures. The omitted-argument form is
+[`ValueOnly`](@ref) and returns the plain value; [`WithDerivative`](@ref)
+returns a [`SpectralResponse`](@ref) carrying the value and its
+angular-frequency derivative. Subsequent methods sharing this convention do not
+repeat it.
+"""
 function core_refractive_index(style::SpectralStyle, fiber::StepIndexCrossSection, λ, T_K)
     return refractive_index(style, fiber.core_material, λ, T_K)
 end
@@ -111,7 +164,17 @@ end
 core_refractive_index(fiber::StepIndexCrossSection, λ, T_K) =
     core_refractive_index(ValueOnly(), fiber, λ, T_K)
 
-function cladding_refractive_index(style::SpectralStyle, fiber::StepIndexCrossSection, λ, T_K)
+"""
+    cladding_refractive_index([style], fiber, λ, T_K)
+
+Return the refractive index of the cladding material.
+"""
+function cladding_refractive_index(
+    style::SpectralStyle,
+    fiber::StepIndexCrossSection,
+    λ,
+    T_K
+)
     return refractive_index(style, fiber.cladding_material, λ, T_K)
 end
 
@@ -124,12 +187,25 @@ cladding_refractive_index(fiber::StepIndexCrossSection, λ, T_K) =
 #
 #################################################
 
+"""
+    waveguide_factor(V)
+
+Return the Gloge approximation to the LP01 transverse core parameter `u(V)`,
+`u ≈ (1 + √2)·V / (1 + (4 + V⁴)^(1/4))`.
+
+Gloge, "Weakly guiding fibers", doi:10.1364/AO.10.002252.
+"""
 function waveguide_factor(V)
     α = one(V) + sqrt(2 * one(V))
     t = (4 + V^4)^(one(V) / 4)
     return α * V / (one(V) + t)
 end
 
+"""
+    waveguide_factor_prime(V)
+
+Return `d/dV` of [`waveguide_factor`](@ref).
+"""
 function waveguide_factor_prime(V)
     α = one(V) + sqrt(2 * one(V))
     t = (4 + V^4)^(one(V) / 4)
@@ -138,13 +214,23 @@ function waveguide_factor_prime(V)
     return α * (den - V * dt_dV) / den^2
 end
 
-# This is 1-u^2/V^2 in many of our formulas, using the approximation for u(V) from Gloge
+"""
+    modal_prefactor(V)
+
+Return `1 - u²/V²` using the Gloge approximation [`waveguide_factor`](@ref) for
+`u(V)`; this prefactor appears in several birefringence formulas.
+"""
 function modal_prefactor(V)
     α = one(V) + sqrt(2*one(V))
     t = one(V) + (4 + V^4)^(one(V) / 4)
     return one(V) - α^2 / t^2
 end
 
+"""
+    modal_prefactor_prime(V)
+
+Return `d/dV` of [`modal_prefactor`](@ref).
+"""
 function modal_prefactor_prime(V)
     α = one(V) + sqrt(2*one(V))
     t = (4 + V^4)^(one(V) / 4)
@@ -153,6 +239,19 @@ function modal_prefactor_prime(V)
     return 2 * α^2 * dt_dV / den^3
 end
 
+"""
+    mode_terms(style, fiber, λ, T_K) -> NamedTuple
+
+Return the guided-mode quantities shared by the downstream formulas: radii,
+vacuum wavenumber `k0`, core/cladding indices, numerical aperture `na`,
+normalized frequency `V`, Gloge `waveguide_factor` and `modal_prefactor`, and
+propagation constant `β`, each paired with its angular-frequency derivative
+(`dk0_dω`, `dn_core_dω`, …).
+
+With `ValueOnly()` the derivative slots are zero; with `WithDerivative()` they
+carry the chain-ruled ω-derivatives. Throws an `ArgumentError` unless
+`n_core > n_cladding`.
+"""
 function mode_terms(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K)
     n_core = core_refractive_index(fiber, λ, T_K)
     n_clad = cladding_refractive_index(fiber, λ, T_K)
@@ -244,6 +343,12 @@ function mode_terms(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K)
     )
 end
 
+"""
+    relative_index_difference([style], fiber, λ, T_K)
+
+Return the relative index difference `Δ = (n_core - n_clad) / n_clad`
+(dimensionless).
+"""
 function relative_index_difference(style::ValueOnly, fiber::StepIndexCrossSection, λ, T_K)
     n_core = core_refractive_index(fiber, λ, T_K)
     n_clad = cladding_refractive_index(fiber, λ, T_K)
@@ -253,6 +358,11 @@ end
 relative_index_difference(fiber::StepIndexCrossSection, λ, T_K) =
     relative_index_difference(ValueOnly(), fiber, λ, T_K)
 
+"""
+    numerical_aperture([style], fiber, λ, T_K)
+
+Return the numerical aperture `√(n_core² - n_clad²)`.
+"""
 numerical_aperture(style::ValueOnly, fiber::StepIndexCrossSection, λ, T_K) =
     mode_terms(style, fiber, λ, T_K).na
 
@@ -264,6 +374,11 @@ end
 numerical_aperture(fiber::StepIndexCrossSection, λ, T_K) =
     numerical_aperture(ValueOnly(), fiber, λ, T_K)
 
+"""
+    normalized_frequency([style], fiber, λ, T_K)
+
+Return the normalized frequency `V = r_core · k0 · NA`.
+"""
 normalized_frequency(style::ValueOnly, fiber::StepIndexCrossSection, λ, T_K) =
     mode_terms(style, fiber, λ, T_K).V
 
@@ -275,6 +390,11 @@ end
 normalized_frequency(fiber::StepIndexCrossSection, λ, T_K) =
     normalized_frequency(ValueOnly(), fiber, λ, T_K)
 
+"""
+    propagation_constant([style], fiber, λ, T_K)
+
+Return the LP01 propagation constant `β` (rad/m).
+"""
 propagation_constant(style::ValueOnly, fiber::StepIndexCrossSection, λ, T_K) =
     mode_terms(style, fiber, λ, T_K).β
 
@@ -286,6 +406,11 @@ end
 propagation_constant(fiber::StepIndexCrossSection, λ, T_K) =
     propagation_constant(ValueOnly(), fiber, λ, T_K)
 
+"""
+    effective_mode_index([style], fiber, λ, T_K)
+
+Return the effective mode index `n_eff = β / k0`.
+"""
 function effective_mode_index(style::ValueOnly, fiber::StepIndexCrossSection, λ, T_K)
     terms = mode_terms(style, fiber, λ, T_K)
     return terms.β / terms.k0
@@ -301,6 +426,11 @@ end
 effective_mode_index(fiber::StepIndexCrossSection, λ, T_K) =
     effective_mode_index(ValueOnly(), fiber, λ, T_K)
 
+"""
+    effective_group_index(fiber, λ, T_K)
+
+Return the effective group index `n_g = n_eff + ω · dn_eff/dω`.
+"""
 function effective_group_index(
     fiber::StepIndexCrossSection,
     λ,
@@ -312,17 +442,26 @@ function effective_group_index(
     return n_eff.value + ω*n_eff.dω
 end
 
-# Using the 1/e^2 criterion
-# Uses a modified form of the traditional Marcuse approximation that's better at lower V;
-#    this form is accurate to within 1% for 1.5 < V < 2.5
-# This form applies to the fundamental mode above V = 2.405.
+"""
+    effective_mode_area(fiber, λ, T_K)
+
+Return the effective mode area (m²) by the 1/e² criterion, `π·w²` with the mode
+field radius `w` from a modified Marcuse approximation that is better at lower
+`V` (accurate to within 1% for `1.5 < V < 2.5`).
+
+Warns when `V` is outside the calibrated range `[MARCUSE_V_MIN, MARCUSE_V_MAX]`
+or above the single-mode cutoff `LP11_CUTOFF_V` (the form applies only to the
+fundamental mode).
+"""
 function effective_mode_area(fiber::StepIndexCrossSection, λ, T_K)
     V = normalized_frequency(fiber, λ, T_K)
     if !(MARCUSE_V_MIN <= V <= MARCUSE_V_MAX)
-        @warn "Marcuse effective-area approximation is calibrated for 1.2 <= V <= 2.4; got V=$(v)"
+        @warn "Marcuse effective-area approximation is calibrated for " *
+              "1.2 <= V <= 2.4; got V=$(V)"
     end
     if (V > LP11_CUTOFF_V)
-        @warn "Marcuse approximation only applies to the fundamental mode. V=$(v) is above the single-mode cutoff."
+        @warn "Marcuse approximation only applies to the fundamental mode. " *
+              "V=$(V) is above the single-mode cutoff."
     end
     w_over_r = 0.65 + 1.619 / V^1.5 + 2.879 / V^6 - 0.016 - 1.561 / V^7
     w = w_over_r * core_radius(fiber)
@@ -337,10 +476,15 @@ Return the nonlinear refractive index `n2` of the fiber core material in m²/W.
 core_nonlinear_refractive_index(fiber::StepIndexCrossSection, λ, T_K) =
     nonlinear_refractive_index(fiber.core_material, λ, T_K)
 
-# This is D_CD, the second derivative with respect to *wavelength*, often
-# used by engineers, -2πc/λ^2 * (d^2k/dω^2), often given in ps/(nm km) for fibers
-# Uses a numerical approximation of the second derivative of n_eff
-# Output in ps/(nm km)
+"""
+    chromatic_dispersion_parameter(fiber, λ, T_K; dλ = 0.1e-9)
+
+Return the chromatic dispersion parameter `D_CD = -2πc/λ² · d²k/dω²` in
+ps/(nm·km), the wavelength-derivative form commonly quoted for fibers.
+
+Uses a central finite difference of the effective mode index with wavelength
+step `dλ` (m).
+"""
 function chromatic_dispersion_parameter(
     fiber::StepIndexCrossSection,
     λ,
@@ -353,9 +497,13 @@ function chromatic_dispersion_parameter(
     return -λ / SPEED_OF_LIGHT_M_PER_S * (n_plus - 2 * n_center + n_minus) / dλ^2 * 1e6
 end
 
-# This is β_2 = d^2k/dω^2, the second derivative with respect to *angular frequency*
-# Often given in ps^2/km for optical fibers
-# Output is in ps^2/km
+"""
+    group_velocity_dispersion_parameter(fiber, λ, T_K; dλ = 0.1e-9)
+
+Return the group-velocity dispersion `β₂ = d²k/dω²` in ps²/km, derived from
+[`chromatic_dispersion_parameter`](@ref) with the same finite-difference step
+`dλ` (m).
+"""
 function group_velocity_dispersion_parameter(
     fiber::StepIndexCrossSection,
     λ,
@@ -366,6 +514,11 @@ function group_velocity_dispersion_parameter(
     return -(λ^2 / (2π * SPEED_OF_LIGHT_M_PER_S)) * D_SI * 1e27
 end
 
+"""
+    is_single_mode(fiber, λ, T_K) -> Bool
+
+Return whether the fiber is single-mode at `λ`, i.e. `V < LP11_CUTOFF_V`.
+"""
 is_single_mode(fiber::StepIndexCrossSection, λ, T_K) =
     normalized_frequency(fiber, λ, T_K) < LP11_CUTOFF_V
 
@@ -424,6 +577,12 @@ function cutoff_wavelength(
     return (a + b) / 2
 end
 
+"""
+    eccentricity_squared(axis_ratio)
+
+Return the squared eccentricity `e² = 1 - 1/ε²` of an ellipse with canonical
+major/minor axis ratio `ε ≥ 1` (validated).
+"""
 function eccentricity_squared(axis_ratio)
     ε = validate_axis_ratio(axis_ratio)
     return one(ε) - inv(ε)^2
@@ -435,11 +594,23 @@ end
 #
 #################################################
 
-# The cross-section returns the birefringence **magnitude**; the fiber generator
-# orients the eigen-axes from `ellipticity_axis_angle` (plus spin/twist phase).
-# `axis_ratio` is canonical (≥ 1, major/minor), so `eccentricity_squared` is a
-# single nonnegative branch `1 - 1/ε²`; orientation lives in the angle, not the
-# sign of the magnitude.
+# The cross-section returns birefringence **magnitudes** only; the fiber
+# generator orients the eigen-axes (from `ellipticity_axis_angle` plus
+# spin/twist phase for the intrinsic terms, or the curvature normal for the
+# bend/tension terms).
+
+"""
+    core_noncircularity_dω(style, fiber, λ, T_K;
+                           axis_ratio = fiber.ellipticity_axis_ratio)
+
+Return the [`BirefringenceResponse`](@ref) of geometric core-noncircularity
+linear birefringence for an elliptical core with major/minor ratio `axis_ratio`.
+
+`axis_ratio` is canonical (`≥ 1`), so the magnitude is a single nonnegative
+branch in `eccentricity_squared(ε) = 1 - 1/ε²`; orientation lives in the
+major-axis angle applied by the fiber generator, not in the sign of the
+magnitude. A circular core (`axis_ratio == 1`) returns zero.
+"""
 function core_noncircularity_dω(style::SpectralStyle, fiber::StepIndexCrossSection, λ, T_K;
                                 axis_ratio = fiber.ellipticity_axis_ratio)
     terms = mode_terms(style, fiber, λ, T_K)
@@ -457,6 +628,19 @@ function core_noncircularity_dω(style::SpectralStyle, fiber::StepIndexCrossSect
     return BirefringenceResponse(Δβ, dω)
 end
 
+"""
+    asymmetric_thermal_stress_dω(style, fiber, λ, T_K;
+                                 axis_ratio = fiber.ellipticity_axis_ratio)
+
+Return the [`BirefringenceResponse`](@ref) of the linear birefringence from
+asymmetric thermal stress frozen into an elliptical core on cooling from the
+softening temperature (response ∝ `|T_soft - T_K|`).
+
+The ellipse-asymmetry factor `(ε - 1)/(ε + 1)` is nonnegative because
+`axis_ratio` is canonical (`≥ 1`); the fiber generator supplies the orientation
+from the major-axis angle, shared with [`core_noncircularity_dω`](@ref). A
+circular core returns zero.
+"""
 function asymmetric_thermal_stress_dω(
     style::SpectralStyle,
     fiber::StepIndexCrossSection,
@@ -472,10 +656,8 @@ function asymmetric_thermal_stress_dω(
     α_clad = cte(fiber.cladding_material, T_K)
     T_soft = softening_temperature(fiber.core_material, T_K)
     ν = poisson_ratio(fiber.core_material, T_K)
-    # `axis_ratio` is canonical (≥ 1, major/minor), so the ellipse-asymmetry factor
-    # `(ε - 1)/(ε + 1)` is already ≥ 0; the generator supplies orientation from the
-    # major-axis angle (see `core_noncircularity_dω`).
-    const_factor = 0.5 * (p11 - p12) * (α_clad - α_core) * abs(T_soft - T_K) / (1 - ν^2) * ((ε - 1) / (ε + 1))
+    const_factor = 0.5 * (p11 - p12) * (α_clad - α_core) * abs(T_soft - T_K) /
+                   (1 - ν^2) * ((ε - 1) / (ε + 1))
     Δβ = terms.k0 * terms.modal_prefactor * terms.n_core^3 * const_factor
     dω = const_factor * (
         terms.dk0_dω * terms.modal_prefactor * terms.n_core^3 +
@@ -485,6 +667,13 @@ function asymmetric_thermal_stress_dω(
     return BirefringenceResponse(Δβ, dω)
 end
 
+"""
+    bending_dω(style, fiber, λ, T_K; bend_radius_m)
+
+Return the [`BirefringenceResponse`](@ref) of photoelastic bend-induced linear
+birefringence at bend radius `bend_radius_m` (m); the response scales as
+`(r_clad / R)²` and is zero for `R = Inf` (straight).
+"""
 function bending_dω(
     style::SpectralStyle,
     fiber::StepIndexCrossSection,
@@ -504,6 +693,17 @@ function bending_dω(
     return BirefringenceResponse(Δβ, dω)
 end
 
+"""
+    axial_tension_dω(style, fiber, λ, T_K; bend_radius_m, axial_tension_N)
+
+Return the [`BirefringenceResponse`](@ref) of photoelastic linear birefringence
+from axial tension `axial_tension_N` (N, nonnegative) on a fiber bent at radius
+`bend_radius_m` (m).
+
+The response scales as `(r_clad / R) · F / (π·r_clad²·E)` and vanishes for a
+straight fiber (`R = Inf`) or zero tension. Throws an `ArgumentError` for
+negative tension.
+"""
 function axial_tension_dω(
     style::SpectralStyle,
     fiber::StepIndexCrossSection,
@@ -530,22 +730,26 @@ function axial_tension_dω(
     return BirefringenceResponse(Δβ, dω)
 end
 
-# Twist-induced **circular** birefringence (optical activity) from the
-# photoelastic effect: the difference in propagation constants of the two
-# circular polarizations, βLC − βRC, per unit mechanical-twist rate. The
-# polarization tracks the geometric rotation of the medium (the leading `1`)
-# reduced by the photoelastic slip `n²(p₁₁−p₁₂)/2` (negative for silica), so the
-# net rotation rate is `(1 + n²(p₁₁−p₁₂)/2)·τ_m`. The generator places this on
-# the real antisymmetric (rotation) part of K; see `circular_birefringence_generator
-#
-# We believe this method is correct.
-# It is wrong in v1 of our 2025 paper [1] and in the seminal 1983 Rashleigh paper [2].
-# Our implementation agrees with [3] which contains experimental validation.
-#
-# [1] arxiv.org/abs/2510.01212v1
-# [2] 10.1109/JLT.1983.1072121
-# [3] 10.1016/j.yofte.2011.10.001
+"""
+    twisting_dω(style, fiber, λ, T_K; twist_rate_rad_per_m)
 
+Return the [`BirefringenceResponse`](@ref) of twist-induced **circular**
+birefringence (optical activity) from the photoelastic effect: the difference in
+propagation constants of the two circular polarizations, `βLC − βRC`, per unit
+mechanical-twist rate.
+
+The polarization tracks the geometric rotation of the medium (the leading `1`)
+reduced by the photoelastic slip `n²(p₁₁−p₁₂)/2` (negative for silica), so the
+net rotation rate is `(1 + n²(p₁₁−p₁₂)/2)·τ_m`. The fiber generator places this
+on the real antisymmetric (rotation) part of `K`; see
+`circular_birefringence_generator`.
+
+This convention agrees with the experimentally validated treatment in
+doi:10.1016/j.yofte.2011.10.001 and differs from the seminal Rashleigh paper,
+doi:10.1109/JLT.1983.1072121.
+
+Throws an `ArgumentError` for a non-finite twist rate; a zero rate returns zero.
+"""
 function twisting_dω(
     style::SpectralStyle,
     fiber::StepIndexCrossSection,
@@ -565,6 +769,14 @@ function twisting_dω(
     return BirefringenceResponse(Δβ, dω)
 end
 
+"""
+    core_noncircularity_birefringence([style], fiber, λ, T_K;
+                                      axis_ratio = fiber.ellipticity_axis_ratio)
+
+Return the core-noncircularity linear birefringence magnitude (rad/m); with
+`WithDerivative()`, return the full [`BirefringenceResponse`](@ref). See
+[`core_noncircularity_dω`](@ref).
+"""
 core_noncircularity_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K;
                                   axis_ratio = fiber.ellipticity_axis_ratio) =
     core_noncircularity_dω(ValueOnly(), fiber, λ, T_K; axis_ratio = axis_ratio).Δβ
@@ -577,41 +789,86 @@ core_noncircularity_birefringence(fiber::StepIndexCrossSection, λ, T_K;
                                   axis_ratio = fiber.ellipticity_axis_ratio) =
     core_noncircularity_birefringence(ValueOnly(), fiber, λ, T_K; axis_ratio = axis_ratio)
 
+"""
+    asymmetric_thermal_stress_birefringence([style], fiber, λ, T_K;
+                                            axis_ratio = fiber.ellipticity_axis_ratio)
+
+Return the asymmetric-thermal-stress linear birefringence magnitude (rad/m);
+with `WithDerivative()`, return the full [`BirefringenceResponse`](@ref). See
+[`asymmetric_thermal_stress_dω`](@ref).
+"""
 asymmetric_thermal_stress_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K;
                                         axis_ratio = fiber.ellipticity_axis_ratio) =
     asymmetric_thermal_stress_dω(ValueOnly(), fiber, λ, T_K; axis_ratio = axis_ratio).Δβ
 
-asymmetric_thermal_stress_birefringence(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K;
+asymmetric_thermal_stress_birefringence(::WithDerivative, fiber::StepIndexCrossSection,
+                                        λ, T_K;
                                         axis_ratio = fiber.ellipticity_axis_ratio) =
     asymmetric_thermal_stress_dω(WithDerivative(), fiber, λ, T_K; axis_ratio = axis_ratio)
 
 asymmetric_thermal_stress_birefringence(fiber::StepIndexCrossSection, λ, T_K;
                                         axis_ratio = fiber.ellipticity_axis_ratio) =
-    asymmetric_thermal_stress_birefringence(ValueOnly(), fiber, λ, T_K; axis_ratio = axis_ratio)
+    asymmetric_thermal_stress_birefringence(ValueOnly(), fiber, λ, T_K;
+                                            axis_ratio = axis_ratio)
 
+"""
+    bending_birefringence([style], fiber, λ, T_K; bend_radius_m)
+
+Return the bend-induced linear birefringence magnitude (rad/m); with
+`WithDerivative()`, return the full [`BirefringenceResponse`](@ref). See
+[`bending_dω`](@ref).
+"""
 bending_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K; bend_radius_m) =
     bending_dω(ValueOnly(), fiber, λ, T_K; bend_radius_m = bend_radius_m).Δβ
 
-bending_birefringence(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K; bend_radius_m) =
+bending_birefringence(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K;
+                      bend_radius_m) =
     bending_dω(WithDerivative(), fiber, λ, T_K; bend_radius_m = bend_radius_m)
 
 bending_birefringence(fiber::StepIndexCrossSection, λ, T_K; bend_radius_m) =
     bending_birefringence(ValueOnly(), fiber, λ, T_K; bend_radius_m = bend_radius_m)
 
-axial_tension_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K; bend_radius_m, axial_tension_N) =
-    axial_tension_dω(ValueOnly(), fiber, λ, T_K; bend_radius_m = bend_radius_m, axial_tension_N = axial_tension_N).Δβ
+"""
+    axial_tension_birefringence([style], fiber, λ, T_K; bend_radius_m,
+                                axial_tension_N)
 
-axial_tension_birefringence(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K; bend_radius_m, axial_tension_N) =
-    axial_tension_dω(WithDerivative(), fiber, λ, T_K; bend_radius_m = bend_radius_m, axial_tension_N = axial_tension_N)
+Return the axial-tension linear birefringence magnitude (rad/m); with
+`WithDerivative()`, return the full [`BirefringenceResponse`](@ref). See
+[`axial_tension_dω`](@ref).
+"""
+axial_tension_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K;
+                            bend_radius_m, axial_tension_N) =
+    axial_tension_dω(ValueOnly(), fiber, λ, T_K;
+                     bend_radius_m = bend_radius_m, axial_tension_N = axial_tension_N).Δβ
 
-axial_tension_birefringence(fiber::StepIndexCrossSection, λ, T_K; bend_radius_m, axial_tension_N) =
-    axial_tension_birefringence(ValueOnly(), fiber, λ, T_K; bend_radius_m = bend_radius_m, axial_tension_N = axial_tension_N)
+axial_tension_birefringence(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K;
+                            bend_radius_m, axial_tension_N) =
+    axial_tension_dω(WithDerivative(), fiber, λ, T_K;
+                     bend_radius_m = bend_radius_m, axial_tension_N = axial_tension_N)
 
-twisting_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K; twist_rate_rad_per_m) =
-    twisting_dω(ValueOnly(), fiber, λ, T_K; twist_rate_rad_per_m = twist_rate_rad_per_m).Δβ
+axial_tension_birefringence(fiber::StepIndexCrossSection, λ, T_K;
+                            bend_radius_m, axial_tension_N) =
+    axial_tension_birefringence(ValueOnly(), fiber, λ, T_K;
+                                bend_radius_m = bend_radius_m,
+                                axial_tension_N = axial_tension_N)
 
-twisting_birefringence(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K; twist_rate_rad_per_m) =
-    twisting_dω(WithDerivative(), fiber, λ, T_K; twist_rate_rad_per_m = twist_rate_rad_per_m)
+"""
+    twisting_birefringence([style], fiber, λ, T_K; twist_rate_rad_per_m)
+
+Return the twist-induced circular birefringence magnitude (rad/m); with
+`WithDerivative()`, return the full [`BirefringenceResponse`](@ref). See
+[`twisting_dω`](@ref).
+"""
+twisting_birefringence(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K;
+                       twist_rate_rad_per_m) =
+    twisting_dω(ValueOnly(), fiber, λ, T_K;
+                twist_rate_rad_per_m = twist_rate_rad_per_m).Δβ
+
+twisting_birefringence(::WithDerivative, fiber::StepIndexCrossSection, λ, T_K;
+                       twist_rate_rad_per_m) =
+    twisting_dω(WithDerivative(), fiber, λ, T_K;
+                twist_rate_rad_per_m = twist_rate_rad_per_m)
 
 twisting_birefringence(fiber::StepIndexCrossSection, λ, T_K; twist_rate_rad_per_m) =
-    twisting_birefringence(ValueOnly(), fiber, λ, T_K; twist_rate_rad_per_m = twist_rate_rad_per_m)
+    twisting_birefringence(ValueOnly(), fiber, λ, T_K;
+                           twist_rate_rad_per_m = twist_rate_rad_per_m)

@@ -1,21 +1,7 @@
-"""
-path-geometry-connector.jl
-
-QuinticConnector{T<:Real}: parametric quintic Hermite curve used as the resolved
-form of a `JumpBy` segment and of the terminal `jumpto!` seal.
-
-Matches position + tangent direction + curvature vector at both endpoints (G2).
-A single positive scalar λ (handle scale) supplies the parameter-speed degree of
-freedom that geometric G2 boundary data does not pin down.
-
-The struct is parametric over `T<:Real` so MCM `Particles` flow through.
-Branching predicates (`κ ≤ 1/R_min`, `s_table` bisection, Newton refinement)
-are evaluated on nominalized Float64 scalars; the final coefficients are built
-from the original `T`-typed inputs so uncertainty propagates.
-
-This file is `include`d into the same lexical scope as `path-geometry.jl`. It
-uses `AbstractPathSegment` and `AbstractMeta` from there.
-"""
+# QuinticConnector: the G2 quintic Hermite curve resolving JumpBy segments and
+# the terminal jumpto! seal. This file is `include`d into the same lexical
+# scope as path-geometry.jl and uses AbstractPathSegment/AbstractMeta from
+# there.
 
 # ---------------------------------------------------------------------------
 # Nominalization (deterministic branching under MCM)
@@ -67,6 +53,13 @@ r(u) = a₀ + a₁ u + a₂ u² + a₃ u³ + a₄ u⁴ + a₅ u⁵,   u ∈ [0,1
 
 in 3D that matches position, tangent direction, and curvature vector at both endpoints
 (G2 continuity). Implements the [`AbstractPathSegment`](@ref) local-geometry interface.
+A single positive scalar λ (handle scale) supplies the parameter-speed degree of
+freedom that the geometric G2 boundary data does not pin down.
+
+The struct is parametric over `T<:Real` so MCM `Particles` flow through. Branching
+predicates (`κ ≤ 1/R_min`, `s_table` bisection, Newton refinement) are evaluated on
+nominalized `Float64` scalars; the final coefficients are built from the original
+`T`-typed inputs so uncertainty propagates.
 
 # Fields
 

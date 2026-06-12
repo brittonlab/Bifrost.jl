@@ -1,3 +1,7 @@
+```@meta
+CollapsedDocStrings = true
+```
+
 # [PathGeometry](@id path-geometry-api)
 
 Three-dimensional path authoring and differential geometry: straight, bend, catenary,
@@ -8,4 +12,5 @@ quantities (turning angle, torsion, material twist, frame rotation).
 
 ```@autodocs
 Modules = [Bifrost.PathGeometry]
+Filter = is_public_api
 ```

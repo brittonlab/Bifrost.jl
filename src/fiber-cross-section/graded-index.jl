@@ -1,14 +1,14 @@
 """
+    GradedIndexCrossSection(core_material, cladding_material, core_diameter_m,
+                            cladding_diameter_m; manufacturer = nothing,
+                            model_number = nothing)
 
-Local optical properties of a graded-index fiber cross section.
+Placeholder graded-index fiber cross section.
 
-This fiber cross-section type has not yet been cleanly implemented. The file serves only
-as a placeholder to show that other cross-section types can be included.
-
-{This file is a stub. You can help Wikipedia by expanding it.}
-
+Stores geometry and materials only; no guided-mode or birefringence model is
+implemented yet, and the fiber-level generators error for this type. It exists
+to show that cross-section types beyond step-index can be added.
 """
-
 struct GradedIndexCrossSection{T<:Real} <: FiberCrossSection
     manufacturer::Union{Nothing, String}
     model_number::Union{Nothing, String}

@@ -70,22 +70,6 @@ Subpath holds its `start_point` and `jumpto_point` as the only globally-anchored
 values. `build(::Vector{SubpathBuilt})` is the first ordering-aware layer; it
 checks endpoint conformity between adjacent Subpaths and resolves the
 continuous cross-Subpath spin phase (`_spin_phi_at_s0`).
-
-# Interface
-
-    arc_length(seg_or_path)
-    arc_length(path, s1, s2)
-    curvature(seg_or_path, s)
-    geometric_torsion(seg_or_path, s)
-    spin_rate(path, s)
-    position(path, s)
-    tangent(path, s)
-    normal(path, s)
-    binormal(path, s)
-    frame(path, s)
-    breakpoints(path)
-    sample(path, s_values)
-    sample_uniform(path; n)
 """
 
 using LinearAlgebra
@@ -510,6 +494,7 @@ reduces to a circular arc (BendSegment) in the n̂ direction.
     arc_length = turns · 2π · √(R² + h²)
 
 Local-frame basis vectors:
+
     n̂  = [cos(axis_angle), sin(axis_angle), 0]     (toward helix axis)
     r̂₀ = [-sin(axis_angle), cos(axis_angle), 0]    (outward radial at s=0)
     ê_φ = (R·ẑ - h·n̂) / ℓ'                        (tangential at s=0, ⊥ axis)

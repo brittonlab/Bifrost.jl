@@ -1,24 +1,3 @@
-"""
-Material properties for pure silica SiO2 glass.
-
-Units (SI unless noted):
-- λ                     wavelength in m
-- T_K                   temperature in K
-- refractive indices, Poisson ratio, photoelastic constants: dimensionless
-- cte                   1/K
-- softening_temperature  K
-- youngs_modulus        Pa
-- nonlinear_refractive_index (n_2)  m²/W
-
-[Example usage]
-
-glass = SiO2()
-T_K = 297.15
-λ = 1550e-9
-n = refractive_index(glass, λ, T_K)
-cte_value = cte(glass, T_K)
-"""
-
 #################################################
 #
 # Material constants
@@ -56,8 +35,29 @@ const SILICA_N2 = 2.2e-20
 #
 #################################################
 
+"""
+    SiO2()
+
+Pure fused-silica (SiO₂) glass.
+
+Implements the [`AbstractMaterial`](@ref) property interface (SI units). The
+refractive index uses temperature-dependent Sellmeier polynomial coefficients
+from Leviton and Frey, doi:10.1117/12.672853.
+
+# Examples
+```julia
+glass = SiO2()
+n = refractive_index(glass, 1550e-9, 297.15)
+α = cte(glass, 297.15)
+```
+"""
 struct SiO2 <: AbstractMaterial end
 
+"""
+    PURE_SILICA
+
+Shared singleton `SiO2()` instance, used as the base glass of doped mixtures.
+"""
 const PURE_SILICA = SiO2()
 
 #################################################

@@ -1,6 +1,18 @@
 using Documenter
 using Bifrost
 
+# Hide private (underscore-prefixed) symbols from the rendered API. The `Filter`
+# in each `@autodocs` block receives the documented object; `nameof` recovers a
+# function/type/module name, while values that lack one (e.g. constants) are
+# public by convention and kept.
+function is_public_api(obj)
+    try
+        return !startswith(string(nameof(obj)), "_")
+    catch
+        return true
+    end
+end
+
 makedocs(
     sitename = "Bifrost.jl",
     authors  = "Britton",
@@ -15,6 +27,7 @@ makedocs(
     ],
     format = Documenter.HTML(;
         prettyurls = get(ENV, "CI", "false") == "true",
+        assets = ["assets/expand-docstrings.js"],
     ),
     pages = [
         "Home" => "index.md",

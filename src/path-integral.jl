@@ -1,17 +1,6 @@
-# Lossless Jones-matrix propagation and DGD sensitivity integration.
+# Numerical propagation layer for callable local Jones generators; see the
+# PathIntegral module docstring in Bifrost.jl for the overview.
 #
-# This file provides the numerical propagation layer for callable local Jones
-# generators. It advances `dJ/ds = K(s)J` with an adaptive exponential-midpoint
-# method, respects caller-supplied breakpoints, supports optional lumped jumps, and
-# integrates the coupled sensitivity system for `G = ∂ωJ`. Fiber-specific wrappers
-# obtain `K`, `Kω`, and breakpoints from `fiber-path.jl`; plotting diagnostics live
-# above this layer in `fiber-path-plot.jl`.
-#
-# The implementation assumes lossless SU(2)-style Jones dynamics. Error control is
-# phase-insensitive, and MCM-compatible code paths avoid scalar coercions,
-# particle-dependent branching, and generic matrix exponentials that do not lift
-# through `MonteCarloMeasurements.Particles`.
-
 # Fiber and the generator API come from the FiberPath submodule, in scope via
 # the PathIntegral submodule in Bifrost.jl.
 # NOTE: fiber-path-plot.jl is intentionally not included here. Callers that need
@@ -22,25 +11,23 @@
 # ----------------------------
 # MCM scalar reduction
 # ----------------------------
-#
-# The adaptive step controller needs to make one decision per step for the whole
-# ensemble — we cannot take half a step for some particles and a full step for
-# others. `scalar_reduce` collapses a possibly-Particles scalar down to a Float64
-# using `pmaximum` (conservative: worst-case particle drives step size).
-#
-# Performance note: `pmean` would be a less conservative compromise and could
-# reduce the step count under high-variance inputs; switch if MCM propagations
-# become too slow under tight tolerances. Keep `scalar_reduce` as the single
-# switch point.
 
 """
     scalar_reduce(x)
 
 Return a `Float64` scalar for adaptive-step decisions.
 
-Plain real numbers are converted directly. Particles-like values are detected by a
-`.particles` field and reduced with `maximum`, matching `pmaximum` without importing
-MonteCarloMeasurements into this file.
+The adaptive step controller must make one decision per step for the whole MCM
+ensemble — it cannot take half a step for some particles and a full step for
+others — so error metrics are collapsed through this single switch point. Plain
+real numbers are converted directly. Particles-like values are detected by a
+`.particles` field and reduced with `maximum`, matching `pmaximum` without
+importing MonteCarloMeasurements into this file (conservative: the worst-case
+particle drives the step size).
+
+Performance note: `pmean` would be a less conservative compromise and could
+reduce the step count under high-variance inputs; switch here if MCM
+propagations become too slow under tight tolerances.
 """
 scalar_reduce(x::AbstractFloat) = Float64(x)
 scalar_reduce(x::Integer) = Float64(x)
@@ -139,114 +126,40 @@ end
 end
 
 """
-    exp_block_upper_triangular_2x2(hM, hMω)
+    exp_block_upper_triangular_2x2(hM, hMω) -> (E, F)
 
-Return the closed-form exponential blocks for a coupled sensitivity step.
+Return the closed-form exponential blocks for a coupled sensitivity step:
 
-This computes the diagonal block `E` and off-diagonal block `F` of the
-block-upper-triangular `4×4` matrix
+    exp([ hM  hMω ])  =  [ E  F ]
+       ([ 0   hM  ])     [ 0  E ]
 
-    A = [ M   Mω ]
-        [ 0   M  ]
+where `E = exp(hM)` (computed by [`exp_jones_generator`](@ref)) and, by Van
+Loan's identity, `F` is the Fréchet derivative of `exp` at `hM` along `hMω`:
 
-scaled by `h`.  The result is
+    F = L_{hM}(hMω) = ∫₀¹ exp((1-τ)·hM) · hMω · exp(τ·hM) dτ
 
-    exp(h·A) = [ E   F ]
-               [ 0   E ]
+In the 2×2 case the integral closes in finite form. Split `hM = c·I + M̃` with
+`M̃` traceless and `μ² = −det(M̃)`, so `M̃² = μ²·I`. The trace part commutes and
+factors as `exp(c)` on both blocks, and the remaining traceless integral
+collapses onto the basis `{B, M̃B + BM̃, M̃BM̃}` with elementary coefficients:
 
-where `E = exp(hM)` and `F = h · φ(hM, Mω)` with `φ` the Frechet derivative
-of `exp` along `Mω`:
+    F = exp(c) · ( φ₀·hMω + φ₁·(M̃·hMω + hMω·M̃) + φ₂·M̃·hMω·M̃ )
 
-    φ(A, B) = ∫₀¹ exp((1-τ)A) · B · exp(τA) dτ
+with (see [`_frechet_2x2_coeffs`](@ref))
 
-For a 2×2 `M = c·I + M̃` with `M̃` traceless and `μ² = -det(M̃)`:
+    φ₀ = (cosh(μ) + sinhc(μ)) / 2
+    φ₁ = sinhc(μ) / 2
+    φ₂ = (cosh(μ) − sinhc(μ)) / (2 μ²)
 
-    exp(A) = exp(c) · [cosh(μ) I + sinhc(μ) M̃]
+and Taylor branches for small `|μ|`. For general Fréchet-derivative theory see
+Al-Mohy and Higham, "Computing the Fréchet derivative of the matrix
+exponential, with an application to condition number estimation",
+doi:10.1137/080716426.
 
-The Frechet derivative admits a closed form in the 2×2 case (see Al-Mohy &
-Higham, "Computing the Fréchet derivative of the matrix exponential", 2009,
-§5).  For `A = c·I + Ã` with `Ã` traceless and eigenvalues ±μ, one can write
-
-    φ(A, B) = α₀·B + α₁·(ÃB + BÃ) + α₂·ÃBÃ
-
-with scalar coefficients that depend only on `c` and `μ`.
-
-We derive the coefficients directly: because the trace part commutes, it
-factors as `exp(c)` on both `E` and `F`, leaving a traceless problem.  For a
-traceless 2×2 `Ã` with eigenvalues ±μ, the identities `Ã² = μ² I` and the
-representation `exp(Ã) = cosh(μ) I + sinhc(μ) Ã` let us evaluate the integral
-in closed form using the basis {B, ÃB + BÃ, ÃBÃ}:
-
-    exp(Ã) − I = (cosh(μ) − 1) I + sinhc(μ) Ã
-    φ(Ã, B)   = β₀ B + β₁ (ÃB + BÃ) + β₂ ÃBÃ
-
-Direct computation (expanding `exp((1-τ)Ã) = cosh((1-τ)μ)I + sinhc((1-τ)μ)(1-τ)Ã`
-and the mirror factor, then integrating over τ ∈ [0,1]) gives:
-
-    β₀ = sinhc(μ)                                    (coefficient of B)
-    β₁ = (cosh(μ) − sinhc(μ)) / (2 μ²)                (coefficient of ÃB + BÃ)
-    β₂ = (sinhc(μ) − cosh(μ) + μ² sinhc_int(μ)) / μ⁴  (coefficient of ÃBÃ)
-
-where `sinhc_int(μ) = ∫₀¹ τ·sinhc((1-τ)μ)·sinhc(τμ) dτ`.  Rather than carry
-that integral in closed form, we use the alternative decomposition based on
-`Ã² = μ² I`: any polynomial in Ã on a 2×2 matrix reduces to `αI + βÃ`, so the
-full `φ(Ã, B)` collapses to terms in `{B, ÃB, BÃ, ÃBÃ}` whose scalar weights
-integrate to elementary functions of μ.
-
-Because this derivation is fiddly, the MCM use case motivates it (LinearAlgebra's
-generic `exp` relies on pivoting and bounds-style operations that do not lift
-through `Particles`).  Instead of carrying the Frechet closed form symbolically,
-we fall back to a numerically exact construction: compute `E = exp(hM)` via
-`exp_jones_generator`, then compute `F` via Van Loan's identity
-
-    exp([ hM   hMω ]) = [ exp(hM)   F       ]
-        [ 0    hM  ]   [ 0         exp(hM) ]
-
-and extract `F` by forming the 4×4 exponential through the 2×2 closed form
-applied to `hM` and `hM'` plus an explicit integral representation.
-
-Implementation: use Higham's scaling & squaring of the 2×2 closed form,
-combined with the identity that for A block-upper-triangular with equal
-diagonal blocks,
-
-    exp(s·A)^2 = [ exp(2sM)    2·exp(sM)·F_s ]
-                 [ 0           exp(2sM)      ]
-
-where `F_s` is the off-diagonal of `exp(s·A)`.  We use s = 1 directly:
-
-    F = ∑_{k=1}^∞ (hM)^(k-1)/k! · hMω · something...
-
-which is equivalent to the series
-
-    F = h · ∑_{k=0}^∞ (hM)^k · hMω · (hM)^j ... /(j+k+1)! ...
-
-This is what Al-Mohy & Higham eq. (10.15) in Higham's "Functions of Matrices"
-computes via scaling & squaring.  For 2×2 blocks the series closes in finite
-form because of `M̃² = μ² I` for the traceless part.  Rather than re-derive,
-we compute `F` by the Kronecker-product identity:
-
-    vec(F) = (I ⊗ I) · L_A(hMω) · vec(I)
-           ≈ h·sinhc(hM/2)  applied bilinearly
-
-Concretely: factor `M = c I + M̃` with `M̃` traceless and `μ² = −det(M̃)`.
-Then `exp(hM) = exp(hc) · [cosh(μh)·I + sinhc(μh)·M̃·h]` (note: we fold `h`
-into the coefficient so `μh` is dimensionless).  The Frechet derivative along
-`Mω` of the scalar-function part is then elementary, and we get:
-
-    F = h · exp(hc) · (
-            φ₀(hc, μh) · Mω
-          + φ₁(hc, μh) · (M̃·Mω + Mω·M̃) · h
-          + φ₂(hc, μh) · M̃·Mω·M̃ · h²
-        )
-
-with
-
-    φ₀(a, b) = sinhc(b)
-    φ₁(a, b) = (cosh(b) - sinhc(b)) / (2 b²)
-    φ₂(a, b) = (b·sinh(b) - 3·cosh(b) + 3·sinhc(b)) / (2 b⁴)
-
-evaluated at a = hc (trace part absorbed into `exp(hc)` prefactor) and
-b = μh.  Small-b branches use Taylor expansions for numerical stability.
+This closed form replaces `LinearAlgebra.exp` on the 4×4 matrix because the
+generic Padé code path relies on operations (`typemax`, `isfinite` on matrix
+norms, pivoting) that do not lift through MCM `Particles`; it is also faster
+and more accurate for plain `Float64` input.
 """
 function exp_block_upper_triangular_2x2(hM::AbstractMatrix, hMω::AbstractMatrix)
     @assert size(hM) == (2, 2) && size(hMω) == (2, 2)
@@ -287,15 +200,23 @@ function exp_block_upper_triangular_2x2(hM::AbstractMatrix, hMω::AbstractMatrix
     return E, F
 end
 
-# Fréchet-derivative scalar coefficients for exp along Ã on a 2×2 traceless matrix
-# Ã with eigenvalues ±μ (so Ã² = μ²·I).  The derivative expands as
-#     L_{c·I + Ã}(B) = exp(c) · [ φ0·B + φ1·(Ã·B + B·Ã) + φ2·Ã·B·Ã ]
-# with, by direct integration of exp((1-τ)Ã)·B·exp(τÃ) over τ ∈ [0,1] using
-# product-to-sum identities and Ã² = μ²·I:
-#     φ0 = (cosh(μ) + sinhc(μ)) / 2                            [coeff of B]
-#     φ1 = sinh(μ) / (2 μ)         = sinhc(μ) / 2              [coeff of Ã·B + B·Ã]
-#     φ2 = (cosh(μ) − sinhc(μ)) / (2 μ²)                       [coeff of Ã·B·Ã]
-# where sinhc(μ) = sinh(μ)/μ.  Small-|μ| branches from Taylor series in μ².
+"""
+    _frechet_2x2_coeffs(μ, μ2) -> (φ0, φ1, φ2)
+
+Return the Fréchet-derivative scalar coefficients of `exp` for a 2×2 traceless
+matrix `Ã` with eigenvalues `±μ` (so `Ã² = μ²·I`). The derivative expands as
+
+    L_{c·I + Ã}(B) = exp(c) · [ φ0·B + φ1·(Ã·B + B·Ã) + φ2·Ã·B·Ã ]
+
+with, by direct integration of `exp((1-τ)Ã)·B·exp(τÃ)` over `τ ∈ [0, 1]` using
+product-to-sum identities and `Ã² = μ²·I`:
+
+    φ0 = (cosh(μ) + sinhc(μ)) / 2          [coeff of B]
+    φ1 = sinh(μ) / (2 μ) = sinhc(μ) / 2    [coeff of Ã·B + B·Ã]
+    φ2 = (cosh(μ) − sinhc(μ)) / (2 μ²)     [coeff of Ã·B·Ã]
+
+where `sinhc(μ) = sinh(μ)/μ`. Small-`|μ|` branches use Taylor series in `μ²`.
+"""
 function _frechet_2x2_coeffs(μ, μ2)
     absμ = scalar_reduce(abs(μ))
     if absμ < 1e-4

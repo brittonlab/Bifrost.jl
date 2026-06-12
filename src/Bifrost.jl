@@ -1,3 +1,15 @@
+"""
+Birefringence simulation for optical fiber: build three-dimensional fiber paths, bind
+them to cross-section optics, and propagate Jones matrices with adaptive error control.
+
+`using Bifrost` re-exports the public names of the core submodules
+(`MaterialProperties`, `PathGeometry`, `FiberCS`, `FiberPath`, `PathIntegral`).
+Plotting helpers are opt-in via `using Bifrost.Plots`.
+
+Typical use: author geometry on a `SubpathBuilder` (`start!` → segment calls →
+`jumpto!`/`seal!`), bind it with `Fiber(spec; cross_section, T_ref_K)`, then call
+`propagate_fiber(fiber; λ_m)` or `propagate_fiber_sensitivity(fiber; λ_m)`.
+"""
 module Bifrost
 
 # Helper: export every public (non-underscore) binding defined directly in
@@ -24,6 +36,18 @@ function _export_public!(mod::Module)
     end
 end
 
+"""
+Intrinsic optical and mechanical properties of fiber glasses.
+
+Each concrete glass subtypes `AbstractMaterial` and implements the property interface
+documented there (`refractive_index`, `cte`, `softening_temperature`, `poisson_ratio`,
+`photoelastic_constants`, `youngs_modulus`, …). Concrete materials: `SiO2`, `GeO2`,
+`SilicaGermaniaGlass`, and `SilicaFluorinatedGlass`.
+
+Units are SI throughout: wavelengths in metres, temperatures in kelvin, moduli in
+pascals; refractive indices, Poisson ratios, and photoelastic constants are
+dimensionless.
+"""
 module MaterialProperties
     using LinearAlgebra
     using Printf
@@ -38,6 +62,42 @@ module MaterialProperties
     _export_public!(@__MODULE__)
 end
 
+"""
+Construct and query three-dimensional smooth space curves (fiber paths).
+
+Authoring uses a small bang-DSL on a mutable `SubpathBuilder`: `start!` → segment
+calls (`straight!`, `bend!`, `helix!`, `catenary!`, `jumpby!`) → seal (`jumpto!`
+toward a global target, or `seal!` to end at the natural exit). `Subpath` freezes
+the authored data; `build` compiles one Subpath to an immutable `SubpathBuilt`, and
+`build(::Vector{Subpath})` concatenates independent Subpaths into a `PathBuilt`
+under a shared global arc length, checking endpoint conformity between neighbors.
+
+Built paths answer differential-geometry queries along arc length:
+
+    arc_length(seg_or_path)
+    arc_length(path, s1, s2)
+    curvature(seg_or_path, s)
+    geometric_torsion(seg_or_path, s)
+    spin_rate(path, s)
+    position(path, s)
+    tangent(path, s)
+    normal(path, s)
+    binormal(path, s)
+    frame(path, s)
+    breakpoints(path)
+    sample(path, s_values)
+    sample_uniform(path; n)
+
+Material spin is one spec per Subpath, set at `start!` via the `spin_rate` keyword
+(constant rate, function of Subpath-local arc length, or `:inherit`); the
+accumulated spin phase is continuous across Subpath boundaries.
+
+Per-segment annotations use the `AbstractMeta` vocabulary (`Nickname`, `MCMadd`,
+`MCMmul`). The geometry layer interprets only meta naming a segment's own fields
+(applied by `build(...; perturb = true)`) and carries any foreign annotation
+through untouched — interpretation of foreign meta (such as the fiber layer's
+`:T_K` and `:tension`) is a consuming layer's job.
+"""
 module PathGeometry
     using LinearAlgebra
     # Extend Base.position rather than shadow it, so callers that do
@@ -58,6 +118,15 @@ module PathGeometry
     _export_public!(@__MODULE__)
 end
 
+"""
+Transverse fiber cross-section optics.
+
+Converts material properties into guided-mode quantities (normalized frequency,
+propagation constant, dispersion, effective area) and local birefringence response
+magnitudes (bending, twist, core ellipticity, asymmetric thermal stress, axial
+tension) for a single transverse slice of fiber. Concrete types subtype
+`FiberCrossSection`; see `StepIndexCrossSection`.
+"""
 module FiberCS
     using LinearAlgebra
     using ..MaterialProperties
@@ -70,6 +139,15 @@ module FiberCS
     _export_public!(@__MODULE__)
 end
 
+"""
+Path-backed fiber assembly.
+
+`Fiber` binds authored path geometry to a `FiberCrossSection` and assembles the
+local Jones generators `K(s)` (via `generator_K`) and `Kω(s)` (via `generator_Kω`)
+consumed by the propagation layer. This module is the sole interpreter of the
+foreign segment meta `:T_K` (temperature excursion, K) and `:tension` (axial
+tension, N), which the geometry layer carries inertly.
+"""
 module FiberPath
     using LinearAlgebra
     using ..MaterialProperties
@@ -85,6 +163,21 @@ module FiberPath
     _export_public!(@__MODULE__)
 end
 
+"""
+Lossless Jones-matrix propagation and DGD sensitivity integration.
+
+Advances `dJ/ds = K(s)·J` for a callable local generator `K` with adaptive
+step-doubling exponential-midpoint integration, respecting caller-supplied
+breakpoints and optional lumped jumps, and integrates the coupled sensitivity
+system for `G = ∂ωJ`. Fiber-level entry points are `propagate_fiber` and
+`propagate_fiber_sensitivity`; DGD extraction uses `output_dgd` and the
+MCM-friendly `output_dgd_2x2`.
+
+The implementation assumes lossless SU(2) Jones dynamics. Error control is
+phase-insensitive, and MCM-compatible code paths avoid scalar coercions,
+particle-dependent branching, and generic matrix exponentials that do not lift
+through `MonteCarloMeasurements.Particles`.
+"""
 module PathIntegral
     using LinearAlgebra
     using Printf
@@ -118,6 +211,13 @@ export MaterialProperties, FiberCS, PathGeometry, FiberPath, PathIntegral
 # Plotting lives in a separate `Plots` submodule, opt-in via
 # `using Bifrost.Plots`, so plain `using Bifrost` does not pull plotting
 # symbols into scope.
+"""
+Visual diagnostics for built path geometry and fiber propagation.
+
+Generates interactive Plotly HTML renderings: 3D centerlines with frame cursors,
+polarization evolution along a fiber, Poincaré-sphere views, and adaptive-step
+solver diagnostics. Opt-in via `using Bifrost.Plots`.
+"""
 module Plots
     using LinearAlgebra
     using ..PathGeometry

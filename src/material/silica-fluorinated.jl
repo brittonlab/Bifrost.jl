@@ -1,29 +1,5 @@
-"""
-Material properties for fluorinated silica glass.
-File name prefixed with 20 so it is loaded after 10-silica-germania-binary glasses, as it
-depends on PURE_SILICA and other siilica material constants defined there.
-
-This file defines fluorinated silica glass, defined by a doping fraction
-of fluorine into a silica base.
-
-Units (SI unless noted):
-- λ                     wavelength in m
-- T_K                   temperature in K
-- x_f                   dopant molar fraction (dimensionless, 0..1)
-- refractive indices, Poisson ratio, photoelastic constants: dimensionless
-- cte                   1/K
-- softening_temperature  K
-- youngs_modulus        Pa
-- nonlinear_refractive_index (n_2)  m²/W
-
-[Example usage]
-
-glass = SilicaFluorinatedGlass(0.01)   # 1.0 mol% F in SiO2
-T_K = 297.15
-λ = 1550e-9
-n = refractive_index(glass, λ, T_K)
-cte_value = cte(glass, T_K)
-"""
+# Fluorine-doped silica. Loaded after silica.jl, whose PURE_SILICA Sellmeier
+# coefficients are the base that the fluorine corrections perturb.
 
 const _FLUORINE_SELLMEIER_B_CORRECTION_COEFFS = (
     (0.0, 0.2565, -61.25),
@@ -37,6 +13,23 @@ const _FLUORINE_SELLMEIER_C_CORRECTION_COEFFS = (
     (0.0, -24.695, 1090.5)
 )
 
+"""
+    SilicaFluorinatedGlass(x_f)
+
+Fluorine-doped silica glass with fluorine molar fraction `x_f`.
+
+The refractive index applies fluorine-dependent corrections to the pure-silica
+Sellmeier coefficients; `x_f` is validated to lie in `[0, 1]`. Only the optical
+properties are modeled: the mechanical and thermal properties (`cte`,
+`softening_temperature`, `poisson_ratio`, `photoelastic_constants`,
+`youngs_modulus`) throw an `ArgumentError` in the current model.
+
+# Examples
+```julia
+glass = SilicaFluorinatedGlass(0.01)   # 1.0 mol% F in SiO2
+n = refractive_index(glass, 1550e-9, 297.15)
+```
+"""
 struct SilicaFluorinatedGlass <: AbstractMaterial
     x_f::Float64
 
@@ -80,6 +73,12 @@ photoelastic_constants(::SilicaFluorinatedGlass, _) =
 youngs_modulus(::SilicaFluorinatedGlass, _) =
     unsupported_fluorine_property("youngs_modulus")
 
+"""
+    unsupported_fluorine_property(name)
+
+Throw the `ArgumentError` reporting that property `name` is not defined for
+fluorine-doped silica in the current model.
+"""
 function unsupported_fluorine_property(name::AbstractString)
     msg = "$(name) is not defined for fluorine-doped silica in the current model"
     throw(ArgumentError(msg))
