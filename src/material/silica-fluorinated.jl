@@ -37,9 +37,9 @@ const _FLUORINE_SELLMEIER_C_CORRECTION_COEFFS = (
     (0.0, -24.695, 1090.5)
 )
 
-# Fluorine enters as a molar fraction over the physical interval [0, 1], matching the
-# binary-glass coefficient source's fraction validation.
-const FLUORINE_MOLAR_FRACTION_RANGE = ValidityRange(0.0, 1.0, "fluorine molar fraction")
+# Fluorine enters as a molar fraction.
+# Caution: The validity range is esan estimate. 
+const FLUORINE_MOLAR_FRACTION_RANGE = ValidityRange(0.0, 0.05, "fluorine molar fraction")
 
 struct SilicaFluorinatedGlass <: AbstractMaterial
     x_f::Float64
