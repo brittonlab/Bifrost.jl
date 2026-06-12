@@ -6,6 +6,9 @@ output/
 __pycache__/
 *.pyc
 
+# Dependency snapshot; only included on tagged releases (issue #77)
+/Manifest.toml
+
 # Documenter.jl build artifacts
 docs/build/
 docs/Manifest.toml

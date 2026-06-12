@@ -7,10 +7,8 @@
 # obtain `K`, `Kω`, and breakpoints from `fiber-path.jl`; plotting diagnostics live
 # above this layer in `fiber-path-plot.jl`.
 #
-# The implementation assumes lossless SU(2)-style Jones dynamics. Error control is
-# phase-insensitive, and MCM-compatible code paths avoid scalar coercions,
-# particle-dependent branching, and generic matrix exponentials that do not lift
-# through `MonteCarloMeasurements.Particles`.
+# The implementation assumes lossless SU(2)-style Jones dynamics and phase-insensitive
+# error control.
 
 # Fiber and the generator API come from the FiberPath submodule, in scope via
 # the PathIntegral submodule in Bifrost.jl.
@@ -23,15 +21,9 @@
 # MCM scalar reduction
 # ----------------------------
 #
-# The adaptive step controller needs to make one decision per step for the whole
-# ensemble — we cannot take half a step for some particles and a full step for
-# others. `scalar_reduce` collapses a possibly-Particles scalar down to a Float64
-# using `pmaximum` (conservative: worst-case particle drives step size).
-#
-# Performance note: `pmean` would be a less conservative compromise and could
-# reduce the step count under high-variance inputs; switch if MCM propagations
-# become too slow under tight tolerances. Keep `scalar_reduce` as the single
-# switch point.
+# The adaptive step controller makes one decision per step for the whole ensemble;
+# `scalar_reduce` is the single switch point between the conservative `pmaximum`
+# reduction and a cheaper `pmean` compromise.
 
 """
     scalar_reduce(x)
@@ -64,9 +56,9 @@ end
 Return `sinh(μ) / μ` using a Taylor expansion near zero.
 """
 function sinhc(μ)
-    # Elementwise arithmetic; lifts through MCM Particles entries automatically.
     # The small-μ branch uses the Taylor series; large-μ uses the analytic ratio.
     # Under MCM we cannot branch per-particle, so we reduce |μ| to a scalar first.
+    # Elementwise arithmetic in both branches lifts through Particles automatically.
     if scalar_reduce(abs(μ)) < 1e-8
         μ2 = μ * μ
         return 1 + μ2 / 6 + μ2 * μ2 / 120 + μ2 * μ2 * μ2 / 5040
@@ -127,9 +119,8 @@ function exp_midpoint_step(K, s::Float64, h::Float64, J::AbstractMatrix)
     return exp_jones_generator(h * M) * J
 end
 
-# Compute the 2×2 product C = A · B given entries of A and B as tuples.
-# Returns a 2×2 Matrix whose eltype is promoted from A and B entries so it
-# lifts cleanly through MCM Particles.
+# Compute the 2×2 product C = A · B given entries of A and B as tuples,
+# promoting the eltype from the A and B entries.
 @inline function _mul2x2(a11, a12, a21, a22, b11, b12, b21, b22)
     c11 = a11 * b11 + a12 * b21
     c12 = a11 * b12 + a12 * b22
@@ -527,9 +518,7 @@ function propagate_interval!(
         J_half = exp_midpoint_step(K, s, 0.5h, J)
         J_twohalf = exp_midpoint_step(K, s + 0.5h, 0.5h, J_half)
 
-        # Collapse the error metric to a scalar here.  Under MCM, pmaximum is
-        # conservative (worst-case particle picks the step); pmean would be a
-        # cheaper compromise at the cost of occasionally under-refining.
+        # Collapse the error metric to a scalar (see scalar_reduce).
         err_abs = scalar_reduce(phase_insensitive_error(J_full, J_twohalf))
         scale = max(
             scalar_reduce(_frobenius_norm(J_twohalf)),
@@ -608,8 +597,7 @@ function propagate_interval_sensitivity!(
         J_half, G_half = exp_sensitivity_midpoint_step(K, Kω, s, 0.5h, J, G)
         J_twohalf, G_twohalf = exp_sensitivity_midpoint_step(K, Kω, s + 0.5h, 0.5h, J_half, G_half)
 
-        # scalar_reduce: under MCM, pmaximum is conservative; pmean would be
-        # a speed compromise — see note at top of this file.
+        # Error metric collapses to a scalar via scalar_reduce (see its docstring).
         err_abs = sensitivity_phase_insensitive_error(J_full, G_full, J_twohalf, G_twohalf)
         scale = max(
             scalar_reduce(_frobenius_norm(J_full)),

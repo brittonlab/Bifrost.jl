@@ -189,9 +189,8 @@ Gauss–Kronrod, which subdivides automatically for oscillatory integrands; a
 _integrate_rate(::Nothing, a::Float64, b::Float64;
                 rtol::Float64 = 1e-8, atol::Float64 = 0.0) = 0.0
 
-# `::Real` (not `::Float64`) so a `Particles` constant rate — e.g. an
-# MCM-perturbed `twist` — integrates without coercion: `rate * (b - a)`
-# promotes to `Particles`. `Float64` is `Real`, so spin still hits this branch.
+# `::Real` (not `::Float64`) so a `Particles` constant rate integrates without
+# coercion; `Float64 <: Real`, so plain spin still hits this branch.
 _integrate_rate(rate::Real, a::Float64, b::Float64;
                 rtol::Float64 = 1e-8, atol::Float64 = 0.0) = rate * (b - a)
 

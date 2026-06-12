@@ -20,10 +20,10 @@ makedocs(
         "Home" => "index.md",
         "Examples" => "examples.md",
         "Usage" => "usage.md",
+        "Developing" => "developing.md",
         "Theory" => [
             "Deriving the generators" => "generators.md",
             "Path geometry" => "path-geometry.md",
-            "Monte Carlo Measurements" => "mcm.md",
         ],
         "API" => [
             "MaterialProperties" => "api/material-properties.md",

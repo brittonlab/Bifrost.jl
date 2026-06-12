@@ -1,0 +1,17 @@
+name: Manifest guard
+
+on:
+  pull_request:
+
+jobs:
+  no-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail if Manifest.toml is tracked
+        run: |
+          if git ls-files | grep -qx 'Manifest.toml'; then
+            echo "::error::Manifest.toml must not be committed during development." \
+                 "It is only snapshotted on tagged releases (see issue #77)."
+            exit 1
+          fi

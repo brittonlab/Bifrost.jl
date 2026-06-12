@@ -6,7 +6,7 @@ These files are intentionally useful on their own:
 
 | File | Standalone role |
 | --- | --- |
-| `material-properties.jl` | Together with files in materials directory, provides material constants and spectra; no path or fiber geometry. |
+| `material-properties.jl` | Together with the other files in `src/material/`, provides material constants and spectra; no path or fiber geometry. |
 | `path-geometry.jl` | Three-dimensional path construction and geometric queries; no optics. |
 | `path-integral.jl` | Adaptive propagation for callable `K(s)` and `Kω(s)` generators. |
 
@@ -14,7 +14,7 @@ The fiber-specific layers combine those pieces:
 
 | File | How it extends the standalone pieces |
 | --- | --- |
-| `fiber-cross-section.jl` | Together with files in fiber-cross-sections directory, adds step-index fiber optics and birefringence responses. |
+| `cross-section.jl` | Together with the other files in `src/fiber-cross-section/`, adds step-index fiber optics and birefringence responses. |
 | `fiber-path.jl` | Binds path geometry to a cross section and assembles bend/twist `K` and `Kω`. |
 
 ## Current Model
