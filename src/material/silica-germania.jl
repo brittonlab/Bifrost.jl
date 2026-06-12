@@ -25,7 +25,7 @@ cte_value = cte(glass, T_K)
 
 # Germania enters as a molar fraction. 
 # Caution: The validity range is esan estimate. 
-const GERMANIA_FRACTION_RANGE = ValidityRange(0.05, 1.0, "germania molar fraction")
+const GERMANIA_FRACTION_RANGE = ValidityRange(0.00, 0.05, "germania molar fraction")
 
 struct SilicaGermaniaGlass <: AbstractMaterial
     x_ge::Float64
