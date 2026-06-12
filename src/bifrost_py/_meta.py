@@ -262,8 +262,8 @@ def _distribution_to_julia(distribution: Any) -> Any:
     """
     try:
         from . import _mcm
-        if isinstance(distribution, _mcm.Particles):
-            return distribution.to_julia()
+        if isinstance(distribution, (_mcm.Particles, _mcm.StaticParticles)):
+            return distribution._julia_type
     except (ImportError, AttributeError):
         pass
     

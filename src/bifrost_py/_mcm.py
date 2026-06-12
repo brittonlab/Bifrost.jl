@@ -154,7 +154,7 @@ class StaticParticles:
         jl = get_jl()
         # Convert numpy array to Julia Vector explicitly
         jl_array = jl.Vector(self.particles)
-        return jl.MonteCarloMeasurements.StaticParticles(jl_array)
+        return jl.MonteCarloMeasurements.Particles(jl_array)
     
     def __repr__(self) -> str:
         return f"StaticParticles(n={self.n}, mean={self.mean:.4f}, std={self.std:.4f})"

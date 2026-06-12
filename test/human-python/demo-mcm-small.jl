@@ -25,11 +25,12 @@ xs = StepIndexCrossSection(
 )
 
 # Build a simple path
-spec = PathSpecBuilder()
-straight!(spec; length = 0.5, meta = [Nickname("lead-in")])
-bend!(spec; radius = 0.01, angle = pi / 2, meta = [Nickname("90 deg bend")])
-straight!(spec; length = 0.5, meta = [Nickname("lead-out")])
-path = build(spec)
+sb = SubpathBuilder(); start!(sb)
+straight!(sb; length = 0.5, meta = [Nickname("lead-in")])
+bend!(sb;     radius = 0.05, angle = π / 2, meta = [Nickname("90 deg bend")])
+straight!(sb; length = 0.5, meta = [Nickname("lead-out")])
+seal!(sb)
+path = build(sb)
 
 # =============================
 # MCM: Temperature uncertainty
@@ -52,7 +53,6 @@ println("Propagating fiber with uncertain temperature ($(N_SAMPLES) samples)..."
 J_particles, stats = propagate_fiber(
     fiber_mcm;
     λ_m = 1550e-9,
-    rtol = 1e-9,
     verbose = false,
 )
 

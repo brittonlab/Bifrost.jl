@@ -47,22 +47,15 @@ println("Temperature perturbation ensemble:")
 # Apply segment-level MCM perturbation via meta
 # The bend segment carries MCMadd(:T_K, ΔT_K_particles) in its meta,
 # which modify() will interpret as "add ΔT_K to the local temperature"
-spec_with_meta = PathSpecBuilder()
+spec_with_meta = SubpathBuilder(); start!(spec_with_meta)
 straight!(spec_with_meta; length = 0.5, meta = [Nickname("lead-in")])
 bend!(spec_with_meta; radius = 0.01, angle = π/2,
       meta = [Nickname("sensitive bend"), MCMadd(:T_K, ΔT_K_particles)])
 straight!(spec_with_meta; length = 0.5, meta = [Nickname("lead-out")])
+seal!(spec_with_meta)
 
 path_with_meta = build(spec_with_meta)
 fiber_with_meta = Fiber(path_with_meta; cross_section = xs, T_ref_K = T_ref_K)
-
-# =============================
-# Modify: apply MCM perturbations to the path
-# =============================
-
-println("\nApplying MCM perturbations via modify()...")
-modified_path = modify(fiber_with_meta)
-fiber_modified = Fiber(modified_path; cross_section = xs, T_ref_K = T_ref_K)
 
 # =============================
 # Propagate
@@ -70,13 +63,22 @@ fiber_modified = Fiber(modified_path; cross_section = xs, T_ref_K = T_ref_K)
 
 println("Propagating with segment-level temperature variation...")
 J_particles, stats = propagate_fiber(
-    fiber_modified;
+    fiber_with_meta;
     λ_m = 1550e-9,
-    rtol = 1e-9,
     verbose = false,
 )
 
 println("Done.\n")
+
+# fiber2 = Fiber(fiber_with_meta.path; cross_section = xs, T_ref_K = T_ref_K + ΔT_K_particles)
+# println("Part 2...")
+# J_particles, stats = propagate_fiber(
+#     fiber2;
+#     λ_m = 1550e-9,
+#     verbose = false,
+# )
+
+# println("Done.\n")
 
 # =============================
 # Convert Jones matrix to rotation angle
