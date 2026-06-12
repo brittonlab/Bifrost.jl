@@ -23,19 +23,6 @@ n = refractive_index(glass, λ, T_K)
 cte_value = cte(glass, T_K)
 """
 
-#################################################
-#
-# Material constants:
-# All from silica.jl and germania.jl
-#
-#################################################
-
-#################################################
-#
-# Structures and Utility Methods
-#
-#################################################
-
 # Germania enters as a molar fraction. 
 # Caution: The validity range is esan estimate. 
 const GERMANIA_FRACTION_RANGE = ValidityRange(0.05, 1.0, "germania molar fraction")
@@ -47,8 +34,7 @@ struct SilicaGermaniaGlass <: AbstractMaterial
         new(check_range(Float64(x_ge), GERMANIA_FRACTION_RANGE))
 end
 
-# A silica-germania mixture is valid over silica's runtime window.
-runtime_ranges(::SilicaGermaniaGlass) = runtime_ranges(PURE_SILICA)
+runtime_range(::SilicaGermaniaGlass) = runtime_range((SiO2(), GeO2()))
 
 #################################################
 #
@@ -57,16 +43,16 @@ runtime_ranges(::SilicaGermaniaGlass) = runtime_ranges(PURE_SILICA)
 #################################################
 
 function refractive_index(::ValueOnly, glass::SilicaGermaniaGlass, λ, T_K)
-    check_range((; T_K, λ), runtime_ranges(glass))
-    n_silica = refractive_index(ValueOnly(), PURE_SILICA, λ, T_K)
-    n_germania = refractive_index(ValueOnly(), PURE_GERMANIA, λ, T_K)
+    check_range((; T_K, λ), (SILICA_VALIDITY, GERMANIA_VALIDITY))
+    n_silica = refractive_index(ValueOnly(), SiO2(), λ, T_K)
+    n_germania = refractive_index(ValueOnly(), GeO2(), λ, T_K)
     return interpolate_scalar(n_silica, n_germania, glass.x_ge)
 end
 
 function refractive_index(::WithDerivative, glass::SilicaGermaniaGlass, λ, T_K)
-    check_range((; T_K, λ), runtime_ranges(glass))
-    n_silica = refractive_index(WithDerivative(), PURE_SILICA, λ, T_K)
-    n_germania = refractive_index(WithDerivative(), PURE_GERMANIA, λ, T_K)
+    check_range((; T_K, λ), (SILICA_VALIDITY, GERMANIA_VALIDITY))
+    n_silica = refractive_index(WithDerivative(), SiO2(), λ, T_K)
+    n_germania = refractive_index(WithDerivative(), GeO2(), λ, T_K)
     return SpectralResponse(
         interpolate_scalar(n_silica.value, n_germania.value, glass.x_ge),
         interpolate_scalar(n_silica.dω, n_germania.dω, glass.x_ge)

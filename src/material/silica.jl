@@ -19,12 +19,6 @@ n = refractive_index(glass, λ, T_K)
 cte_value = cte(glass, T_K)
 """
 
-#################################################
-#
-# Material constants
-#
-#################################################
-
 # Sellmeier polynomial coefficients from Leviton and Frey, doi:10.1117/12.672853.
 const _SILICA_SELLMEIER_B_COEFFS = (
     (1.10127, -4.94251e-5, 5.27414e-7, -1.59700e-9, 1.75949e-12),
@@ -50,15 +44,7 @@ const SILICA_YOUNGS_MODULUS = 74e9
 
 const SILICA_N2 = 2.2e-20
 
-#################################################
-#
-# Structures and Utility Methods
-#
-#################################################
-
 struct SiO2 <: AbstractMaterial end
-
-const PURE_SILICA = SiO2()
 
 #################################################
 #
@@ -71,8 +57,7 @@ const SILICA_VALIDITY = (
     T_K = ValidityRange(243.0, 373.0, "temperature"),
     λ = ValidityRange(1300e-9, 1700e-9, "wavelength"),
 )
-
-runtime_ranges(::SiO2) = SILICA_VALIDITY
+runtime_range(::SiO2) = SILICA_VALIDITY
 
 function _sellmeier_coefficients(::SiO2, T_K)
     return _evaluate_sellmeier_polynomials(
@@ -83,12 +68,12 @@ function _sellmeier_coefficients(::SiO2, T_K)
 end
 
 function refractive_index(::ValueOnly, material::SiO2, λ, T_K)
-    check_range((; T_K, λ), runtime_ranges(material))
+    check_range((; T_K, λ), SILICA_VALIDITY)
     return sellmeier_index_from_coefficients(_sellmeier_coefficients(material, T_K), λ)
 end
 
 function refractive_index(::WithDerivative, material::SiO2, λ, T_K)
-    check_range((; T_K, λ), runtime_ranges(material))
+    check_range((; T_K, λ), SILICA_VALIDITY)
     return sellmeier_index_from_coefficients_dω(_sellmeier_coefficients(material, T_K), λ)
 end
 

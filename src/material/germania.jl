@@ -19,12 +19,6 @@ n = refractive_index(glass, λ, T_K)
 cte_value = cte(glass, T_K)
 """
 
-#################################################
-#
-# Material constants
-#
-#################################################
-
 # Sellmeier coefficients from Fleming, Applied Optics (1984).
 # doi:10.1364/AO.23.004486
 const _GERMANIA_SELLMEIER_COEFFICIENTS = (
@@ -47,15 +41,9 @@ const GERMANIA_YOUNGS_MODULUS = 45.5e9
 
 const GERMANIA_N2 = 4.6e-20
 
-#################################################
-#
-# Structures and Utility Methods
-#
-#################################################
-
 struct GeO2 <: AbstractMaterial end
 
-const PURE_GERMANIA = GeO2()
+
 
 #################################################
 #
@@ -69,8 +57,7 @@ const GERMANIA_VALIDITY = (
     T_K = ValidityRange(243.0, 373.0, "temperature"),
     λ = ValidityRange(1300e-9, 1700e-9, "wavelength"),
 )
-
-runtime_ranges(::GeO2) = GERMANIA_VALIDITY
+runtime_range(::GeO2) = GERMANIA_VALIDITY
 
 # From G. M. Rego, Sensors (2024), doi:10.3390/s24154857
 function thermo_optic_index_shift(material::GeO2, T_K)
@@ -85,14 +72,14 @@ function _sellmeier_coefficients(::GeO2, T_K)
 end
 
 function refractive_index(::ValueOnly, material::GeO2, λ, T_K)
-    check_range((; T_K, λ), runtime_ranges(material))
+    check_range((; T_K, λ), GERMANIA_VALIDITY)
     base_coeffs = _sellmeier_coefficients(material, T_K)
     n_ref = sellmeier_index_from_coefficients(base_coeffs, λ)
     return n_ref + thermo_optic_index_shift(material, T_K)
 end
 
 function refractive_index(::WithDerivative, material::GeO2, λ, T_K)
-    check_range((; T_K, λ), runtime_ranges(material))
+    check_range((; T_K, λ), GERMANIA_VALIDITY)
     base_coeffs = _sellmeier_coefficients(material, T_K)
     base = sellmeier_index_from_coefficients_dω(base_coeffs, λ)
     return SpectralResponse(base.value + thermo_optic_index_shift(material, T_K), base.dω)

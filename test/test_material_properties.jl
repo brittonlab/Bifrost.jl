@@ -339,15 +339,11 @@ end
     @test_throws ArgumentError check_range((a = 0.5, b = 25.0), ranges)
 
     # T-GUARDRAIL: declared runtime windows carry the documented bounds.
-    for m in (PURE_SILICA, PURE_GERMANIA)
-        rr = runtime_ranges(m)
+    for m in (SiO2(), GeO2(), SilicaGermaniaGlass(0.036), SilicaFluorinatedGlass(0.01))
+        rr = runtime_range(m)
         @test rr.T_K.lo == 243.0 && rr.T_K.hi == 373.0
         @test rr.λ.lo == 1300e-9 && rr.λ.hi == 1700e-9
     end
-
-    # T-GUARDRAIL: doped glasses inherit silica's runtime window.
-    @test runtime_ranges(SilicaGermaniaGlass(0.036)) === runtime_ranges(PURE_SILICA)
-    @test runtime_ranges(SilicaFluorinatedGlass(0.01)) === runtime_ranges(PURE_SILICA)
 end
 
 @testset "Spectral responses" begin

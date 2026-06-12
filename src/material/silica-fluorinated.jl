@@ -1,7 +1,7 @@
 """
 Material properties for fluorinated silica glass.
 File name prefixed with 20 so it is loaded after 10-silica-germania-binary glasses, as it
-depends on PURE_SILICA and other siilica material constants defined there.
+depends on SiO2 and other silica material constants defined there.
 
 This file defines fluorinated silica glass, defined by a doping fraction
 of fluorine into a silica base.
@@ -48,11 +48,10 @@ struct SilicaFluorinatedGlass <: AbstractMaterial
         new(check_range(Float64(x_f), FLUORINE_MOLAR_FRACTION_RANGE))
 end
 
-# Fluorine doping does not shift the validity window inherited from pure silica.
-runtime_ranges(::SilicaFluorinatedGlass) = runtime_ranges(PURE_SILICA)
+runtime_range(::SilicaFluorinatedGlass) = runtime_range(SiO2())
 
 function _sellmeier_coefficients(glass::SilicaFluorinatedGlass, T_K)
-    silica_coeffs = _sellmeier_coefficients(PURE_SILICA, T_K)
+    silica_coeffs = _sellmeier_coefficients(SiO2(), T_K)
     x_f = glass.x_f
     corrections = _evaluate_sellmeier_polynomials(
         _FLUORINE_SELLMEIER_B_CORRECTION_COEFFS,
@@ -65,12 +64,12 @@ function _sellmeier_coefficients(glass::SilicaFluorinatedGlass, T_K)
 end
 
 function refractive_index(::ValueOnly, material::SilicaFluorinatedGlass, λ, T_K)
-    check_range((; T_K, λ), runtime_ranges(material))
+    check_range((; T_K, λ), SILICA_VALIDITY)
     return sellmeier_index_from_coefficients(_sellmeier_coefficients(material, T_K), λ)
 end
 
 function refractive_index(::WithDerivative, material::SilicaFluorinatedGlass, λ, T_K)
-    check_range((; T_K, λ), runtime_ranges(material))
+    check_range((; T_K, λ), SILICA_VALIDITY)
     return sellmeier_index_from_coefficients_dω(_sellmeier_coefficients(material, T_K), λ)
 end
 

@@ -69,13 +69,7 @@ end
     check_range(value, range::ValidityRange) -> value
     check_range(values::NamedTuple, ranges::NamedTuple) -> nothing
 
-Validate `value` against `range`, returning it (handy inside constructors) or
-throwing an `ArgumentError` when it is non-finite or outside `[range.lo,
-range.hi]`. The `NamedTuple` method validates several values at once, matching
-each to the range that shares its key.
-
-The check is MCM-safe: it uses only `isfinite` and `lo <= value <= hi`, with no
-coercion or branching on uncertain values, so `Particles` pass through unchanged.
+Validate `value` against `range`.
 """
 function check_range(value, r::ValidityRange)
     isfinite(value) && r.lo <= value <= r.hi ||
@@ -87,15 +81,26 @@ check_range(values::NamedTuple, ranges::NamedTuple) =
     foreach(k -> check_range(getfield(values, k), getfield(ranges, k)), keys(ranges))
 
 """
-    runtime_ranges(material) -> NamedTuple
+    runtime_range(material) -> NamedTuple
 
-Per-material runtime validity envelope as a `NamedTuple` of [`ValidityRange`](@ref)s
-keyed by quantity (for example `(; T_K, λ)`). Defaults to empty; each material
-declares its own. Consuming layers read these bounds directly — the step-index
-cutoff search, for instance, takes its bisection limits from
-`runtime_ranges(material).λ`.
+Per-material runtime validity range.
+
+Example: runtime_range(::SilicaGermaniaGlass).λ.lo
 """
-runtime_ranges(::AbstractMaterial) = NamedTuple()
+runtime_range(::AbstractMaterial) = NamedTuple()
+
+function runtime_range(materials::Tuple)
+    ranges = map(runtime_range, materials)
+    all_keys = union(map(keys, ranges)...)
+    return NamedTuple(
+        k => ValidityRange(
+            maximum(r[k].lo for r in ranges if haskey(r, k)),
+            minimum(r[k].hi for r in ranges if haskey(r, k)),
+            first(r[k].name for r in ranges if haskey(r, k))
+        )
+        for k in all_keys
+    )
+end
 
 #################################################
 #
@@ -145,7 +150,7 @@ examples of their use.
 
 These evaluators are pure numerics and do no domain validation: callers validate their
 inputs at the `refractive_index` entry via `check_range` against the material's
-`runtime_ranges`.
+`runtime_range`.
 
 Note also that any implemented material must ensure compatibility with `Particles` to allow
 Monte Carlo calculation. This happens naturally through the Sellmeier structure included here.

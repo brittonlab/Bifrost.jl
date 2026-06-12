@@ -175,7 +175,7 @@ end
 
     # T-GUARDRAIL: the bisection defaults read the core material's wavelength window
     # rather than any global constant, and give the same result as passing them by hand.
-    window = runtime_ranges(fiber.core_material).λ
+    window = runtime_range(fiber.core_material).λ
     @test cutoff_wavelength(fiber, T; λ_min = window.lo, λ_max = window.hi) == λ_cutoff
 end
 

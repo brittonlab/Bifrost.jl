@@ -22,7 +22,7 @@ using Bifrost.PathGeometry: _qc_nominalize
         T = T_nom ± 2.0
 
         # T-GUARDRAIL: Particles flow through each material's refractive_index
-        for mat in (PURE_SILICA, PURE_GERMANIA,
+        for mat in (SiO2(), GeO2(),
                     SilicaGermaniaGlass(0.036), SilicaFluorinatedGlass(0.01))
             n = refractive_index(mat, λ, T)
             @test n isa Particles
@@ -31,7 +31,7 @@ using Bifrost.PathGeometry: _qc_nominalize
         end
 
         # T-GUARDRAIL: WithDerivative SpectralResponse lifts both fields
-        for mat in (PURE_SILICA, PURE_GERMANIA,
+        for mat in (SiO2(), GeO2(),
                     SilicaGermaniaGlass(0.036), SilicaFluorinatedGlass(0.01))
             resp = refractive_index(WithDerivative(), mat, λ, T)
             @test resp.value isa Particles
@@ -44,19 +44,19 @@ using Bifrost.PathGeometry: _qc_nominalize
         # T-PHYSICS: mean of n(T_nom ± δ) matches n(T_nom) to O(δ²)
         δ = 2.0
         T_small = T_nom ± δ
-        n_mean = pmean(refractive_index(PURE_SILICA, λ, T_small))
-        n_ref = refractive_index(PURE_SILICA, λ, T_nom)
+        n_mean = pmean(refractive_index(SiO2(), λ, T_small))
+        n_ref = refractive_index(SiO2(), λ, T_nom)
         @test abs(n_mean - n_ref) < 1e-3  # second-order curvature in δ=2 K
 
         # T-GUARDRAIL: out-of-range T (mean outside validity window) errors
-        @test_throws ArgumentError refractive_index(PURE_SILICA, λ, 500.0 ± 1.0)
+        @test_throws ArgumentError refractive_index(SiO2(), λ, 500.0 ± 1.0)
 
         # T-GUARDRAIL: T-independent material constants stay Float64 even under Particles T
-        @test cte(PURE_SILICA, T) isa Float64
-        @test softening_temperature(PURE_SILICA, T) isa Float64
-        @test poisson_ratio(PURE_SILICA, T) isa Float64
-        @test youngs_modulus(PURE_SILICA, T) isa Float64
-        @test photoelastic_constants(PURE_SILICA, T) isa Tuple{Float64, Float64}
+        @test cte(SiO2(), T) isa Float64
+        @test softening_temperature(SiO2(), T) isa Float64
+        @test poisson_ratio(SiO2(), T) isa Float64
+        @test youngs_modulus(SiO2(), T) isa Float64
+        @test photoelastic_constants(SiO2(), T) isa Tuple{Float64, Float64}
     finally
         MonteCarloMeasurements.unsafe_comparisons(false)
     end
