@@ -221,7 +221,7 @@ Evaluate a rate specification at local arc length `s`: `nothing` → `0`, a `Rea
 constant → itself, a `Function` → `rate(s)`. Branch-free per type so a
 `Particles` constant propagates without coercion.
 """
-_eval_rate(::Nothing, s) = zero(s isa AbstractFloat ? s : Float64(s))
+_eval_rate(::Nothing, s) = 0.0 * s
 _eval_rate(rate::Real, s) = rate
 _eval_rate(rate::Function, s) = rate(s)
 

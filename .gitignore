@@ -32,3 +32,7 @@ test/bifrost_pr19_review/sources/download_attempts.log
 test/bifrost_pr19_review/sources/josab-19-12-2886.pdf
 test/bifrost_pr19_review/sources/Rottwitt.pdf
 test/bifrost_pr19_review/src/generate_reference_plots.jl
+
+# Notebook environment locals (test/human)
+test/human/Manifest.toml
+test/human/.CondaPkg/
