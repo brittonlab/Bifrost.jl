@@ -98,7 +98,7 @@ function unsupported_message(f)
     end
 end
 
-reference_dλ_dω(λ_meters) = -(λ_meters^2) / (2π * SPEED_OF_LIGHT_M_PER_S)
+reference_dλ_dω(λ_meters) = -(λ_meters^2) / (2π * u.c)
 
 function finite_difference_dω(f, λ_meters; dλ = 1e-12)
     df_dλ = (f(λ_meters + dλ) - f(λ_meters - dλ)) / (2dλ)
