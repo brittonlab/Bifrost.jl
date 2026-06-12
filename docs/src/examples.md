@@ -42,7 +42,7 @@ dgd = output_dgd(J, G)
 
 For Monte Carlo Measurements (MCM) paths, prefer `output_dgd_2x2(J, G)` over
 `output_dgd(J, G)` because it avoids `eigvals`. See
-[Monte Carlo Measurements Compatibility](@ref) for the surrounding conventions.
+[MCM compatibility](@ref mcm-compatibility) for the surrounding conventions.
 
 ## Python
 

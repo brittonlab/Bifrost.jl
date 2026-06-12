@@ -197,15 +197,15 @@ The fiber-specific layers combine those pieces:
 
 ## Extension Guidance
 
-- Add new path shapes by implementing the `AbstractPathSegment` local geometry
-  interface in `path-geometry.jl`, and declare its length-dimensioned fields via
-  `_length_fields` in `path-geometry-perturb.jl` so isotropic scaling is defined
-  (the fallback errors loudly if omitted).
-- Add new per-segment annotations by extending the `AbstractMeta` vocabulary and
-  keeping interpretation in the consuming layer — the geometry layer must carry
+Full extension recipes (path segments, meta, birefringence sources, materials, cross
+sections) and the MCM compatibility contract live in the docs Developing page
+(`docs/src/developing.md`). Hard constraints:
+
+- A new `AbstractPathSegment` must declare `_length_fields` in
+  `path-geometry-perturb.jl` (the fallback errors loudly if omitted).
+- Meta interpretation belongs to the consuming layer — the geometry layer must carry
   meta it cannot interpret blindly (never naming it, never erroring on it).
-- Add new fiber-level birefringence mechanisms by extending generator assembly
-  in `fiber-path.jl` and adding guardrail tests first.
+- New birefringence mechanisms get guardrail tests first.
 - Keep solver changes in `path-integral.jl` deliberate; step controller, error
   metric, and exponential formulas are core numerical contracts.
 - Preserve separation between lossless Jones propagation and any future

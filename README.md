@@ -90,13 +90,9 @@ notebook activates the environment pinned by `test/human/Project.toml`.
 ## Documentation
 
 Full documentation is built with [Documenter.jl](https://documenter.juliadocs.org)
-from the `docs/` tree. 
+from the `docs/` tree and published at
+[brittonlab.github.io/BIFROST](https://brittonlab.github.io/BIFROST/stable/).
 
-Build it locally:
-
-```bash
-julia --project=docs -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate()'
-julia --project=docs docs/make.jl
-```
-
-then open `docs/build/index.html`.
+Contributor setup, tests, documentation builds, and extension/MCM guidance live on the
+site's [Developing](https://brittonlab.github.io/BIFROST/stable/developing/) page
+(source: `docs/src/developing.md`).

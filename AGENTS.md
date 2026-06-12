@@ -120,28 +120,15 @@ Do not break these without explicit user discussion:
   raw matrix difference. This is intentional.
 - **Function-valued inputs**: Physical profiles (bend radius, twist rate, temperature,
   axis angle) must be callable at arbitrary `s`, not just on a fixed grid.
-- **MCM compatibility**: `material-properties.jl`, the `fiber-cross-section/`
-  files, `path-geometry.jl`, and `path-integral.jl` accept
-  `MonteCarloMeasurements.Particles` on the uncertain inputs (`T_K`,
-  bend/twist/tension/axis-ratio properties, segment shrinkage, and the
-  per-entry eltype of the Jones matrices `J` and sensitivity `G`). Keep
-  these files `::Real`-free on uncertain-input slots and avoid `Float64(·)`
-  coercions on those paths. Test files using MCM must wrap blocks in
-  `MonteCarloMeasurements.unsafe_comparisons(true)`; under unsafe comparisons,
-  invariants like "breakpoints are sorted and deduplicated" reduce via `pmean`
-  rather than failing. In `path-integral.jl` specifically:
-  - The adaptive step controller reduces the error metric through
-    `scalar_reduce` (pmaximum under MCM) so the ensemble takes one step at a
-    time. A `pmean`-based reduction is a reasonable performance compromise if
-    step counts become too large under tight tolerances.
-  - The 4×4 sensitivity exp is a closed-form Fréchet derivative of the 2×2
-    exp (`exp_block_upper_triangular_2x2`), not `LinearAlgebra.exp` — this is
-    required for MCM compatibility and is also faster/exacter for Float64.
-  - `output_dgd_2x2` is the MCM-friendly DGD extractor (closed form, no
-    `eigvals`); `output_dgd` still uses `eigvals` and is Float64-only.
-  - MCM prohibits conditionals anywhere that needs to propagate Particles. 
-    Here this includes most methods in material-properties.jl, the
-    fiber-cross-section/ files, path-geometry.jl, fiber-path.jl, path-integral.jl.
+- **MCM compatibility**: uncertain inputs (`T_K`, bend/twist/tension/axis-ratio
+  properties, segment shrinkage, the per-entry eltype of `J` and `G`) must lift through
+  `MonteCarloMeasurements.Particles`: no annotations or `Float64(·)` coercions that
+  exclude `Particles` on those slots, no per-particle conditionals (reduce first via
+  `scalar_reduce` or a nominalized scalar), closed-form matrix exponentials and DGD
+  extraction only. Any change touching an uncertain-input path must add or extend MCM
+  tests (`test/test_mcm_compatability.jl`, blocks wrapped in
+  `MonteCarloMeasurements.unsafe_comparisons(true)`). The full contract lives in the
+  docs Developing page (`docs/src/developing.md`, "MCM compatibility").
 - **python wrapper**: A Python wrapper for `Bifrost.jl` is supplied in `src/wrapper.py`. The spirit 
     for this wrapper is that Python is the workspace and Julia modules are guest libraries. No Julia
     methods should be used in th python environment except those explicitly exposed via
@@ -150,13 +137,9 @@ Do not break these without explicit user discussion:
 
 ## Adding a New Birefringence Source
 
-1. Define a struct as a subtype of `AbstractBirefringenceSource`.
-2. Implement `generator_K_contribution(source, s)` — returns the local 2×2 generator
-   contribution.
-3. Implement `generator_Kω_contribution(source, s)` — returns ∂K/∂ω. May return zero
-   matrix if not yet modeled.
-4. Declare `coverage_intervals(source)` and `breakpoints(source)`.
-5. Add guardrail tests before adding physics tests.
+Follow the recipe in the docs Developing page (`docs/src/developing.md`, "Extending
+Bifrost"). Non-negotiable: add guardrail tests before physics tests, and every source
+must cover the full fiber domain (see Key Invariants).
 
 ## What Requires User Authorization
 

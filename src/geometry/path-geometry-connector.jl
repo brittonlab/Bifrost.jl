@@ -62,7 +62,7 @@ Resolved form of a [`JumpBy`](@ref) segment and of the terminal `jumpto!` seal: 
 quintic Hermite curve
 
 ```
-r(u) = a₀ + a₁ u + a₂ u² + a₃ u³ + a₄ u⁴ + a₅ u⁵,   u ∈ [0,1]
+r(ξ) = a₀ + a₁ ξ + a₂ ξ² + a₃ ξ³ + a₄ ξ⁴ + a₅ ξ⁵,   ξ ∈ [0,1]
 ```
 
 in 3D that matches position, tangent direction, and curvature vector at both endpoints
@@ -70,10 +70,10 @@ in 3D that matches position, tangent direction, and curvature vector at both end
 
 # Fields
 
-- `a`: `6 × 3` coefficient matrix; row `i` stores the coefficient of `uⁱ⁻¹`.
+- `a`: `6 × 3` coefficient matrix; row `i` stores the coefficient of `ξⁱ⁻¹`.
 - `lambda`: chosen handle scale (`Float64` — must be deterministic under MCM inputs).
-- `s_table`: arc-length lookup, where `s_table[i]` is the arc length from `u = 0` to
-  `u = (i-1)/(n-1)`.
+- `s_table`: arc-length lookup, where `s_table[i]` is the arc length from `ξ = 0` to
+  `ξ = (i-1)/(n-1)`.
 - `twist`: mechanical-twist rate (rad/m) carried from the originating
   `JumpBy`/seal (see [`TwistRate`](@ref)).
 - `meta`: per-segment annotation bag (see [`AbstractMeta`](@ref)).
@@ -134,15 +134,15 @@ end
 # Polynomial evaluators (Horner)
 # ---------------------------------------------------------------------------
 
-@inline function _qc_eval(a::AbstractMatrix, u::Real)
+@inline function _qc_eval(a::AbstractMatrix, ξ::Real)
     val = collect(a[6, :])
     @inbounds for i in 5:-1:1
-        val = val .* u .+ collect(a[i, :])
+        val = val .* ξ .+ collect(a[i, :])
     end
     return val
 end
 
-@inline function _qc_eval_d1(a::AbstractMatrix, u::Real)
+@inline function _qc_eval_d1(a::AbstractMatrix, ξ::Real)
     c1 = collect(a[2, :])
     c2 = 2  .* collect(a[3, :])
     c3 = 3  .* collect(a[4, :])
@@ -150,30 +150,30 @@ end
     c5 = 5  .* collect(a[6, :])
     val = c5
     @inbounds for c in (c4, c3, c2, c1)
-        val = val .* u .+ c
+        val = val .* ξ .+ c
     end
     return val
 end
 
-@inline function _qc_eval_d2(a::AbstractMatrix, u::Real)
+@inline function _qc_eval_d2(a::AbstractMatrix, ξ::Real)
     c0 = 2  .* collect(a[3, :])
     c1 = 6  .* collect(a[4, :])
     c2 = 12 .* collect(a[5, :])
     c3 = 20 .* collect(a[6, :])
     val = c3
     @inbounds for c in (c2, c1, c0)
-        val = val .* u .+ c
+        val = val .* ξ .+ c
     end
     return val
 end
 
-@inline function _qc_eval_d3(a::AbstractMatrix, u::Real)
+@inline function _qc_eval_d3(a::AbstractMatrix, ξ::Real)
     c0 = 6  .* collect(a[4, :])
     c1 = 24 .* collect(a[5, :])
     c2 = 60 .* collect(a[6, :])
     val = c2
     @inbounds for c in (c1, c0)
-        val = val .* u .+ c
+        val = val .* ξ .+ c
     end
     return val
 end
@@ -182,8 +182,8 @@ end
 # Speed and arc-length table
 # ---------------------------------------------------------------------------
 
-function _qc_speed(a::AbstractMatrix, u::Real)
-    d1 = _qc_eval_d1(a, u)
+function _qc_speed(a::AbstractMatrix, ξ::Real)
+    d1 = _qc_eval_d1(a, ξ)
     return sqrt(d1[1]^2 + d1[2]^2 + d1[3]^2)
 end
 
@@ -191,21 +191,21 @@ function _qc_build_table(a::Matrix{T}, n::Int) where {T<:Real}
     s = Vector{T}(undef, n)
     s[1] = zero(T)
     @inbounds for i in 2:n
-        u0 = (i - 2) / (n - 1)
-        u1 = (i - 1) / (n - 1)
-        um = (u0 + u1) / 2
-        uh = (u1 - u0) / 2
-        s[i] = s[i-1] + uh * (
-            _QC_GAUSS4_WEIGHTS[1] * _qc_speed(a, um + uh * _QC_GAUSS4_NODES[1]) +
-            _QC_GAUSS4_WEIGHTS[2] * _qc_speed(a, um + uh * _QC_GAUSS4_NODES[2]) +
-            _QC_GAUSS4_WEIGHTS[3] * _qc_speed(a, um + uh * _QC_GAUSS4_NODES[3]) +
-            _QC_GAUSS4_WEIGHTS[4] * _qc_speed(a, um + uh * _QC_GAUSS4_NODES[4]))
+        ξ0 = (i - 2) / (n - 1)
+        ξ1 = (i - 1) / (n - 1)
+        ξm = (ξ0 + ξ1) / 2
+        ξh = (ξ1 - ξ0) / 2
+        s[i] = s[i-1] + ξh * (
+            _QC_GAUSS4_WEIGHTS[1] * _qc_speed(a, ξm + ξh * _QC_GAUSS4_NODES[1]) +
+            _QC_GAUSS4_WEIGHTS[2] * _qc_speed(a, ξm + ξh * _QC_GAUSS4_NODES[2]) +
+            _QC_GAUSS4_WEIGHTS[3] * _qc_speed(a, ξm + ξh * _QC_GAUSS4_NODES[3]) +
+            _QC_GAUSS4_WEIGHTS[4] * _qc_speed(a, ξm + ξh * _QC_GAUSS4_NODES[4]))
     end
     return s
 end
 
 # ---------------------------------------------------------------------------
-# s ↔ u inversion (deterministic under MCM)
+# s ↔ ξ inversion (deterministic under MCM)
 # ---------------------------------------------------------------------------
 
 function _qc_t_from_s(seg::QuinticConnector{T}, s_target::Real) where {T<:Real}
@@ -222,24 +222,24 @@ function _qc_t_from_s(seg::QuinticConnector{T}, s_target::Real) where {T<:Real}
         s_mid = Float64(_qc_nominalize(s_table[mid]))
         s_mid <= sc ? (lo = mid) : (hi = mid)
     end
-    u0 = (lo - 1) / (n - 1)
-    u1 = (hi - 1) / (n - 1)
+    ξ0 = (lo - 1) / (n - 1)
+    ξ1 = (hi - 1) / (n - 1)
     s0 = Float64(_qc_nominalize(s_table[lo]))
     ds = Float64(_qc_nominalize(s_table[hi])) - s0
 
-    u = ds > 1e-15 ? u0 + (sc - s0) / ds * (u1 - u0) : u0
+    ξ = ds > 1e-15 ? ξ0 + (sc - s0) / ds * (ξ1 - ξ0) : ξ0
 
     a_nom = [Float64(_qc_nominalize(x)) for x in seg.a]
     a_nom_mat = reshape(a_nom, size(seg.a))
     for _ in 1:2
-        spd_mid = _qc_speed(a_nom_mat, (u0 + u) / 2)
+        spd_mid = _qc_speed(a_nom_mat, (ξ0 + ξ) / 2)
         spd_mid < 1e-15 && break
-        s_est = s0 + (u - u0) * spd_mid
-        spd   = _qc_speed(a_nom_mat, u)
+        s_est = s0 + (ξ - ξ0) * spd_mid
+        spd   = _qc_speed(a_nom_mat, ξ)
         spd   < 1e-15 && break
-        u = clamp(u - (s_est - sc) / spd, u0, u1)
+        ξ = clamp(ξ - (s_est - sc) / spd, ξ0, ξ1)
     end
-    return u
+    return ξ
 end
 
 # ---------------------------------------------------------------------------
@@ -249,9 +249,9 @@ end
 arc_length(seg::QuinticConnector) = seg.s_table[end]
 
 function curvature(seg::QuinticConnector, s::Real)
-    u  = _qc_t_from_s(seg, s)
-    d1 = _qc_eval_d1(seg.a, u)
-    d2 = _qc_eval_d2(seg.a, u)
+    ξ  = _qc_t_from_s(seg, s)
+    d1 = _qc_eval_d1(seg.a, ξ)
+    d2 = _qc_eval_d2(seg.a, ξ)
     spd2 = d1[1]^2 + d1[2]^2 + d1[3]^2
     Float64(_qc_nominalize(spd2)) < 1e-30 && return zero(spd2)
     cx = d1[2]*d2[3] - d1[3]*d2[2]
@@ -262,10 +262,10 @@ function curvature(seg::QuinticConnector, s::Real)
 end
 
 function geometric_torsion(seg::QuinticConnector, s::Real)
-    u  = _qc_t_from_s(seg, s)
-    d1 = _qc_eval_d1(seg.a, u)
-    d2 = _qc_eval_d2(seg.a, u)
-    d3 = _qc_eval_d3(seg.a, u)
+    ξ  = _qc_t_from_s(seg, s)
+    d1 = _qc_eval_d1(seg.a, ξ)
+    d2 = _qc_eval_d2(seg.a, ξ)
+    d3 = _qc_eval_d3(seg.a, ξ)
     cx = d1[2]*d2[3] - d1[3]*d2[2]
     cy = d1[3]*d2[1] - d1[1]*d2[3]
     cz = d1[1]*d2[2] - d1[2]*d2[1]
@@ -278,8 +278,8 @@ position_local(seg::QuinticConnector, s::Real) =
     _qc_eval(seg.a, _qc_t_from_s(seg, s))
 
 function tangent_local(seg::QuinticConnector, s::Real)
-    u  = _qc_t_from_s(seg, s)
-    d1 = _qc_eval_d1(seg.a, u)
+    ξ  = _qc_t_from_s(seg, s)
+    d1 = _qc_eval_d1(seg.a, ξ)
     spd2 = d1[1]^2 + d1[2]^2 + d1[3]^2
     if Float64(_qc_nominalize(spd2)) < 1e-30
         T = eltype(seg.a)
@@ -306,17 +306,17 @@ function _qc_normal_from_derivs(d1::AbstractVector, d2::AbstractVector)
 end
 
 function normal_local(seg::QuinticConnector, s::Real)
-    u  = _qc_t_from_s(seg, s)
-    d1 = _qc_eval_d1(seg.a, u)
-    d2 = _qc_eval_d2(seg.a, u)
+    ξ  = _qc_t_from_s(seg, s)
+    d1 = _qc_eval_d1(seg.a, ξ)
+    d2 = _qc_eval_d2(seg.a, ξ)
     _, N = _qc_normal_from_derivs(d1, d2)
     return N
 end
 
 function binormal_local(seg::QuinticConnector, s::Real)
-    u  = _qc_t_from_s(seg, s)
-    d1 = _qc_eval_d1(seg.a, u)
-    d2 = _qc_eval_d2(seg.a, u)
+    ξ  = _qc_t_from_s(seg, s)
+    d1 = _qc_eval_d1(seg.a, ξ)
+    d2 = _qc_eval_d2(seg.a, ξ)
     Tv, Nv = _qc_normal_from_derivs(d1, d2)
     return [Tv[2]*Nv[3] - Tv[3]*Nv[2],
             Tv[3]*Nv[1] - Tv[1]*Nv[3],
@@ -357,9 +357,9 @@ end
 function _qc_peak_curvature(a::AbstractMatrix; n_check::Int = 128)
     κ_max = 0.0
     @inbounds for i in 0:n_check
-        u  = i / n_check
-        d1 = _qc_eval_d1(a, u)
-        d2 = _qc_eval_d2(a, u)
+        ξ  = i / n_check
+        d1 = _qc_eval_d1(a, ξ)
+        d2 = _qc_eval_d2(a, ξ)
         spd2 = d1[1]^2 + d1[2]^2 + d1[3]^2
         spd2_nom = Float64(_qc_nominalize(spd2))
         spd2_nom < 1e-30 && continue
@@ -424,7 +424,7 @@ coincident-endpoint solve is ill-conditioned.
 
 `extra == 0` yields a true zero-length connector (all coefficients zero); its
 query path is degenerate-safe in `QuinticConnector` (zero speed maps to the
-local ẑ tangent). `extra > 0` yields an exact straight line `r(u) = (0,0,extra·u)`
+local ẑ tangent). `extra > 0` yields an exact straight line `r(ξ) = (0,0,extra·ξ)`
 with a linear arc-length table.
 
 `meta` is the seal's annotation bag; it is stored on the connector so any
@@ -436,7 +436,7 @@ function _build_straight_connector(extra::Real, ::Type{T};
                                    meta::AbstractVector{<:AbstractMeta} = AbstractMeta[]) where {T<:Real}
     L = T(extra)
     a = zeros(T, 6, 3)
-    a[2, 3] = L                       # r(u) = (0, 0, L·u): linear in ẑ
+    a[2, 3] = L                       # r(ξ) = (0, 0, L·ξ): linear in ẑ
     s_table = T[zero(T), L]           # straight ⇒ two table points suffice
     return QuinticConnector(a, 1.0, s_table; twist = twist, meta = meta)
 end

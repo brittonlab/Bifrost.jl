@@ -28,8 +28,6 @@ nonlinear_refractive_index(material::AbstractMaterial, λ, T_K)
 
 """
 
-const SPEED_OF_LIGHT_M_PER_S = 299_792_458.0
-
 abstract type AbstractMaterial end
 abstract type SpectralStyle end
 
@@ -140,8 +138,8 @@ fraction of a dopant. We provide the _evaluate_sellmeier_polynomials(B_coeffs, C
 and _evaluate_sellmeier_constants(coeffs, x) utilities; see silica.jl and germania.jl for
 examples of their use. 
 
-Note also that any implemented material must ensure compatibility with `Particles` to allow
-Monte Carlo calculation. This happens naturally through the Sellmeier structure included here.
+Implemented materials must lift `MonteCarloMeasurements.Particles`; routing spectral
+evaluation through the Sellmeier helpers here provides that automatically.
 """
 
 function _evaluate_sellmeier_polynomials(B_coeffs, C_coeffs, x)
@@ -178,6 +176,6 @@ function sellmeier_index_from_coefficients_dω(coeffs, λ)
     end
     n = sqrt(total)
     dn_dλ = dtotal_dλm / (2 * n)
-    dλ_dω = -(λ_m^2) / (2π * SPEED_OF_LIGHT_M_PER_S)
+    dλ_dω = -(λ_m^2) / (2π * u.c)
     return SpectralResponse(n, dn_dλ * dλ_dω)
 end
