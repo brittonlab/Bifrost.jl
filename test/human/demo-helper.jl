@@ -755,7 +755,7 @@ function dh_temperature_ptf_row(T_C::AbstractVector, st; title::AbstractString =
         legend = attr(font = attr(color = "#ccc"), x = 1.0, y = 1.0),
         xaxis  = merge(_DARK_AX, attr(title = "Temperature (°C)")),
         xaxis2 = merge(_DARK_AX, attr(title = "Temperature (°C)")),
-        yaxis  = merge(_DARK_AX, attr(title = "Angle (deg)", range = [0, 180])),
+        yaxis  = merge(_DARK_AX, attr(title = "Angle (deg)")),
         yaxis2 = merge(_DARK_AX, attr(title = "Stokes parameter / DLP",
                                       range = [-1, 1])))
     return p
@@ -789,7 +789,7 @@ function dh_temperature_scatter_row(T_C::AbstractVector, st;
     relayout!(p, height = 470, paper_bgcolor = "#1a1a1a", plot_bgcolor = "#1a1a1a",
         font = attr(color = "#ccc"), title = attr(text = title),
         xaxis  = merge(_DARK_AX, attr(title = "Temperature (°C)")),
-        yaxis  = merge(_DARK_AX, attr(title = "Angle (deg)", range = [0, 180])),
+        yaxis  = merge(_DARK_AX, attr(title = "Angle (deg)")),
         xaxis2 = merge(_DARK_AX, attr(title = "S1", range = [-1.05, 1.05])),
         yaxis2 = merge(_DARK_AX, attr(title = "S2", range = [-1.05, 1.05],
                                       scaleanchor = "x2", scaleratio = 1)))

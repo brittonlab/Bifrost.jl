@@ -274,29 +274,32 @@ variable names, flow); only the path spec is authored with the public builder AP
 ```julia
 sb = SubpathBuilder(); start!(sb; spin_rate = s -> sin(2π * s / 100.0))
 straight!(sb; length = 5.0)
-helix!(sb; radius = 0.025, pitch = 0.05, turns = 10001.892069208387,
+helix!(sb; radius = 0.025, pitch = 0.05, turns = 100.0,
        axis_angle = 0.0, meta = AbstractMeta[MCMadd(:T_K, ΔT_K)])
 straight!(sb; length = 5.0)
-helix!(sb; radius = 0.025, pitch = 0.05, turns = 10000.0, axis_angle = 0.0)
+helix!(sb; radius = 0.025, pitch = 0.05, turns = 100.0, axis_angle = 0.0)
 straight!(sb; length = 5.0); seal!(sb)
 Fiber(sb; cross_section = MCM_DEMO_XS, T_ref_K = 303.15)
 ```
 
-Physics: bend birefringence ∝ 1/R²; at R = 2.5 cm the first helix accumulates
-|Δβ|·L ≈ 886·2π rad. Temperature uncertainty enters as `MCMadd(:T_K, ΔT_K)` geometry
-meta (`T_ref_K` is deterministic by contract; the `Fiber` constructor rejects
-`Particles` there). The operating point and turn count are sized so the ensemble's
-retardation deviations reach ≥ π/4 over T = 30 °C ± 5 °C. Per-particle Jones
-matrices are sliced into Stokes observables for input state H
-(`dh_stokes_ensemble`).
+Physics (measured at these parameters): bend birefringence ∝ 1/R²; at R = 2.5 cm the
+100-turn helix (L ≈ 16.5 m) accumulates Γ = |Δβ|·L ≈ 55.6 rad ≈ 8.86 waves.
+Temperature uncertainty enters as `MCMadd(:T_K, ΔT_K)` geometry meta (`T_ref_K` is
+deterministic by contract; the `Fiber` constructor rejects `Particles` there), so the
+coupling is thermal expansion only: dΓ/dT = −Γ·α ≈ −3.0×10⁻⁵ rad/K (cladding CTE
+α ≈ 5.4×10⁻⁷ /K), a 1σ = 5 °C spread of ~1.5×10⁻⁴ rad. The demos show a clean but
+deliberately small linear angle-vs-T trend — the much stronger thermo-optic channel
+is pinned at the deterministic baseline by construction. Per-particle Jones matrices
+are sliced into Stokes observables for input state H (`dh_stokes_ensemble`).
 
 - **9.1 ptf** — `T_C = StaticParticles(50, Normal(30, 5))`; legacy two-panel format
-  (§V6): angle vs T | S1/S2/S3/DLP vs T. Look for: angle swinging through the
-  mid-fringe, DLP ≈ 1 and S3 ≈ 0 (helix birefringence rotates the linear
+  (§V6): angle vs T | S1/S2/S3/DLP vs T. Look for: the small linear angle trend
+  (autoscaled axis), DLP ≈ 1 and S3 ≈ 0 (helix birefringence rotates the linear
   polarization angle without adding ellipticity).
 - **9.2 scatter** — `Particles(500, Normal(30, 5))` (legacy used 2000; 500 keeps
   runtime in minutes); two-panel: angle vs T | S1–S2 Poincaré equatorial projection
-  with unit circle. Look for: the temperature-parameterized arc on the equator.
+  with unit circle. At this fiber scale the ensemble clusters tightly on the
+  equator; the autoscaled angle panel carries the temperature trend.
 
 ## §10 — MCM speed benchmarks
 
@@ -307,11 +310,9 @@ including `:T_K` interpretation), first-call (JIT + run, `time_ns`) vs steady-st
 (`@belapsed` minimum, 3 samples), and the §V8 presentation (grouped log-scale bars +
 table). Numbers are machine-dependent; nothing is asserted.
 
-Notebook scaling: the benchmark fiber keeps the 5-segment structure but scales the
-helices to 100 turns (the legacy ~10000-turn, mid-fringe-tuned fiber exists for
-sensitivity, which is irrelevant to a speed comparison) so the repeated timed runs —
-in particular the `Particles(2000)` case — stay tractable; a note in the cell
-records the reduction.
+Notebook scaling: the benchmark fiber is the same 100-turn five-segment scale as
+§9 (rebuilt locally without nicknames), keeping the repeated timed runs — in
+particular the `Particles(2000)` case — tractable.
 
 ## Visual techniques (implemented in `demo-helper.jl`)
 
