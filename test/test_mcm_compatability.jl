@@ -547,3 +547,26 @@ end
         MonteCarloMeasurements.unsafe_comparisons(false)
     end
 end
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ▓▓▓  path-geometry-connector.jl — nominalization is module-agnostic  ▓▓▓
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Minimal Real carrying a `particles` field, standing in for any MCM-like type.
+struct _FakeParticles <: Real
+    particles::Vector{Float64}
+end
+
+@testset "MCM :: _qc_nominalize reduces particle carriers structurally" begin
+    # T-GUARDRAIL: nominalization must detect the `particles` field itself —
+    # not reflect into Main for the MonteCarloMeasurements binding (regression:
+    # consumers that load MCM inside a module, e.g. notebook executors or
+    # wrapper packages, got un-nominalized Particles back and downstream
+    # Float64() conversions threw).
+    @test Bifrost.PathGeometry._qc_nominalize(_FakeParticles([1.0, 2.0, 3.0])) ≈ 2.0
+    p = Particles(100, Normal(2.0, 0.5))
+    n = Bifrost.PathGeometry._qc_nominalize(p)
+    @test n isa Float64
+    @test n ≈ pmean(p)
+end

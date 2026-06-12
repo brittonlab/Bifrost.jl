@@ -23,18 +23,18 @@ uses `AbstractPathSegment` and `AbstractMeta` from there.
 
 # `Particles{T,N} <: Real` (but not <: AbstractFloat). Dispatch the identity
 # branch on the concrete already-nominal types so Particles falls through to
-# the pmean lookup below. Listing AbstractFloat first covers Float64/BigFloat;
-# Integer covers Int*; the generic Real method catches Particles and other
-# custom Real subtypes that need pmean reduction.
+# the particle-mean reduction below. Listing AbstractFloat first covers
+# Float64/BigFloat; Integer covers Int*; the generic Real method catches
+# Particles and other custom Real subtypes that need mean reduction. The
+# reduction detects the MCM `particles` field structurally (like
+# `_budget_scalar` and the plot-layer `_plot_scalar`) so it works regardless
+# of which module loaded MonteCarloMeasurements.
 _qc_nominalize(x::AbstractFloat) = x
 _qc_nominalize(x::Integer) = x
 function _qc_nominalize(x::Real)
-    if isdefined(Main, :MonteCarloMeasurements)
-        M = getfield(Main, :MonteCarloMeasurements)
-        if isdefined(M, :pmean)
-            f = getfield(M, :pmean)
-            applicable(f, x) && return f(x)
-        end
+    if hasfield(typeof(x), :particles)
+        p = getfield(x, :particles)
+        return sum(p) / length(p)
     end
     return x
 end
