@@ -18,6 +18,7 @@ straight!(sb; length = 0.5, meta = [Nickname("lead-in")])
 bend!(sb;     radius = 0.05, angle = π / 2, meta = [Nickname("90 deg bend")])
 straight!(sb; length = 0.5, meta = [Nickname("lead-out")])
 seal!(sb)
+#println(segment_nickname(sb.segments[2]))
 
 fiber = Fiber(build(sb); cross_section = xs, T_ref_K = 297.15)
 
@@ -27,3 +28,13 @@ println("J =")
 display(J)
 println()
 println("intervals = ", length(stats))
+println("Accepted = ", stats[1].accepted_steps, "; Rejected = ", stats[1].rejected_steps)
+
+# plot_path = write_path_geometry_plot3d(
+#     path,
+#     path.spec.s_start,
+#     path.s_end;
+#     output = joinpath(@__DIR__, "..", "..", "output", "demo-smallest.html"),
+#     title = "demo-smallest path",
+# )
+# println("Wrote path plot to: ", plot_path)
