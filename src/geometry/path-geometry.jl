@@ -3,8 +3,11 @@ Construct and query three-dimensional smooth space curves (fiber paths).
 
 This file defines a small authoring DSL for building piecewise paths from
 local-frame segment primitives, compiling them to an immutable global-frame
-form, and querying differential geometry (position, tangent/normal/binormal,
-curvature, torsion) and material spin along arc length.
+form, and querying differential geometry (position, tangent, curvature and
+curvature vector, torsion) and material spin along arc length. The transverse
+frame exposed by `bishop_e1`/`bishop_e2`/`bishop_frame` is the parallel-transported
+(Bishop / relatively-parallel) frame: continuous everywhere, zero twist about
+the tangent, anchored at the path start by a static lab-frame convention.
 
 # Three layers
 
@@ -76,13 +79,14 @@ continuous cross-Subpath spin phase (`_spin_phi_at_s0`).
     arc_length(seg_or_path)
     arc_length(path, s1, s2)
     curvature(seg_or_path, s)
+    curvature_vector(path, s)
     geometric_torsion(seg_or_path, s)
     spin_rate(path, s)
     position(path, s)
     tangent(path, s)
-    normal(path, s)
-    binormal(path, s)
-    frame(path, s)
+    bishop_e1(path, s)   # transported (Bishop) e1
+    bishop_e2(path, s)   # transported (Bishop) e2 = T × e1
+    bishop_frame(path, s)
     breakpoints(path)
     sample(path, s_values)
     sample_uniform(path; n)
@@ -119,10 +123,18 @@ MCM-valued fields):
 | `geometric_torsion(seg, s)` | `T` (τ_geom, rad/m) |
 | `position_local(seg, s)` | length-3 `Vector{T}` |
 | `tangent_local(seg, s)` | unit length-3 `Vector{T}` |
-| `normal_local(seg, s)` | unit length-3 `Vector{T}` |
-| `binormal_local(seg, s)` | unit length-3 `Vector{T}` |
+| `_curvature_vector_local(seg, s)` | length-3 `Vector{T}` (k⃗ = dT/ds) |
+| `_parallel_transport_local(seg, v, s)` | length-3 `Vector{T}` |
+| `_normal_local(seg, s)` | unit length-3 `Vector{T}` (internal construction axes) |
+| `_binormal_local(seg, s)` | unit length-3 `Vector{T}` (internal construction axes) |
 | `end_position_local(seg)` | length-3 `Vector{T}` |
-| `end_frame_local(seg)` | `(T, N, B)`, each length-3 `Vector{T}` |
+| `_end_frame_local(seg)` | `(T, N, B)`, each length-3 `Vector{T}` |
+
+`_normal_local`/`_binormal_local`/`_end_frame_local` are internal geometric
+construction axes (they orient `axis_angle`, the placement chaining, and the
+connector boundary data); they are not the optical frame. The public
+transverse frame returned by [`bishop_e1`](@ref)/[`bishop_e2`](@ref) is the
+parallel-transported (Bishop) frame built from `_parallel_transport_local`.
 
 `JumpBy` resolves at `build` time into a parametric [`QuinticConnector`](@ref)
 that supports MCM `Particles` via nominalized-scalar branching.
@@ -298,20 +310,20 @@ Return the unit tangent at local arc length `s`, in the local frame. See
 tangent_local(seg::StraightSegment, _)    = [zero(seg.length), zero(seg.length), sign(seg.length)]
 
 """
-    normal_local(seg::AbstractPathSegment, s) -> Vector{T}
+    _normal_local(seg::AbstractPathSegment, s) -> Vector{T}
 
 Return the unit normal at local arc length `s`, in the local frame. See
 [`AbstractPathSegment`](@ref).
 """
-normal_local(seg::StraightSegment, _)     = [sign(seg.length), zero(seg.length), zero(seg.length)]
+_normal_local(seg::StraightSegment, _)     = [sign(seg.length), zero(seg.length), zero(seg.length)]
 
 """
-    binormal_local(seg::AbstractPathSegment, s) -> Vector{T}
+    _binormal_local(seg::AbstractPathSegment, s) -> Vector{T}
 
 Return the unit binormal at local arc length `s`, in the local frame. See
 [`AbstractPathSegment`](@ref).
 """
-binormal_local(seg::StraightSegment, _)   = [zero(seg.length), one(seg.length), zero(seg.length)]
+_binormal_local(seg::StraightSegment, _)   = [zero(seg.length), one(seg.length), zero(seg.length)]
 
 """
     end_position_local(seg::AbstractPathSegment) -> Vector{T}
@@ -322,12 +334,12 @@ Return the segment's endpoint position in its local frame. See
 end_position_local(seg::StraightSegment)  = [zero(seg.length), zero(seg.length), seg.length]
 
 """
-    end_frame_local(seg::AbstractPathSegment) -> (T, N, B)
+    _end_frame_local(seg::AbstractPathSegment) -> (T, N, B)
 
 Return the `(tangent, normal, binormal)` frame at the segment's end, in its
 local frame. See [`AbstractPathSegment`](@ref).
 """
-function end_frame_local(seg::StraightSegment)
+function _end_frame_local(seg::StraightSegment)
     sgn = sign(seg.length)
     T = [zero(seg.length), zero(seg.length), sgn]
     N = [sgn, zero(seg.length), zero(seg.length)]
@@ -385,14 +397,14 @@ function tangent_local(seg::BendSegment, s)
     return [sin(θ) * cos(φ), sin(θ) * sin(φ), cos(θ)]
 end
 
-function normal_local(seg::BendSegment, s)
+function _normal_local(seg::BendSegment, s)
     R = seg.radius
     θ = s / R
     φ = seg.axis_angle
     return [cos(θ) * cos(φ), cos(θ) * sin(φ), -sin(θ)]
 end
 
-function binormal_local(seg::BendSegment, _)
+function _binormal_local(seg::BendSegment, _)
     φ = seg.axis_angle
     return [-sin(φ), cos(φ), zero(φ)]   # constant for circular arc (zero torsion)
 end
@@ -405,7 +417,7 @@ function end_position_local(seg::BendSegment)
     return R * (1 - cos(θ)) * n̂ + [zero(R), zero(R), R * sin(θ)]
 end
 
-function end_frame_local(seg::BendSegment)
+function _end_frame_local(seg::BendSegment)
     θ = seg.angle
     φ = seg.axis_angle
     T = [sin(θ) * cos(φ), sin(θ) * sin(φ),  cos(θ)]
@@ -467,7 +479,7 @@ function tangent_local(seg::CatenarySegment, s)
     return [(s / a) / q * cos(φ), (s / a) / q * sin(φ), one(q) / q]
 end
 
-function normal_local(seg::CatenarySegment, s)
+function _normal_local(seg::CatenarySegment, s)
     # N = dT/ds / |dT/ds|, derived analytically: N = [n̂_horiz/q, -s/a/q] normalised
     a = seg.a
     φ = seg.axis_angle
@@ -475,17 +487,17 @@ function normal_local(seg::CatenarySegment, s)
     return [cos(φ) / q, sin(φ) / q, -(s / a) / q]
 end
 
-function binormal_local(seg::CatenarySegment, s)
-    return cross(tangent_local(seg, s), normal_local(seg, s))
+function _binormal_local(seg::CatenarySegment, s)
+    return cross(tangent_local(seg, s), _normal_local(seg, s))
 end
 
 function end_position_local(seg::CatenarySegment)
     return position_local(seg, arc_length(seg))
 end
 
-function end_frame_local(seg::CatenarySegment)
+function _end_frame_local(seg::CatenarySegment)
     s = arc_length(seg)
-    return (tangent_local(seg, s), normal_local(seg, s), binormal_local(seg, s))
+    return (tangent_local(seg, s), _normal_local(seg, s), _binormal_local(seg, s))
 end
 
 # -----------------------------------------------------------------------
@@ -589,13 +601,13 @@ function tangent_local(seg::HelixSegment, s)
     return (h .* â .- R .* sin(φ) .* r̂₀ .+ R .* cos(φ) .* ê_φ) ./ ℓ′
 end
 
-function normal_local(seg::HelixSegment, s)
+function _normal_local(seg::HelixSegment, s)
     _, _, ℓ′, _, r̂₀, ê_φ = _helix_basis(seg)
     φ = s / ℓ′
     return -(cos(φ) .* r̂₀ .+ sin(φ) .* ê_φ)
 end
 
-function binormal_local(seg::HelixSegment, s)
+function _binormal_local(seg::HelixSegment, s)
     R, h, ℓ′, â, r̂₀, ê_φ = _helix_basis(seg)
     φ = s / ℓ′
     # B = T × N; expanding in {â, r̂₀, ê_φ} orthonormal frame:
@@ -607,9 +619,9 @@ function end_position_local(seg::HelixSegment)
     return position_local(seg, arc_length(seg))
 end
 
-function end_frame_local(seg::HelixSegment)
+function _end_frame_local(seg::HelixSegment)
     s = arc_length(seg)
-    return (tangent_local(seg, s), normal_local(seg, s), binormal_local(seg, s))
+    return (tangent_local(seg, s), _normal_local(seg, s), _binormal_local(seg, s))
 end
 
 """
@@ -664,10 +676,103 @@ curvature(::JumpBy, ::Real)      = error("JumpBy: call build() to resolve jump g
 geometric_torsion(::JumpBy, ::Real) = 0.0
 position_local(::JumpBy, ::Real) = error("JumpBy: call build() to resolve jump geometry")
 tangent_local(::JumpBy, ::Real)  = error("JumpBy: call build() to resolve jump geometry")
-normal_local(::JumpBy, ::Real)   = error("JumpBy: call build() to resolve jump geometry")
-binormal_local(::JumpBy, ::Real) = error("JumpBy: call build() to resolve jump geometry")
+_normal_local(::JumpBy, ::Real)   = error("JumpBy: call build() to resolve jump geometry")
+_binormal_local(::JumpBy, ::Real) = error("JumpBy: call build() to resolve jump geometry")
 end_position_local(::JumpBy)     = error("JumpBy: call build() to resolve jump geometry")
-end_frame_local(::JumpBy)        = error("JumpBy: call build() to resolve jump geometry")
+_end_frame_local(::JumpBy)        = error("JumpBy: call build() to resolve jump geometry")
+
+# -----------------------------------------------------------------------
+# Parallel transport and curvature vector (per-segment local interface)
+# -----------------------------------------------------------------------
+
+"""
+    _rotate_about_unit_axis(v, axis, angle) -> Vector
+
+Rodrigues rotation of `v` about the unit vector `axis` by `angle` (rad).
+Conditional-free closed form, so MCM `Particles` propagate through all three
+arguments.
+"""
+function _rotate_about_unit_axis(v::AbstractVector, axis::AbstractVector, angle)
+    c = cos(angle)
+    si = sin(angle)
+    axv = [axis[2] * v[3] - axis[3] * v[2],
+           axis[3] * v[1] - axis[1] * v[3],
+           axis[1] * v[2] - axis[2] * v[1]]
+    ad = axis[1] * v[1] + axis[2] * v[2] + axis[3] * v[3]
+    return c .* v .+ si .* axv .+ ((1 - c) * ad) .* axis
+end
+
+"""
+    _curvature_vector_local(seg::AbstractPathSegment, s) -> Vector{T}
+
+Return the curvature vector `k⃗ = dT̂/ds` (1/m) at local arc length `s`, in the
+segment's local frame. Unlike a unit Frenet normal it needs no `k⃗/|k⃗|`
+normalization, so it is well-defined (zero) on straight regions and continuous
+through inflections. See [`AbstractPathSegment`](@ref).
+"""
+_curvature_vector_local(seg::StraightSegment, _) =
+    [zero(seg.length), zero(seg.length), zero(seg.length)]
+
+_curvature_vector_local(seg::BendSegment, s) =
+    curvature(seg, s) .* _normal_local(seg, s)
+
+_curvature_vector_local(seg::CatenarySegment, s) =
+    curvature(seg, s) .* _normal_local(seg, s)
+
+_curvature_vector_local(seg::HelixSegment, s) =
+    curvature(seg, s) .* _normal_local(seg, s)
+
+_curvature_vector_local(::JumpBy, ::Real) =
+    error("JumpBy: call build() to resolve jump geometry")
+
+"""
+    _parallel_transport_local(seg::AbstractPathSegment, v, s) -> Vector
+
+Parallel-transport the transverse vector `v` from the segment's entry (`s = 0`)
+to local arc length `s`, in local coordinates: the unique rotation history with
+zero twist about the tangent (`⟨de/ds, T̂ × e⟩ = 0`). `v` must be perpendicular
+to the entry tangent (local `ẑ`); the result is perpendicular to the tangent at
+`s`. Closed forms per segment, conditional-free on uncertain values, so MCM
+`Particles` propagate. See [`AbstractPathSegment`](@ref).
+
+A negative-length `StraightSegment` reverses the tangent; transport across a
+tangent reversal is ill-defined, and the identity is used there (matching the
+sign-carrying frame chaining of `build`).
+"""
+_parallel_transport_local(::StraightSegment, v::AbstractVector, _) = v
+
+# Planar segments: the tangent turns in a fixed plane, so parallel transport is
+# the rotation about the (constant) plane normal by the tangent turning angle.
+function _parallel_transport_local(seg::BendSegment, v::AbstractVector, s)
+    φ = seg.axis_angle
+    b̂ = [-sin(φ), cos(φ), zero(φ)]
+    return _rotate_about_unit_axis(v, b̂, s / seg.radius)
+end
+
+function _parallel_transport_local(seg::CatenarySegment, v::AbstractVector, s)
+    φ = seg.axis_angle
+    b̂ = [-sin(φ), cos(φ), zero(φ)]
+    return _rotate_about_unit_axis(v, b̂, atan(s / seg.a))
+end
+
+# Helix: the Frenet pair (N, B) rotates about the tangent at the geometric
+# torsion rate τ relative to parallel transport, so transported components
+# counter-rotate by τ·s on the Frenet pair (which is itself in closed form).
+function _parallel_transport_local(seg::HelixSegment, v::AbstractVector, s)
+    N0 = _normal_local(seg, zero(s))
+    B0 = _binormal_local(seg, zero(s))
+    Ns = _normal_local(seg, s)
+    Bs = _binormal_local(seg, s)
+    aN0 = v[1] * N0[1] + v[2] * N0[2] + v[3] * N0[3]
+    aB0 = v[1] * B0[1] + v[2] * B0[2] + v[3] * B0[3]
+    θ = geometric_torsion(seg, s) * s
+    aN = aN0 * cos(θ) + aB0 * sin(θ)
+    aB = -aN0 * sin(θ) + aB0 * cos(θ)
+    return aN .* Ns .+ aB .* Bs
+end
+
+_parallel_transport_local(::JumpBy, ::AbstractVector, _) =
+    error("JumpBy: call build() to resolve jump geometry")
 
 # -----------------------------------------------------------------------
 # QuinticConnector  (resolved form of JumpBy and Subpath terminal connectors)
@@ -721,16 +826,32 @@ _resolve_at_placement(seg::AbstractPathSegment, ::AbstractVector, ::AbstractMatr
 A segment together with its placement in the global frame.
 
 Records the segment, its cumulative arc-length offset at its start
-(`s_offset_eff`), its global start `origin`, and the 3×3 `frame` whose columns
-are `[N_global | B_global | T_global]` and which transforms local vectors to
-global as `v_g = frame * v_l`.
+(`s_offset_eff`), its global start `origin`, the 3×3 `placement_frame` whose
+columns are `[N, B, T]` and which transforms local vectors to global as
+`v_g = placement_frame * v_l`, and `bishop_e1` — the global transported
+(Bishop) `e1` at the segment's entry, advanced segment-to-segment by
+`_parallel_transport_local` in the `build` placement loop.
+
+`placement_frame` is the chained geometric **construction** frame, distinct from
+the optical gauge carried by `bishop_e1` (the two coincide only at the path
+start). It is *not* the public [`bishop_frame`](@ref)`(path, s)` API. The
+construction frame is kept because the path-authoring DSL depends on it:
+
+  - `axis_angle` is interpreted relative to the incoming local `N`/`B`
+    construction axes;
+  - `bend!`, `helix!`, `catenary!`, and `jumpby!` placement all rely on those
+    axes;
+  - connector boundary data are expressed in that local construction frame;
+  - keeping this machinery means positions and tangents remain bit-identical to
+    the old build logic.
 """
 struct PlacedSegment
     segment::AbstractPathSegment
-    s_offset_eff::Real          # cumulative arc-length at segment start
-    origin::AbstractVector      # global start position (length 3)
-    frame::AbstractMatrix       # 3×3, columns [N_global | B_global | T_global]
-                                # transforms local vectors → global: v_g = frame * v_l
+    s_offset_eff::Real             # cumulative arc-length at segment start
+    origin::AbstractVector         # global start position (length 3)
+    placement_frame::AbstractMatrix # 3×3 construction frame, columns [N, B, T];
+                                   # transforms local → global: v_g = placement_frame * v_l
+    bishop_e1::AbstractVector      # global transported e1 at the segment entry
 end
 
 # -----------------------------------------------------------------------
@@ -1159,13 +1280,13 @@ geometric_torsion(::Subpath, ::Real) = error("Subpath: call build(subpath) befor
 spin_rate(::Subpath, ::Real)   = error("Subpath: call build(subpath) before querying spin_rate")
 twist_rate(::Subpath, ::Real)      = error("Subpath: call build(subpath) before querying twist_rate")
 twist_phase(::Subpath, ::Real)     = error("Subpath: call build(subpath) before querying twist_phase")
-torsion_phase(::Subpath, ::Real)   = error("Subpath: call build(subpath) before querying torsion_phase")
 spin_phase(::Subpath, ::Real)      = error("Subpath: call build(subpath) before querying spin_phase")
+curvature_vector(::Subpath, ::Real) = error("Subpath: call build(subpath) before querying curvature_vector")
 position(::Subpath, ::Real)         = error("Subpath: call build(subpath) before querying position")
 tangent(::Subpath, ::Real)          = error("Subpath: call build(subpath) before querying tangent")
-normal(::Subpath, ::Real)           = error("Subpath: call build(subpath) before querying normal")
-binormal(::Subpath, ::Real)         = error("Subpath: call build(subpath) before querying binormal")
-frame(::Subpath, ::Real)            = error("Subpath: call build(subpath) before querying frame")
+bishop_e1(::Subpath, ::Real)        = error("Subpath: call build(subpath) before querying bishop_e1")
+bishop_e2(::Subpath, ::Real)        = error("Subpath: call build(subpath) before querying bishop_e2")
+bishop_frame(::Subpath, ::Real)     = error("Subpath: call build(subpath) before querying bishop_frame")
 
 # -----------------------------------------------------------------------
 # SubpathBuilt and PathBuilt
@@ -1199,6 +1320,12 @@ struct SubpathBuilt
     jumpto_placed::PlacedSegment                  # placement of the terminal connector
     spin_rate::Union{Float64, Function, Nothing, Symbol}
     _spin_phi_at_s0::Float64
+    # Constant rotation (rad, about the local tangent) applied to this Subpath's
+    # own transported frame when queried through a `PathBuilt`, making the
+    # Bishop gauge continuous across Subpath boundaries. `0.0` standalone and on
+    # the first Subpath; set by `build(::Vector{SubpathBuilt})`. May carry MCM
+    # `Particles` when the adjoining geometry does.
+    _bishop_gauge_at_s0::Real
 end
 
 """
@@ -1288,18 +1415,25 @@ questions in local coordinates:
 
 1. `end_position_local(seg)` — where does this segment end, relative to its own
    start?
-2. `end_frame_local(seg)` — what is the `(T, N, B)` frame at its end, in its own
+2. `_end_frame_local(seg)` — what is the `(T, N, B)` frame at its end, in its own
    local axes?
 
 The placement loop rotates those local answers into global coordinates and
-chains them (the "frame propagation" steps below). The frame matrix (columns
-`[N | B | T]`) is the rotation from local to global, so `frame * v_local`
-converts any local vector to global.
+chains them (the "frame propagation" steps below). The `placement_frame` matrix
+(columns `[N, B, T]`) is the rotation from local to global, so
+`placement_frame * v_local` converts any local vector to global.
 
-Note: this propagated frame is a parallel-transport-style frame (continuous
-across joints), not the textbook Frenet frame, which flips discontinuously at
-inflection points where curvature → 0. For a fiber path the continuous frame is
-the desired one, as done here.
+Two distinct frames are propagated through the loop:
+
+- the chained `[N, B, T]` **construction frame** (`placement_frame`), which
+  interprets each segment's `axis_angle` and the connector boundary data — it
+  absorbs each segment's local end frame and is internal to placement;
+- the **transported (Bishop) frame** `e1` (with `e2 = T × e1`), advanced by
+  each segment's closed-form parallel transport
+  ([`_parallel_transport_local`](@ref)) and anchored at the Subpath start by
+  [`_initial_frame_from_tangent`](@ref). This is the frame returned by
+  [`bishop_e1`](@ref)/[`bishop_e2`](@ref)/[`bishop_frame`](@ref) and the gauge in
+  which the fiber layer expresses birefringence axes.
 """
 function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothing)::SubpathBuilt
     (sub.inherit_start_point || sub.inherit_start_tangent || sub.inherit_start_curvature) &&
@@ -1309,6 +1443,9 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
     pos = collect(sub.start_point)
     T_frame, N_frame, B_frame = _initial_frame_from_tangent(sub.start_outgoing_tangent)
     K_in_global = collect(sub.start_outgoing_curvature)
+    # Bishop (transported-frame) anchor: e1(0) is the static lab-frame
+    # Gram–Schmidt normal of the start tangent — independent of any curvature.
+    E1 = copy(N_frame)
 
     # Under perturb, apply each authored segment's field-level MCM before
     # placement; meta whose symbol is not one of a segment's own fields (foreign
@@ -1320,26 +1457,34 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
     placed = PlacedSegment[]  # in global coordinate system
 
     for seg_orig in segs
-        frame      = hcat(N_frame, B_frame, T_frame)   # columns: [N | B | T]
-        seg_placed = _resolve_at_placement(seg_orig, pos, frame, K_in_global)
-        push!(placed, PlacedSegment(seg_placed, s_eff, copy(pos), copy(frame)))
+        placement_frame = hcat(N_frame, B_frame, T_frame)   # columns: [N, B, T]
+        seg_placed = _resolve_at_placement(seg_orig, pos, placement_frame, K_in_global)
+        push!(placed, PlacedSegment(seg_placed, s_eff, copy(pos),
+                                    copy(placement_frame), copy(E1)))
 
         # Advance position and frame
-        # Note: Each of Straight, Bend, Catenary, Helix and QuniticConnector has its own 
-        # end_position_local() and end_frame_local() methods.
+        # Note: Each of Straight, Bend, Catenary, Helix and QuniticConnector has its own
+        # end_position_local() and _end_frame_local() methods.
         pos_end_local         = end_position_local(seg_placed)
-        (T_end_l, N_end_l, _) = end_frame_local(seg_placed)
+        (T_end_l, N_end_l, _) = _end_frame_local(seg_placed)
+        L_seg = arc_length(seg_placed)
 
-        # Frame propagation
-        pos     = pos + frame * pos_end_local
-        T_frame = _safe_normalize(frame * T_end_l)
-        N_end_g = frame * N_end_l
+        # Frame propagation. The chained [N, B, T] construction frame interprets
+        # the next segment's axis_angle and the connector boundary data; E1
+        # advances independently by parallel transport and carries the optical
+        # gauge.
+        E1      = placement_frame *
+                  _parallel_transport_local(seg_placed, placement_frame' * E1, L_seg)
+        pos     = pos + placement_frame * pos_end_local
+        T_frame = _safe_normalize(placement_frame * T_end_l)
+        N_end_g = placement_frame * N_end_l
         N_frame = _safe_normalize(N_end_g - dot(N_end_g, T_frame) * T_frame)
         B_frame = cross(T_frame, N_frame)
+        # Numerical hygiene: keep E1 exactly transverse and unit.
+        E1 = _safe_normalize(E1 - dot(E1, T_frame) * T_frame)
 
         # Update K_in_global for the next segment: κ at end times the unit
         # normal at the end, both expressed globally.
-        L_seg = arc_length(seg_placed)
         κ_end = curvature(seg_placed, L_seg)
         K_in_global = κ_end .* N_frame
 
@@ -1347,7 +1492,7 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
     end
 
     # Resolve the terminal connector inline.
-    frame = hcat(N_frame, B_frame, T_frame)
+    placement_frame = hcat(N_frame, B_frame, T_frame)
     if sub.jumpto_natural
         # Natural seal: no target to reach. Build the terminal connector
         # directly at the natural exit, bypassing the quintic solver (a
@@ -1362,15 +1507,16 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
     else
         # Destination is global (sub.jumpto_point); transform to local frame to
         # call _build_quintic_connector.
-        p1_local  = frame' * (collect(sub.jumpto_point) .- pos)
+        p1_local  = placement_frame' * (collect(sub.jumpto_point) .- pos)
         chord     = norm(p1_local)
         t_hat_out = isnothing(sub.jumpto_incoming_tangent) ?
             (chord > 1e-15 ? p1_local ./ chord : [0.0, 0.0, 1.0]) :
-            _safe_normalize(frame' * _safe_normalize(collect(sub.jumpto_incoming_tangent)))
-        K0_local = frame' * K_in_global
+            _safe_normalize(placement_frame' *
+                            _safe_normalize(collect(sub.jumpto_incoming_tangent)))
+        K0_local = placement_frame' * K_in_global
         K1_local = isnothing(sub.jumpto_incoming_curvature) ?
             zeros(eltype(K0_local), 3) :
-            frame' * collect(sub.jumpto_incoming_curvature)
+            placement_frame' * collect(sub.jumpto_incoming_curvature)
         # The caller may constrain the terminal connector's arc length (the fiber
         # supplies this to thermally expand the connector).
         # `min_bend_radius` is always honored: with a target set the
@@ -1385,16 +1531,18 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
     # PlacedSegment wrapper for the terminal connector: anchor at the
     # position/frame at the end of the interior segments. Stored alongside
     # the connector so query functions treat it like any other placed segment.
-    jumpto_placed = PlacedSegment(connector, s_eff, copy(pos), copy(frame))
+    jumpto_placed = PlacedSegment(connector, s_eff, copy(pos),
+                                  copy(placement_frame), copy(E1))
 
     # `:inherit` spin needs a predecessor; it can only be resolved by the
-    # vector build. 
+    # vector build.
     (sub.spin_rate === :inherit || sub.spin_rate === :inherit_soft) && throw(ArgumentError(
         "build(::Subpath): spin_rate=:inherit requires a predecessor; it is valid " *
         "only for a non-first Subpath in build([...])."))
-    # `_spin_phi_at_s0 = 0.0` provisionally (correct for a first/standalone
-    # Subpath); `build(::Vector{SubpathBuilt})` overrides it for later Subpaths.
-    return SubpathBuilt(sub, placed, connector, jumpto_placed, sub.spin_rate, 0.0)
+    # `_spin_phi_at_s0 = 0.0` and `_bishop_gauge_at_s0 = 0.0` provisionally
+    # (correct for a first/standalone Subpath); `build(::Vector{SubpathBuilt})`
+    # overrides both for later Subpaths.
+    return SubpathBuilt(sub, placed, connector, jumpto_placed, sub.spin_rate, 0.0, 0.0)
 end
 
 # -----------------------------------------------------------------------
@@ -1442,9 +1590,47 @@ function _resolve_spin_phase(builts::Vector{SubpathBuilt})
     for i in eachindex(builts)
         b = builts[i]
         out[i] = SubpathBuilt(b.subpath, b.placed_segments, b.jumpto_quintic_connector,
-                              b.jumpto_placed, b.spin_rate, phi)
+                              b.jumpto_placed, b.spin_rate, phi, b._bishop_gauge_at_s0)
         L = Float64(_qc_nominalize(arc_length(b)))
         phi += _integrate_rate(b.spin_rate, 0.0, L)
+    end
+    return out
+end
+
+"""
+    _resolve_bishop_gauge(builts::Vector{SubpathBuilt}) -> Vector{SubpathBuilt}
+
+Set each Subpath's `_bishop_gauge_at_s0` so the transported (Bishop) frame is
+continuous across every interior Subpath boundary: `0.0` on the first Subpath;
+on each later Subpath, the constant angle (about the local tangent) that
+rotates its own lab-anchored `e1(0)` onto the predecessor's gauge-corrected
+transported `e1` at its end.
+
+A constant transverse rotation of a relatively-parallel field is itself
+relatively parallel, so this correction is exact — no re-transport is needed.
+The static lab anchor (see [`_initial_frame_from_tangent`](@ref)) therefore
+applies only at the very start of a multi-Subpath path. Conditional-free on
+uncertain values (`atan(y, x)` of dot/cross projections), so `Particles`-valued
+geometry propagates into the gauge angle.
+"""
+function _resolve_bishop_gauge(builts::Vector{SubpathBuilt})
+    out = Vector{SubpathBuilt}(undef, length(builts))
+    out[1] = builts[1]
+    for i in 2:lastindex(builts)
+        prev = out[i-1]
+        s_prev = Float64(_qc_nominalize(s_end(prev)))
+        δp = prev._bishop_gauge_at_s0
+        e1p = bishop_e1(prev, s_prev)
+        e2p = bishop_e2(prev, s_prev)
+        e1p_corr = cos(δp) .* e1p .+ sin(δp) .* e2p
+        b = builts[i]
+        T0 = tangent(b, 0.0)
+        e10 = bishop_e1(b, 0.0)
+        e20 = bishop_e2(b, 0.0)
+        ẽ = e1p_corr .- dot(e1p_corr, T0) .* T0
+        δ = atan(dot(ẽ, e20), dot(ẽ, e10))
+        out[i] = SubpathBuilt(b.subpath, b.placed_segments, b.jumpto_quintic_connector,
+                              b.jumpto_placed, b.spin_rate, b._spin_phi_at_s0, δ)
     end
     return out
 end
@@ -1598,7 +1784,7 @@ function build(builts::Vector{SubpathBuilt})
     for i in 2:length(builts)
         _check_subpath_conformity(builts[i-1], builts[i].subpath, i)
     end
-    return PathBuilt(_resolve_spin_phase(builts))
+    return PathBuilt(_resolve_bishop_gauge(_resolve_spin_phase(builts)))
 end
 
 function build(subpaths::Vector{Subpath}; perturb::Bool = false)
@@ -1669,10 +1855,10 @@ end
     _local_to_global(ps::PlacedSegment, v_local) -> AbstractVector
 
 Rotate a local-frame vector into global coordinates via the placed segment's
-frame (`v_g = frame * v_l`).
+construction frame (`v_g = placement_frame * v_l`).
 """
 function _local_to_global(ps::PlacedSegment, v_local::AbstractVector)
-    return ps.frame * v_local
+    return ps.placement_frame * v_local
 end
 
 """
@@ -1752,21 +1938,6 @@ end
 # -----------------------------------------------------------------------
 
 """
-    _segment_torsion_phase(seg, a, b) -> value
-
-Integral of `geometric_torsion(seg, ·)` over the segment-local interval
-`[a, b]`. Geometric torsion is constant for every authored segment type
-(zero for planar shapes, `h/(R²+h²)` for a helix), so the default evaluates it
-once and multiplies by the interval length; the `QuinticConnector` torsion
-varies and is integrated by quadrature.
-"""
-_segment_torsion_phase(seg::AbstractPathSegment, a::Float64, b::Float64) =
-    geometric_torsion(seg, a) * (b - a)
-
-_segment_torsion_phase(seg::QuinticConnector, a::Float64, b::Float64) =
-    QuadGK.quadgk(s -> geometric_torsion(seg, s), a, b; rtol = 1e-8)[1]
-
-"""
     _accumulate_segment_phase(b::SubpathBuilt, s, seg_phase) -> value
 
 Accumulate a per-segment phase integral `seg_phase(seg, a_local, b_local)` from
@@ -1775,15 +1946,10 @@ segments and the terminal connector. Segment-boundary positions are reduced to
 `Float64` for the loop bounds (so no `Particles` conditional is evaluated),
 while the integrand carries whatever element type the rate has.
 
-_accumulate_segment_phase is a generic helper — it doesn't accumulate any one kind of phase. 
-It's the shared "walk the path and integrate a rate from the start up to s" machinery. The caller 
-decides which phase by passing in a seg_phase integrand function. There are two kinds of "phase" 
-    built on top of it:
-
-    twist phase — ∫₀ˢ τ_m, the accumulated mechanical-twist angle 
-                            (how much the fiber has been physically twisted)
-    torsion phase — ∫₀ˢ τ_g, the accumulated geometric-torsion angle 
-                            (how much the path itself corkscrews through 3D space)
+`_accumulate_segment_phase` is a generic helper — it doesn't accumulate any one
+kind of phase. It's the shared "walk the path and integrate a rate from the
+start up to s" machinery; the caller decides which phase by passing in a
+`seg_phase` integrand (currently the mechanical-twist phase `∫₀ˢ τ_m`).
 """
 function _accumulate_segment_phase(b::SubpathBuilt, s, seg_phase)
     s_hi = Float64(_qc_nominalize(s))
@@ -1822,16 +1988,6 @@ twist_phase(b::SubpathBuilt, s) =
         (seg, a, bb) -> _integrate_rate(_segment_twist(seg), a, bb))
 
 """
-    torsion_phase(path, s) -> value
-
-Accumulated geometric-torsion phase `∫₀ˢ τ_g` (rad) of a built `path`. Rotates
-the bend (curvature-direction) birefringence axis relative to the
-parallel-transport frame.
-"""
-torsion_phase(b::SubpathBuilt, s) =
-    _accumulate_segment_phase(b, s, _segment_torsion_phase)
-
-"""
     spin_phase(path, s) -> value
 
 Accumulated material-spin phase (rad) of a built `path` at global arc length
@@ -1862,42 +2018,70 @@ function tangent(b::SubpathBuilt, s::Real)
 end
 
 """
-    normal(path, s) -> Vector
+    bishop_e1(path, s) -> Vector
 
-Return the global-frame unit normal of a built `path` at arc length `s` (the
-parallel-transport frame; see [`build`](@ref)).
+Return the global-frame transverse unit vector `e1` of the parallel-transported
+(Bishop / relatively-parallel) frame of a built `path` at arc length `s`.
+
+The transported frame has zero twist about the tangent (`⟨de1/ds, e2⟩ = 0`): it
+is continuous along the whole path — through inflections, straight regions, and
+segment joints where the curvature direction jumps — and is the gauge in which
+the fiber layer expresses birefringence axes. It is anchored at `s = 0` by the
+static lab-frame convention of [`_initial_frame_from_tangent`](@ref). It is
+**not** the Frenet–Serret normal; the curvature direction is exposed separately
+by [`curvature_vector`](@ref).
 """
-function normal(b::SubpathBuilt, s::Real)
+function bishop_e1(b::SubpathBuilt, s::Real)
     ps, s_local = _find_placed_segment(b, s)
-    return _local_to_global(ps, normal_local(ps.segment, s_local))
+    e1_entry_local = ps.placement_frame' * ps.bishop_e1
+    return ps.placement_frame * _parallel_transport_local(ps.segment, e1_entry_local, s_local)
 end
 
 """
-    binormal(path, s) -> Vector
+    bishop_e2(path, s) -> Vector
 
-Return the global-frame unit binormal of a built `path` at arc length `s`.
+Return the global-frame transverse unit vector `e2 = T̂ × e1` of the
+parallel-transported (Bishop) frame of a built `path` at arc length `s`. See
+[`bishop_e1`](@ref).
 """
-function binormal(b::SubpathBuilt, s::Real)
-    ps, s_local = _find_placed_segment(b, s)
-    return _local_to_global(ps, binormal_local(ps.segment, s_local))
+function bishop_e2(b::SubpathBuilt, s::Real)
+    return cross(tangent(b, s), bishop_e1(b, s))
 end
 
 """
-    frame(path, s) -> NamedTuple
+    curvature_vector(path, s) -> Vector
+
+Return the global-frame curvature vector `k⃗ = dT̂/ds` (1/m) of a built `path`
+at arc length `s`: magnitude `curvature(path, s)`, direction the local center
+of curvature. Zero on straight regions and continuous through inflections —
+unlike a unit Frenet normal it requires no normalization. The bend
+birefringence axis is the projection of this vector onto the transported frame
+(`bishop_e1`/`bishop_e2`).
+"""
+function curvature_vector(b::SubpathBuilt, s::Real)
+    ps, s_local = _find_placed_segment(b, s)
+    return _local_to_global(ps, _curvature_vector_local(ps.segment, s_local))
+end
+
+"""
+    bishop_frame(path, s) -> NamedTuple
 
 Return all differential-geometry quantities of a built `path` at arc length
-`s` as a `NamedTuple`: `position`, `tangent`, `normal`, `binormal`,
+`s` as a `NamedTuple`: `position`, `tangent`, `bishop_e1`, `bishop_e2` (the
+parallel-transported pair — see [`bishop_e1`](@ref)), `curvature_vector`,
 `curvature`, `geometric_torsion`, and `spin_rate`.
 """
-function frame(b::SubpathBuilt, s::Real)
+function bishop_frame(b::SubpathBuilt, s::Real)
     T = tangent(b, s)
-    N = normal(b, s)
-    Bi = binormal(b, s)
+    e1 = bishop_e1(b, s)
+    e2 = cross(T, e1)
+    k⃗ = curvature_vector(b, s)
     κ = curvature(b, s)
     τ = geometric_torsion(b, s)
     m = spin_rate(b, s)
-    return (; position = position(b, s), tangent = T, normal = N, binormal = Bi,
-              curvature = κ, geometric_torsion = τ, spin_rate = m)
+    return (; position = position(b, s), tangent = T, bishop_e1 = e1, bishop_e2 = e2,
+              curvature_vector = k⃗, curvature = κ, geometric_torsion = τ,
+              spin_rate = m)
 end
 
 # -----------------------------------------------------------------------
@@ -2072,73 +2256,6 @@ function total_spin(
 end
 
 """
-    total_frame_rotation(b; s_start, s_end, rtol = 1e-8, atol = 0.0) → Float64
-
-Total frame rotation `∫ (τ_geom + Ω_spin) ds` over local arc length from
-`s_start` to `s_end`.
-"""
-function total_frame_rotation(
-    b::SubpathBuilt;
-    s_start::Real = 0.0,
-    s_end::Real   = s_end(b),
-    rtol::Real    = 1e-8,
-    atol::Real    = 0.0,
-)
-    s_lo = Float64(_qc_nominalize(s_start))
-    s_hi = Float64(_qc_nominalize(s_end))
-    if s_lo > s_hi
-        throw(ArgumentError(
-            "total_frame_rotation: require s_start ≤ s_end; got s_start=$(s_lo), s_end=$(s_hi)"))
-    end
-    ps0 = 0.0
-    ps1 = Float64(_qc_nominalize(arc_length(b)))
-    if !(ps0 - 1e-12 <= s_lo <= ps1 + 1e-12) || !(ps0 - 1e-12 <= s_hi <= ps1 + 1e-12)
-        throw(ArgumentError(
-            "total_frame_rotation: require 0 ≤ s ≤ s_end(b) for both endpoints; " *
-            "got [$(s_lo), $(s_hi)] m vs subpath domain [$(ps0), $(ps1)] m"))
-    end
-    s_lo == s_hi && return 0.0
-
-    τ_total = 0.0
-    rtolf = Float64(rtol)
-    atolf = Float64(atol)
-    for ps in _all_placed_segs(b)
-        seg = ps.segment
-        seg_s_start_nom = Float64(_qc_nominalize(ps.s_offset_eff))
-        seg_s_end_nom   = seg_s_start_nom +
-                          Float64(_qc_nominalize(arc_length(seg)))
-        a_nom = max(seg_s_start_nom, s_lo)
-        b_nom = min(seg_s_end_nom,   s_hi)
-        b_nom <= a_nom && continue
-
-        L_seg  = arc_length(seg)
-        seg_span_nom = seg_s_end_nom - seg_s_start_nom
-        frac_a = (a_nom - seg_s_start_nom) / seg_span_nom
-        frac_b = (b_nom - seg_s_start_nom) / seg_span_nom
-        a_loc = frac_a * L_seg
-        b_loc = frac_b * L_seg
-
-        if seg isa StraightSegment || seg isa BendSegment || seg isa CatenarySegment
-            # τ_geom = 0
-        elseif seg isa HelixSegment
-            τ_total += geometric_torsion(seg, zero(L_seg)) * (b_loc - a_loc)
-        elseif seg isa QuinticConnector
-            # QuinticConnector returns geometric_torsion(::QuinticConnector, ::Real)
-            # = 0.0 identically (planar treatment); skip without QuadGK so the
-            # MCM Particles arc-length bounds don't trigger a kronrod method error.
-        else
-            val, _ = QuadGK.quadgk(s -> geometric_torsion(seg, s), a_loc, b_loc;
-                                   rtol = rtolf, atol = atolf)
-            τ_total += val
-        end
-    end
-
-    Ω_total = total_spin(b; s_start = s_lo, s_end = s_hi,
-                                   rtol = rtolf, atol = atolf)
-    return τ_total + Ω_total
-end
-
-"""
     writhe(b; n) → Float64
 
 Writhe of the Subpath: numerical double integral on `n` samples.
@@ -2170,18 +2287,18 @@ end
     Sample
 
 One evaluated point on a path: arc-length coordinate `s` plus all frame
-quantities (position, tangent/normal/binormal, curvature, geometric torsion,
+quantities (position, tangent/bishop_e1/bishop_e2, curvature, geometric torsion,
 spin rate).
 
-The frame is the propagated (parallel-transport) frame, not the textbook
-Frenet frame — see [`build`](@ref).
+`bishop_e1`/`bishop_e2` are the parallel-transported (Bishop) pair — continuous
+along the whole path, zero twist about the tangent; see [`bishop_e1`](@ref).
 """
 struct Sample
     s                 :: Real
     position          :: AbstractVector
     tangent           :: AbstractVector
-    normal            :: AbstractVector
-    binormal          :: AbstractVector
+    bishop_e1         :: AbstractVector
+    bishop_e2         :: AbstractVector
     curvature         :: Real
     geometric_torsion :: Real
     spin_rate    :: Real
@@ -2319,13 +2436,13 @@ function sample_path(b::SubpathBuilt, s1::Real, s2::Real; fidelity::Float64 = 1.
     n = length(all_s)
     samples = Vector{Sample}(undef, n)
     for i in eachindex(all_s)
-        fr = frame(b, all_s[i])
+        fr = bishop_frame(b, all_s[i])
         samples[i] = Sample(
             all_s[i],
             fr.position,
             fr.tangent,
-            fr.normal,
-            fr.binormal,
+            fr.bishop_e1,
+            fr.bishop_e2,
             fr.curvature,
             fr.geometric_torsion,
             fr.spin_rate,
@@ -2378,10 +2495,10 @@ breakpoints(b::SubpathBuilt) = path_segment_breakpoints(b)
 """
     sample(path, s_values) -> Vector{NamedTuple}
 
-Return the [`frame`](@ref) of a built `path` at each arc length in `s_values`.
+Return the [`bishop_frame`](@ref) of a built `path` at each arc length in `s_values`.
 """
 function sample(b::SubpathBuilt, s_values)
-    return [frame(b, s) for s in s_values]
+    return [bishop_frame(b, s) for s in s_values]
 end
 
 """
@@ -2453,13 +2570,43 @@ end
 
 # Forward all "point-query at s" methods through _find_subpath. `spin_phase`
 # is point-like at the PathBuilt level because each Subpath's `_spin_phi_at_s0`
-# already encodes the cross-Subpath accumulation.
+# already encodes the cross-Subpath accumulation. `curvature_vector` is
+# gauge-independent and forwards directly; `bishop_e1`/`bishop_e2`/`bishop_frame` are
+# gauge-aware (below) and apply the Subpath's `_bishop_gauge_at_s0`.
 for f in (:curvature, :geometric_torsion, :spin_rate, :twist_rate, :spin_phase,
-          :position, :tangent, :normal, :binormal, :frame)
+          :position, :tangent, :curvature_vector)
     @eval function $f(p::PathBuilt, s::Real)
         sb, s_local = _find_subpath(p, s)
         return $f(sb, s_local)
     end
+end
+
+function bishop_e1(p::PathBuilt, s::Real)
+    sb, s_local = _find_subpath(p, s)
+    e1 = bishop_e1(sb, s_local)
+    e2 = bishop_e2(sb, s_local)
+    δ = sb._bishop_gauge_at_s0
+    return cos(δ) .* e1 .+ sin(δ) .* e2
+end
+
+function bishop_e2(p::PathBuilt, s::Real)
+    sb, s_local = _find_subpath(p, s)
+    e1 = bishop_e1(sb, s_local)
+    e2 = bishop_e2(sb, s_local)
+    δ = sb._bishop_gauge_at_s0
+    return cos(δ) .* e2 .- sin(δ) .* e1
+end
+
+function bishop_frame(p::PathBuilt, s::Real)
+    sb, s_local = _find_subpath(p, s)
+    fr = bishop_frame(sb, s_local)
+    δ = sb._bishop_gauge_at_s0
+    e1 = cos(δ) .* fr.bishop_e1 .+ sin(δ) .* fr.bishop_e2
+    e2 = cos(δ) .* fr.bishop_e2 .- sin(δ) .* fr.bishop_e1
+    return (; position = fr.position, tangent = fr.tangent, bishop_e1 = e1,
+              bishop_e2 = e2, curvature_vector = fr.curvature_vector,
+              curvature = fr.curvature, geometric_torsion = fr.geometric_torsion,
+              spin_rate = fr.spin_rate)
 end
 
 """
@@ -2468,9 +2615,9 @@ end
 Sum a from-zero per-Subpath phase accumulator `subphase(subpath, s_local)`
 across the Subpaths preceding the one containing global arc length `s` (each
 taken over its full length) plus the partial contribution of the containing
-Subpath. Used for `twist_phase`/`torsion_phase`, which — unlike spin — carry no
-stored cross-Subpath offset. No `Particles` conditional is evaluated (loop
-bounds use the `Float64` subpath offsets).
+Subpath. Used for `twist_phase`, which — unlike spin — carries no stored
+cross-Subpath offset. No `Particles` conditional is evaluated (loop bounds use
+the `Float64` subpath offsets).
 """
 function _pathbuilt_cumulative_phase(p::PathBuilt, s, subphase)
     s_hi = Float64(_qc_nominalize(s))
@@ -2487,7 +2634,6 @@ function _pathbuilt_cumulative_phase(p::PathBuilt, s, subphase)
 end
 
 twist_phase(p::PathBuilt, s::Real)   = _pathbuilt_cumulative_phase(p, s, twist_phase)
-torsion_phase(p::PathBuilt, s::Real) = _pathbuilt_cumulative_phase(p, s, torsion_phase)
 
 # Endpoint access
 start_point(p::PathBuilt)   = position(p, 0.0)
@@ -2535,28 +2681,6 @@ function total_spin(p::PathBuilt;
     return total
 end
 
-function total_frame_rotation(p::PathBuilt;
-                              s_start::Real = 0.0,
-                              s_end::Real   = s_end(p),
-                              rtol::Real    = 1e-8,
-                              atol::Real    = 0.0)
-    s_lo = Float64(_qc_nominalize(s_start))
-    s_hi = Float64(_qc_nominalize(s_end))
-    s_lo == s_hi && return 0.0
-    total = 0.0
-    offs = s_offsets(p)
-    for i in eachindex(p.subpaths)
-        L = Float64(_qc_nominalize(arc_length(p.subpaths[i])))
-        a_local = max(0.0, s_lo - offs[i])
-        b_local = min(L,   s_hi - offs[i])
-        b_local <= a_local && continue
-        total += total_frame_rotation(p.subpaths[i];
-                                      s_start = a_local, s_end = b_local,
-                                      rtol = rtol, atol = atol)
-    end
-    return total
-end
-
 function breakpoints(p::PathBuilt)
     isempty(p.subpaths) && return Float64[]
     offs = s_offsets(p)
@@ -2570,7 +2694,7 @@ function breakpoints(p::PathBuilt)
 end
 
 function sample(p::PathBuilt, s_values)
-    return [frame(p, s) for s in s_values]
+    return [bishop_frame(p, s) for s in s_values]
 end
 
 function sample_uniform(p::PathBuilt; n::Int = 256)
@@ -2584,7 +2708,7 @@ end
 Adaptive sampling of a `PathBuilt` over `[s1, s2]`. Walks each constituent
 `SubpathBuilt`'s clipped interval and concatenates samples with adjacent-
 duplicate suppression at Subpath boundaries. Sample positions/tangents/etc.
-are taken via `frame(p, s)` so they live in the global frame.
+are taken via `bishop_frame(p, s)` so they live in the global frame.
 """
 function sample_path(p::PathBuilt, s1::Real, s2::Real; fidelity::Float64 = 1.0)
     @assert s2 > s1 "sample_path: require s2 > s1"
@@ -2618,13 +2742,13 @@ function sample_path(p::PathBuilt, s1::Real, s2::Real; fidelity::Float64 = 1.0)
     n = length(all_s)
     samples = Vector{Sample}(undef, n)
     for i in eachindex(all_s)
-        fr = frame(p, all_s[i])
+        fr = bishop_frame(p, all_s[i])
         samples[i] = Sample(
             all_s[i],
             fr.position,
             fr.tangent,
-            fr.normal,
-            fr.binormal,
+            fr.bishop_e1,
+            fr.bishop_e2,
             fr.curvature,
             fr.geometric_torsion,
             fr.spin_rate,

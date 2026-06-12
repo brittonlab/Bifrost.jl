@@ -466,18 +466,22 @@ end
     @test_skip true
 end
 
-@testset "MCM :: total_frame_rotation propagates length-uncertainty (Tier 2.2)" begin
+@testset "MCM :: Bishop transport propagates pitch-uncertainty (Tier 2.2)" begin
     MonteCarloMeasurements.unsafe_comparisons(true)
     try
-        # HelixSegment with uncertain pitch → arc_length is Particles, τ_geom
-        # is Particles. total_frame_rotation should return Particles with
-        # non-degenerate spread.
+        # HelixSegment with uncertain pitch → the transported frame and the
+        # curvature-vector projections depend on the uncertain torsion, so
+        # `normal` components and `bend_components` must carry Particles with
+        # non-degenerate spread (no scalar coercion on the transport path).
         path = _build_mcm_path() do sb
             helix!(sb; radius = 0.03, pitch = 0.01 ± 0.001, turns = 2.0)
         end
-        ψ = total_frame_rotation(path)
-        @test ψ isa Particles
-        @test pstd(ψ) > 0.0
+        s_mid = 0.5 * Float64(pmean(arc_length(path)))
+        e1 = bishop_e1(path, s_mid)
+        @test any(c isa Particles && pstd(c) > 0.0 for c in e1)
+        bc = FiberPath.bend_components(path, s_mid)
+        @test bc.kx isa Particles || bc.ky isa Particles
+        @test pstd(bc.ky) > 0.0
     finally
         MonteCarloMeasurements.unsafe_comparisons(false)
     end

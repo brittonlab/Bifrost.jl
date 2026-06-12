@@ -74,23 +74,29 @@ in 3D that matches position, tangent direction, and curvature vector at both end
 - `lambda`: chosen handle scale (`Float64` — must be deterministic under MCM inputs).
 - `s_table`: arc-length lookup, where `s_table[i]` is the arc length from `u = 0` to
   `u = (i-1)/(n-1)`.
+- `e1_table`: `n × 3` parallel-transport lookup; row `i` holds the local
+  components of the transported `e1` at `u = (i-1)/(n-1)`, with
+  `e1_table[1, :] = x̂` (the entry transverse axis). Built by discrete
+  double-reflection transport along the same `u`-grid as `s_table`.
 - `twist`: mechanical-twist rate (rad/m) carried from the originating
   `JumpBy`/seal (see [`TwistRate`](@ref)).
 - `meta`: per-segment annotation bag (see [`AbstractMeta`](@ref)).
 """
 struct QuinticConnector{T<:Real} <: AbstractPathSegment
-    a       :: Matrix{T}     # 6 × 3
-    lambda  :: Float64
-    s_table :: Vector{T}
-    twist   :: TwistRate     # mechanical-twist rate (rad/m); see `TwistRate`
-    meta    :: Vector{AbstractMeta}
+    a        :: Matrix{T}    # 6 × 3
+    lambda   :: Float64
+    s_table  :: Vector{T}
+    e1_table :: Matrix{T}    # n × 3 transported e1 at the s_table u-nodes
+    twist    :: TwistRate    # mechanical-twist rate (rad/m); see `TwistRate`
+    meta     :: Vector{AbstractMeta}
 end
 
 """
     QuinticConnector(a, lambda, s_table; twist = nothing, meta = AbstractMeta[])
 
 Construct a [`QuinticConnector`](@ref) from a precomputed coefficient matrix `a`, handle
-scale `lambda`, and arc-length table `s_table`.
+scale `lambda`, and arc-length table `s_table`. The parallel-transport `e1_table` is
+computed here by discrete double-reflection over the `s_table` `u`-grid.
 
 Coerces `lambda` to `Float64` and wraps `meta` in an `AbstractMeta` vector. `twist`
 is the connector's mechanical-twist rate (see [`TwistRate`](@ref)). Callers
@@ -100,7 +106,79 @@ this directly.
 QuinticConnector(a::Matrix{T}, lambda::Real, s_table::AbstractVector{T};
                  twist = nothing, meta = AbstractMeta[]) where {T<:Real} =
     QuinticConnector{T}(a, Float64(lambda), Vector{T}(s_table),
+                        _qc_build_e1_table(a, length(s_table)),
                         twist, Vector{AbstractMeta}(meta))
+
+# ---------------------------------------------------------------------------
+# Discrete parallel transport (double-reflection / rotation-minimizing frame)
+# ---------------------------------------------------------------------------
+
+"""
+    _qc_tangent_at_u(a, u) -> Vector
+
+Unit tangent of the quintic at parameter `u` (not arc length). Zero-speed
+points (degenerate/zero-length connectors) map to the local `ẑ`, mirroring
+`tangent_local`.
+"""
+function _qc_tangent_at_u(a::AbstractMatrix, u::Real)
+    d1 = _qc_eval_d1(a, u)
+    spd2 = d1[1]^2 + d1[2]^2 + d1[3]^2
+    if Float64(_qc_nominalize(spd2)) < 1e-30
+        T = eltype(a)
+        return [zero(T), zero(T), one(T)]
+    end
+    return d1 ./ sqrt(spd2)
+end
+
+"""
+    _qc_double_reflect(v, x0, t0, x1, t1) -> Vector
+
+One double-reflection parallel-transport step (Wang–Jüttler–Zheng–Liu
+rotation-minimizing frame, doi:10.1145/1330511.1330513): transport the
+transverse vector `v` from the point/tangent pair `(x0, t0)` to `(x1, t1)`.
+Degenerate steps (coincident points, parallel reflection data) skip the
+affected reflection on a nominalized predicate; the algebra itself is built
+from the inputs' element type so MCM `Particles` propagate.
+"""
+function _qc_double_reflect(v::AbstractVector, x0::AbstractVector, t0::AbstractVector,
+                            x1::AbstractVector, t1::AbstractVector)
+    d = x1 .- x0
+    c1 = d[1]^2 + d[2]^2 + d[3]^2
+    Float64(_qc_nominalize(c1)) < 1e-30 && return v
+    vL = v .- (2 * (d[1]*v[1] + d[2]*v[2] + d[3]*v[3]) / c1) .* d
+    tL = t0 .- (2 * (d[1]*t0[1] + d[2]*t0[2] + d[3]*t0[3]) / c1) .* d
+    e = t1 .- tL
+    c2 = e[1]^2 + e[2]^2 + e[3]^2
+    Float64(_qc_nominalize(c2)) < 1e-30 && return vL
+    return vL .- (2 * (e[1]*vL[1] + e[2]*vL[2] + e[3]*vL[3]) / c2) .* e
+end
+
+"""
+    _qc_build_e1_table(a, n) -> Matrix
+
+Build the `n × 3` transported-`e1` lookup for a quintic with coefficients `a`:
+row `i` is the parallel transport of the entry `x̂` to `u = (i-1)/(n-1)`,
+accumulated by double-reflection steps between consecutive nodes. Exact for
+straight and zero-length connectors (identity transport); O(h²)-accurate in
+the node spacing otherwise.
+"""
+function _qc_build_e1_table(a::Matrix{T}, n::Int) where {T<:Real}
+    e1 = Matrix{T}(undef, n, 3)
+    v = T[one(T), zero(T), zero(T)]
+    e1[1, 1] = v[1]; e1[1, 2] = v[2]; e1[1, 3] = v[3]
+    x_prev = _qc_eval(a, 0.0)
+    t_prev = _qc_tangent_at_u(a, 0.0)
+    @inbounds for i in 2:n
+        u = (i - 1) / (n - 1)
+        x_cur = _qc_eval(a, u)
+        t_cur = _qc_tangent_at_u(a, u)
+        v = _qc_double_reflect(v, x_prev, t_prev, x_cur, t_cur)
+        e1[i, 1] = v[1]; e1[i, 2] = v[2]; e1[i, 3] = v[3]
+        x_prev = x_cur
+        t_prev = t_cur
+    end
+    return e1
+end
 
 # ---------------------------------------------------------------------------
 # Coefficient solve (closed-form quintic Hermite)
@@ -305,7 +383,7 @@ function _qc_normal_from_derivs(d1::AbstractVector, d2::AbstractVector)
     return Tv, acc ./ sqrt(an2)
 end
 
-function normal_local(seg::QuinticConnector, s::Real)
+function _normal_local(seg::QuinticConnector, s::Real)
     u  = _qc_t_from_s(seg, s)
     d1 = _qc_eval_d1(seg.a, u)
     d2 = _qc_eval_d2(seg.a, u)
@@ -313,7 +391,7 @@ function normal_local(seg::QuinticConnector, s::Real)
     return N
 end
 
-function binormal_local(seg::QuinticConnector, s::Real)
+function _binormal_local(seg::QuinticConnector, s::Real)
     u  = _qc_t_from_s(seg, s)
     d1 = _qc_eval_d1(seg.a, u)
     d2 = _qc_eval_d2(seg.a, u)
@@ -325,7 +403,7 @@ end
 
 end_position_local(seg::QuinticConnector) = _qc_eval(seg.a, 1.0)
 
-function end_frame_local(seg::QuinticConnector)
+function _end_frame_local(seg::QuinticConnector)
     d1 = _qc_eval_d1(seg.a, 1.0)
     d2 = _qc_eval_d2(seg.a, 1.0)
     Tv, Nv = _qc_normal_from_derivs(d1, d2)
@@ -333,6 +411,43 @@ function end_frame_local(seg::QuinticConnector)
           Tv[3]*Nv[1] - Tv[1]*Nv[3],
           Tv[1]*Nv[2] - Tv[2]*Nv[1]]
     return (Tv, Nv, Bv)
+end
+
+# Curvature vector k⃗ = dT̂/ds from the raw parametric derivatives:
+# k⃗ = (r″ − T̂(T̂·r″)) / |r′|². No κ normalization, so no inflection or
+# near-straight degeneracy — zero-speed points return the zero vector.
+function _curvature_vector_local(seg::QuinticConnector, s::Real)
+    u  = _qc_t_from_s(seg, s)
+    d1 = _qc_eval_d1(seg.a, u)
+    d2 = _qc_eval_d2(seg.a, u)
+    spd2 = d1[1]^2 + d1[2]^2 + d1[3]^2
+    if Float64(_qc_nominalize(spd2)) < 1e-30
+        return [zero(spd2), zero(spd2), zero(spd2)]
+    end
+    proj = (d1[1]*d2[1] + d1[2]*d2[2] + d1[3]*d2[3]) / spd2
+    acc = d2 .- proj .* d1
+    return acc ./ spd2
+end
+
+# Parallel transport on the connector: decompose `v` on the entry transverse
+# pair (x̂, ŷ), look up the transported pair at the table node at or below the
+# query point, and finish with one double-reflection step from the node to the
+# exact query point — continuous in `s`, O(h²) in the table spacing.
+function _parallel_transport_local(seg::QuinticConnector, v::AbstractVector, s)
+    n = length(seg.s_table)
+    u = _qc_t_from_s(seg, s)          # deterministic Float64 under MCM
+    lo = clamp(floor(Int, u * (n - 1) + 1e-12) + 1, 1, n)
+    u_lo = (lo - 1) / (n - 1)
+    e1_lo = [seg.e1_table[lo, 1], seg.e1_table[lo, 2], seg.e1_table[lo, 3]]
+    t_lo = _qc_tangent_at_u(seg.a, u_lo)
+    e2_lo = [t_lo[2]*e1_lo[3] - t_lo[3]*e1_lo[2],
+             t_lo[3]*e1_lo[1] - t_lo[1]*e1_lo[3],
+             t_lo[1]*e1_lo[2] - t_lo[2]*e1_lo[1]]
+    w = v[1] .* e1_lo .+ v[2] .* e2_lo
+    x_lo = _qc_eval(seg.a, u_lo)
+    x_u = _qc_eval(seg.a, u)
+    t_u = _qc_tangent_at_u(seg.a, u)
+    return _qc_double_reflect(w, x_lo, t_lo, x_u, t_u)
 end
 
 # Unit vector perpendicular to t (arbitrary orientation), parametric in T.

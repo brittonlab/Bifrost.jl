@@ -2,7 +2,11 @@ using Test
 using LinearAlgebra
 using QuadGK
 using Bifrost
-using Bifrost.PathGeometry: _build_quintic_connector, _qc_build_table, _qc_coefficients, _qc_eval, _qc_eval_d1, _qc_eval_d2, _qc_peak_curvature, _qc_speed, _qc_t_from_s, _qc_nominalize
+using Bifrost.PathGeometry: _build_quintic_connector, _qc_build_table, _qc_coefficients,
+                            _qc_eval, _qc_eval_d1, _qc_eval_d2, _qc_peak_curvature,
+                            _qc_speed, _qc_t_from_s, _qc_nominalize,
+                            _curvature_vector_local, _parallel_transport_local,
+                            _end_frame_local
 
 
 # -----------------------------------------------------------------------
@@ -356,14 +360,13 @@ end
     end
 
     @testset "AbstractPathSegment interface smoke test" begin
-        """
-        AbstractPathSegment interface methods return correctly typed/sized data.
-
-        Quick smoke test of the whole interface (`position_local`, `tangent_local`,
-        `normal_local`, `binormal_local`, `arc_length`, `end_position_local`,
-        `end_frame_local`) on a representative connector. Catches signature drift
-        and shape regressions.
-        """
+        # T-GUARDRAIL
+        # AbstractPathSegment interface methods return correctly typed/sized data.
+        #
+        # Quick smoke test of the interface (`position_local`, `tangent_local`,
+        # `_curvature_vector_local`, `_parallel_transport_local`, `arc_length`,
+        # `end_position_local`, `_end_frame_local`) on a representative connector.
+        # Catches signature drift and shape regressions.
         p1 = [0.5, 0.4, 0.7]; t_out = [1.0, 0.0, 0.0]
         seg = _build_quintic_connector(p1, t_out, zeros(3), zeros(3);
                                         min_bend_radius = nothing, n_table = 64)
@@ -372,13 +375,18 @@ end
         for s in (0.0, 0.5L, L)
             p = position_local(seg, s);   @test length(p) == 3
             T = tangent_local(seg, s);    @test isapprox(norm(T), 1.0; atol = 1e-9)
-            N = normal_local(seg, s);     @test isapprox(norm(N), 1.0; atol = 1e-9)
-            B = binormal_local(seg, s);   @test isapprox(norm(B), 1.0; atol = 1e-9)
-            @test isapprox(dot(T, N), 0.0; atol = 1e-9)
+            # Curvature vector is tangent-perpendicular with |k⃗| = κ.
+            k⃗ = _curvature_vector_local(seg, s)
+            @test isapprox(norm(k⃗), curvature(seg, s); atol = 1e-9)
+            @test isapprox(dot(T, k⃗), 0.0; atol = 1e-8)
+            # Parallel transport preserves length and transversality.
+            e1 = _parallel_transport_local(seg, [1.0, 0.0, 0.0], s)
+            @test isapprox(norm(e1), 1.0; atol = 1e-6)
+            @test isapprox(dot(T, e1), 0.0; atol = 1e-6)
         end
         ep = end_position_local(seg)
         @test isapprox(ep, p1; atol = 1e-10)
-        Tend, Nend, Bend = end_frame_local(seg)
+        Tend, Nend, Bend = _end_frame_local(seg)
         @test isapprox(Tend, t_out; atol = 1e-9)
         @test isapprox(norm(Nend), 1.0; atol = 1e-9)
         @test isapprox(norm(Bend), 1.0; atol = 1e-9)

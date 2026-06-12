@@ -65,17 +65,21 @@ if !isdefined(Main, :DEFAULT_T_REF_K)
     const DEFAULT_T_REF_K = 297.15
 end
 
-# Path-backed fibers use the path's local normal/binormal frame. The bend
-# axis is the curvature normal, so the local transverse bend components are
-# (κ, 0) in that frame. Frame rotation enters through the path spin rate.
+# Path-backed fibers express birefringence axes in the path's transported
+# (Bishop) frame `(e1, e2) = (bishop_e1, bishop_e2)`. The bend axis is the
+# projection of the curvature vector k⃗ = dT̂/ds onto that frame, so both
+# transverse components are live: discrete curvature-direction jumps at
+# segment joints (e.g. perpendicular-plane corners) land on existing
+# breakpoints, and no Frenet normal — with its inflection flips and
+# near-straight degeneracy — is ever consulted. Conditional-free, so MCM
+# `Particles` propagate.
 function bend_components(path::Union{SubpathBuilt, PathBuilt}, s::Real)
-    κ = curvature(path, s)
-    if κ == zero(κ)
-        z = zero(κ)
-        return (kx = z, ky = z, k2 = z)
-    end
-    z = zero(κ)
-    return (kx = κ, ky = z, k2 = κ * κ)
+    k⃗ = curvature_vector(path, s)
+    e1 = bishop_e1(path, s)
+    e2 = bishop_e2(path, s)
+    kx = k⃗[1] * e1[1] + k⃗[2] * e1[2] + k⃗[3] * e1[3]
+    ky = k⃗[1] * e2[1] + k⃗[2] * e2[2] + k⃗[3] * e2[3]
+    return (kx = kx, ky = ky, k2 = kx * kx + ky * ky)
 end
 
 struct Fiber{P,T,S}
@@ -384,13 +388,13 @@ circular_birefringence_generator(Δβc) = [
 ]
 
 # Orientation of the bend (curvature-direction) birefringence axis in the
-# parallel-transport (Bishop) propagation frame. The Frenet curvature direction
-# rotates relative to the Bishop frame at the geometric torsion rate, so its
-# angle is the accumulated `∫₀ˢ τ_g` (zero for any planar path, recovering the
-# previous fixed `(κ,0)` behaviour). Returned as `(cos 2φ, sin 2φ)`.
+# parallel-transport (Bishop) propagation frame: the angle φ of the curvature
+# vector projected onto (e1, e2), i.e. (kx, ky) = κ(cos φ, sin φ). Returned as
+# `(cos 2φ, sin 2φ)` in the normalization-free double-angle ratio form —
+# conditional-free for MCM. Callers guard κ ≠ 0, so k2 > 0 here.
 function _bend_axis_c2s2(f::Fiber, s::Real)
-    φ = torsion_phase(f.path, s)
-    return (cos(2 * φ), sin(2 * φ))
+    bc = bend_components(f.path, s)
+    return ((bc.kx * bc.kx - bc.ky * bc.ky) / bc.k2, 2 * bc.kx * bc.ky / bc.k2)
 end
 
 function bend_generator_K(f::Fiber, s::Real, λ_m::Real)

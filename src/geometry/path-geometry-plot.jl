@@ -32,7 +32,7 @@ using LinearAlgebra
 using ..PathGeometry
 
 # ---------------------------------------------------------------------------
-# Sampling (uses `frame` from PathGeometry — analytic Frenet data on `Path`)
+# Sampling (uses `bishop_frame` from PathGeometry — transported (Bishop) frame data)
 # ---------------------------------------------------------------------------
 
 """
@@ -49,12 +49,12 @@ function _expand(ps::PathGeometry.PathSample)
     tx       = [smpl.tangent[1]           for smpl in ps.samples]
     ty       = [smpl.tangent[2]           for smpl in ps.samples]
     tz       = [smpl.tangent[3]           for smpl in ps.samples]
-    nx       = [smpl.normal[1]            for smpl in ps.samples]
-    ny       = [smpl.normal[2]            for smpl in ps.samples]
-    nz       = [smpl.normal[3]            for smpl in ps.samples]
-    bx       = [smpl.binormal[1]          for smpl in ps.samples]
-    by       = [smpl.binormal[2]          for smpl in ps.samples]
-    bz       = [smpl.binormal[3]          for smpl in ps.samples]
+    nx       = [smpl.bishop_e1[1]         for smpl in ps.samples]
+    ny       = [smpl.bishop_e1[2]         for smpl in ps.samples]
+    nz       = [smpl.bishop_e1[3]         for smpl in ps.samples]
+    bx       = [smpl.bishop_e2[1]         for smpl in ps.samples]
+    by       = [smpl.bishop_e2[2]         for smpl in ps.samples]
+    bz       = [smpl.bishop_e2[3]         for smpl in ps.samples]
     kappa    = [smpl.curvature            for smpl in ps.samples]
     tau_geom = [smpl.geometric_torsion    for smpl in ps.samples]
     tau_spin  = [smpl.spin_rate       for smpl in ps.samples]
@@ -186,8 +186,8 @@ function _collect_segment_labels(path::PathGeometry.SubpathBuilt,
         s_b = min(s_hi, s2f)
         s_a >= s_b - 1e-15 && continue
         s_mid = (s_a + s_b) / 2
-        fr = PathGeometry.frame(path, s_mid)
-        r = collect(fr.position); N = collect(fr.normal)
+        fr = PathGeometry.bishop_frame(path, s_mid)
+        r = collect(fr.position); N = collect(fr.bishop_e1)
         nn = norm(N)
         if nn >= 1e-12
             N ./= nn
@@ -218,8 +218,8 @@ function _collect_segment_labels(path::PathGeometry.PathBuilt,
             s_b = min(s_hi, s2f)
             s_a >= s_b - 1e-15 && continue
             s_mid = (s_a + s_b) / 2
-            fr = PathGeometry.frame(path, s_mid)
-            r = collect(fr.position); N = collect(fr.normal)
+            fr = PathGeometry.bishop_frame(path, s_mid)
+            r = collect(fr.position); N = collect(fr.bishop_e1)
             nn = norm(N)
             if nn >= 1e-12
                 N ./= nn
@@ -249,7 +249,7 @@ view.
 
 Open-circle markers mark effective arc-length joins between authored segments that fall
 within `[s1, s2]`. Each authored segment carrying a `Nickname` meta gets a 3D text label at
-its midpoint arc length, nudged along the principal normal. A red arrow in the local N̂–B̂
+its midpoint arc length, nudged along the transported normal. A red arrow in the local N̂–B̂
 plane points along `cos(Φ) N̂ + sin(Φ) B̂`, where `Φ` is `PathGeometry.total_spin` from
 `s1` to the cursor arc length.
 
@@ -338,8 +338,8 @@ function write_path_geometry_plot3d(
       - normal–binormal plane: semi-transparent square in the local plane spanned by N̂ and B̂
         at the cursor (moves with scrub).
       - T̂: orange segment, unit tangent at the cursor.
-      - N̂: blue segment, principal normal at the cursor.
-      - B̂: green segment, binormal T̂×N̂ at the cursor.
+      - N̂: blue segment, transported (Bishop) e1 at the cursor.
+      - B̂: green segment, transported e2 = T̂×N̂ at the cursor.
       - ∫τ_spin: red arrow in the N̂–B̂ plane at the cursor; Φ = total_spin(path; s_start
         = plot start, s_end = cursor) (same length scale as T̂/N̂/B̂ axes).
       - segment labels (optional): 3D text for each authored segment that has a nickname, when

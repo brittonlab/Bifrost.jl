@@ -99,6 +99,11 @@ The fiber-specific layers combine those pieces:
    - **Invariant:** the geometry layer carries any meta it cannot interpret
      blindly and never errors on it — in particular it never references `:T_K`.
      Interpretation of foreign meta is a consuming layer's job (the fiber).
+   - **Invariant:** `normal`/`binormal`/`frame` expose the parallel-transported
+     (Bishop) pair — zero twist about the tangent, continuous along the path
+     and across Subpath boundaries; the bend axis is the projection of
+     `curvature_vector` onto it. Geometric torsion is a shape diagnostic with
+     no optical role (see `docs/src/frame-and-gauge.md`).
    - Resolves the per-Subpath `spin_rate` into path-coordinate material spin.
    - Resolves `JumpBy` and the terminal `jumpto!` connector into G2 quintic
      connectors at build time.
@@ -135,7 +140,8 @@ The fiber-specific layers combine those pieces:
      target length is set).
    - Keeps operating wavelength as a per-query argument rather than `Fiber`
      state.
-   - Assembles fiber-level bend and spin generators `K(s)` and `Kω(s)`.
+   - Assembles the fiber-level generators `K(s)` and `Kω(s)` (bend, twist,
+     ellipticity, tension), with all axes expressed in the transported frame.
 
 4. **Propagation layer** (`path-integral.jl`)
 

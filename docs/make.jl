@@ -22,6 +22,7 @@ makedocs(
         "Usage" => "usage.md",
         "Developing" => "developing.md",
         "Theory" => [
+            "Frame and gauge" => "frame-and-gauge.md",
             "Deriving the generators" => "generators.md",
             "Path geometry" => "path-geometry.md",
         ],
