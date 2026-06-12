@@ -167,6 +167,20 @@ _seal_tension(sub::Subpath) =
 # absolute tension `F`. Shares the denominator of `axial_tension_dω`.
 _tension_strain(F, r_clad, E) = F / (π * r_clad^2 * E)
 
+# Scale a Subpath-level material spin rate inversely by `factor` so the total
+# number of spin rotations ∫τ ds over the Subpath is conserved across an
+# isotropic length scaling (mirroring how per-segment twist rates conserve
+# total turns — see `_scale_inverse_twist_rate`). A function rate τ(s_local) is
+# reparametrized onto the stretched local arc length:
+#   g(s) = τ(s/factor)/factor
+# so that ∫₀^{factor·L} g ds = ∫₀^L τ ds. The unresolved `:inherit` /
+# `:inherit_soft` sentinels are carried through unchanged; inheritance copies
+# the previous Subpath's already-resolved rate.
+_scale_inverse_spin_rate(::Nothing, _factor) = nothing
+_scale_inverse_spin_rate(sym::Symbol, _factor) = sym
+_scale_inverse_spin_rate(rate::Real, factor) = rate / factor
+_scale_inverse_spin_rate(rate::Function, factor) = s -> rate(s / factor) / factor
+
 # The terminal connector supports only `MCMadd(:T_K, …)` (thermal expansion)
 # and `MCMadd(:tension, …)` (axial elongation). Any other MCMadd/MCMmul
 # — field-level perturbation, or a multiplicative `:T_K`/`:tension` — has no effect
@@ -239,7 +253,7 @@ function _resolve_thermal_and_tension(
     new_segments = AbstractPathSegment[_scaled(seg) for seg in sub.segments]
 
     # for jumpto the terminal connector target = τ_seal · L0
-    # Here,  L0 is the nominal connector length (solved without :T_K/:tension). 
+    # Here,  L0 is the nominal connector length (solved without :T_K/:tension).
     # `build` re-solves to the fixed `jumpto_point` with this arc length.
     # When the seal expands, the terminal connector elongates by `seal_factor` (its
     # length is re-solved to `jumpto_target_length`), so its twist rate divides by
@@ -253,6 +267,28 @@ function _resolve_thermal_and_tension(
         jumpto_target_length = seal_factor * L0
     end
 
+    # The Subpath's material spin rate divides by the Subpath's total length factor
+    # F = L_new/L_old so the total number of spin rotations ∫τ ds is conserved
+    # across the thermal/tension expansion (mirroring per-segment twist). The
+    # interior contributes (sum of new lengths)/(sum of old lengths); when the
+    # seal also expands, the connector adds (seal_factor·L0, L0) to numerator
+    # and denominator. When the seal does not expand its length is identical in
+    # both old and new Subpaths and the connector contribution cancels out, so
+    # interior arc lengths suffice. Interior `JumpBy` segments resolve to a
+    # connector only at build time and pass through the thermal transform
+    # unchanged, so they contribute identically to both sums and are skipped.
+    _resolvable_length(seg::JumpBy) = nothing
+    _resolvable_length(seg::AbstractPathSegment) = arc_length(seg)
+    _sum_resolvable(segs) = sum(
+        Iterators.filter(!isnothing, _resolvable_length(seg) for seg in segs);
+        init = 0.0)
+    old_interior_L = _sum_resolvable(sub.segments)
+    new_interior_L = _sum_resolvable(new_segments)
+    old_total_L = old_interior_L + (seal_expands ? L0 : 0.0)
+    new_total_L = new_interior_L + (seal_expands ? jumpto_target_length : 0.0)
+    spin_factor = Float64(_qc_nominalize(old_total_L)) > 0 ?
+                  new_total_L / old_total_L : 1.0
+
     resolved = Subpath(
         sub.meta, sub.start_point, sub.start_outgoing_tangent,
         sub.start_outgoing_curvature, new_segments, sub.jumpto_point,
@@ -260,7 +296,7 @@ function _resolve_thermal_and_tension(
         sub.jumpto_min_bend_radius, sub.jumpto_meta,
         _scale_inverse_twist_rate(sub.jumpto_twist, seal_factor),
         sub.jumpto_natural, sub.jumpto_natural_extra,
-        sub.spin_rate, sub._spin_phi_at_s0,
+        _scale_inverse_spin_rate(sub.spin_rate, spin_factor), sub._spin_phi_at_s0,
         sub.inherit_start_point, sub.inherit_start_tangent, sub.inherit_start_curvature,
     )
     return (resolved, jumpto_target_length)

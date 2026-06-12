@@ -331,9 +331,15 @@ end
 # Material spin under thermal expansion
 # -----------------------------------------------------------------------
 
-@testset "Fiber :T_K — preserves constant spin rate; total scales with length" begin
-    # T-PHYSICS: thermal expansion scales arc length by α but leaves the spin
-    # rate τ unchanged, so the integrated spin ∫τ ds scales by α.
+@testset "Fiber :T_K — spin rotations per Subpath fixed regardless of temperature" begin
+    # T-PHYSICS (issue #32): the number of material-spin rotations per Subpath
+    # is fixed regardless of temperature. The rotations are baked into the
+    # material at draw time and an isotropic thermal expansion by α only
+    # stretches the existing pattern over a longer length — no rotations are
+    # added or removed. As a consequence the spinning period (1/τ) is
+    # temperature-dependent: τ divides by α so the period scales by α.
+    # This mirrors how mechanical twist conserves total turns under thermal
+    # expansion (see the twist tests below).
     α = 1.05
     τ = 1.5
     spec = sb -> straight!(sb; length = 2.0, meta = _ft_mcm(α))
@@ -342,16 +348,40 @@ end
     scal = _ft_scaled(spec; spin_rate = τ)
 
     @test base.spin_rate == τ
-    @test scal.spin_rate == τ          # rate preserved, not scaled
+    @test scal.spin_rate ≈ τ / α rtol = 1e-12   # rate divides, total turns fixed
 
     Lb = Float64(_qc_nominalize(arc_length(base)))
     Ls = Float64(_qc_nominalize(arc_length(scal)))
     @test Ls ≈ α * Lb atol = 1e-9
 
+    # Total spin rotations ∫τ ds are conserved across the thermal expansion.
     Ωb = total_spin(base; s_start = 0.0, s_end = Lb)
     Ωs = total_spin(scal; s_start = 0.0, s_end = Ls)
     @test Ωb ≈ τ * Lb atol = 1e-9
-    @test Ωs ≈ α * Ωb rtol = 1e-9
+    @test Ωs ≈ Ωb rtol = 1e-9
+
+    # The spinning period (length per rotation) is temperature-dependent.
+    period_base = 2π / spin_rate(base, 0.5 * Lb)
+    period_scal = 2π / spin_rate(scal, 0.5 * Ls)
+    @test period_scal ≈ α * period_base rtol = 1e-12
+end
+
+@testset "Fiber :T_K — function-valued spin rate conserves turns (reparametrized)" begin
+    # T-PHYSICS (issue #32, follow-on): a function rate τ(s_local) is
+    # reparametrized onto the stretched local arc length, g(s) = τ(s/α)/α, so
+    # ∫g over the elongated Subpath equals ∫τ over the original — turns
+    # conserved for non-constant spin too.
+    α    = 1.1
+    rate = s -> 1.0 + s          # rad/m, linear in Subpath-local arc length
+    spec = sb -> straight!(sb; length = 2.0, meta = _ft_mcm(α))
+
+    base = _ft_baseline(spec; spin_rate = rate)
+    scal = _ft_scaled(spec; spin_rate = rate)
+
+    Lb = Float64(_qc_nominalize(arc_length(base)))
+    Ls = Float64(_qc_nominalize(arc_length(scal)))
+    @test total_spin(base; s_start = 0.0, s_end = Lb) ≈
+          total_spin(scal; s_start = 0.0, s_end = Ls) rtol = 1e-9
 end
 
 # -----------------------------------------------------------------------
