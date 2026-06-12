@@ -7,7 +7,7 @@ be available to all specific materials defined in the material folder.
 Units (SI unless noted):
 - λ                     wavelength in m
 - T_K                   temperature in K
-- x_ge, x_f             dopant molar fraction (dimensionless, 0..1)
+- x_ge, x_f             dopant molar fraction (dimensionless; range is per-material)
 - refractive indices, Poisson ratio, photoelastic constants: dimensionless
 - cte                   1/K
 - softening_temperature  K
@@ -42,8 +42,6 @@ end
 struct ValueOnly <: SpectralStyle end
 struct WithDerivative <: SpectralStyle end
 
-# Shared by all materials to simplify the ValueOnly() case;
-# Users do not need to copy or override.
 refractive_index(material::AbstractMaterial, λ, T_K) =
     refractive_index(ValueOnly(), material, λ, T_K)
 

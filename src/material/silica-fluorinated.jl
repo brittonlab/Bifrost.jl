@@ -1,7 +1,5 @@
 """
 Material properties for fluorinated silica glass.
-File name prefixed with 20 so it is loaded after 10-silica-germania-binary glasses, as it
-depends on SiO2 and other silica material constants defined there.
 
 This file defines fluorinated silica glass, defined by a doping fraction
 of fluorine into a silica base.
@@ -9,7 +7,7 @@ of fluorine into a silica base.
 Units (SI unless noted):
 - λ                     wavelength in m
 - T_K                   temperature in K
-- x_f                   dopant molar fraction (dimensionless, 0..1)
+- x_f                   fluorine molar fraction (dimensionless, 0..0.05)
 - refractive indices, Poisson ratio, photoelastic constants: dimensionless
 - cte                   1/K
 - softening_temperature  K
@@ -22,7 +20,6 @@ glass = SilicaFluorinatedGlass(0.01)   # 1.0 mol% F in SiO2
 T_K = 297.15
 λ = 1550e-9
 n = refractive_index(glass, λ, T_K)
-cte_value = cte(glass, T_K)
 """
 
 const _FLUORINE_SELLMEIER_B_CORRECTION_COEFFS = (
@@ -37,8 +34,7 @@ const _FLUORINE_SELLMEIER_C_CORRECTION_COEFFS = (
     (0.0, -24.695, 1090.5)
 )
 
-# Fluorine enters as a molar fraction.
-# Caution: The validity range is esan estimate. 
+# Caution: the validity range is an estimate.
 const FLUORINE_MOLAR_FRACTION_RANGE = ValidityRange(0.0, 0.05, "fluorine molar fraction")
 
 struct SilicaFluorinatedGlass <: AbstractMaterial

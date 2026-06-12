@@ -43,8 +43,6 @@ const GERMANIA_N2 = 4.6e-20
 
 struct GeO2 <: AbstractMaterial end
 
-
-
 #################################################
 #
 # Pure Germania GeO2 Refractive Index

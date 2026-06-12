@@ -7,7 +7,7 @@ defined by a doping fraction of germania into a silica base.
 Units (SI unless noted):
 - λ                     wavelength in m
 - T_K                   temperature in K
-- x_ge                  dopant molar fraction (dimensionless, 0..1)
+- x_ge                  germania molar fraction (dimensionless, 0..0.05)
 - refractive indices, Poisson ratio, photoelastic constants: dimensionless
 - cte                   1/K
 - softening_temperature  K
@@ -23,8 +23,7 @@ n = refractive_index(glass, λ, T_K)
 cte_value = cte(glass, T_K)
 """
 
-# Germania enters as a molar fraction. 
-# Caution: The validity range is esan estimate. 
+# Caution: the validity range is an estimate.
 const GERMANIA_FRACTION_RANGE = ValidityRange(0.00, 0.05, "germania molar fraction")
 
 struct SilicaGermaniaGlass <: AbstractMaterial
