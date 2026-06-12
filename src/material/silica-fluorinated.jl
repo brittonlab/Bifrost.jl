@@ -35,7 +35,7 @@ const _FLUORINE_SELLMEIER_C_CORRECTION_COEFFS = (
 )
 
 # Caution: the validity range is an estimate.
-const FLUORINE_MOLAR_FRACTION_RANGE = ValidityRange(0.0, 0.05, "fluorine molar fraction")
+const FLUORINE_MOLAR_FRACTION_RANGE = ValidRange(0.0, 0.05, "fluorine molar fraction")
 
 struct SilicaFluorinatedGlass <: AbstractMaterial
     x_f::Float64

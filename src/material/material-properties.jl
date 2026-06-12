@@ -52,24 +52,24 @@ refractive_index(material::AbstractMaterial, λ, T_K) =
 #################################################
 
 """
-    ValidityRange(lo, hi, name)
+    ValidRange(lo, hi, name)
 
 Closed interval `[lo, hi]` bounding the domain over which a material model is
 valid, for a quantity labelled `name` (used only in error messages).
 """
-struct ValidityRange
+struct ValidRange
     lo::Float64
     hi::Float64
     name::String
 end
 
 """
-    _check_range(value, range::ValidityRange) -> value
+    _check_range(value, range::ValidRange) -> value
     _check_range(values::NamedTuple, ranges::NamedTuple) -> nothing
 
 Validate `value` against `range`.
 """
-function _check_range(value, r::ValidityRange)
+function _check_range(value, r::ValidRange)
     isfinite(value) && r.lo <= value <= r.hi ||
         throw(ArgumentError("$(r.name) = $(value) outside [$(r.lo), $(r.hi)]"))
     return value
@@ -91,7 +91,7 @@ function runtime_range(materials::Tuple)
     ranges = map(runtime_range, materials)
     all_keys = union(map(keys, ranges)...)
     return NamedTuple(
-        k => ValidityRange(
+        k => ValidRange(
             maximum(r[k].lo for r in ranges if haskey(r, k)),
             minimum(r[k].hi for r in ranges if haskey(r, k)),
             first(r[k].name for r in ranges if haskey(r, k))

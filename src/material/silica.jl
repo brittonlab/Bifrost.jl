@@ -54,8 +54,8 @@ struct SiO2 <: AbstractMaterial end
 
 # Validity window of the Leviton and Frey fused-silica model, doi:10.1117/12.672853.
 const SILICA_VALIDITY = (
-    T_K = ValidityRange(243.0, 373.0, "temperature"),
-    λ = ValidityRange(1300e-9, 1700e-9, "wavelength"),
+    T_K = ValidRange(243.0, 373.0, "temperature"),
+    λ = ValidRange(1300e-9, 1700e-9, "wavelength"),
 )
 runtime_range(::SiO2) = SILICA_VALIDITY
 

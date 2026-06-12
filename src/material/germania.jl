@@ -52,8 +52,8 @@ struct GeO2 <: AbstractMaterial end
 # Combined validity window: the intersection of the Fleming Sellmeier model
 # (doi:10.1364/AO.23.004486) and the Rego thermo-optic model (doi:10.3390/s24154857).
 const GERMANIA_VALIDITY = (
-    T_K = ValidityRange(243.0, 373.0, "temperature"),
-    λ = ValidityRange(1300e-9, 1700e-9, "wavelength"),
+    T_K = ValidRange(243.0, 373.0, "temperature"),
+    λ = ValidRange(1300e-9, 1700e-9, "wavelength"),
 )
 runtime_range(::GeO2) = GERMANIA_VALIDITY
 

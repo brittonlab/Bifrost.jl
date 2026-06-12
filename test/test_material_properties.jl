@@ -324,7 +324,7 @@ end
 
 @testset "Validity range primitives" begin
     # T-GUARDRAIL: a range checks one value, returning it in range and throwing outside.
-    r = ValidityRange(1.0, 2.0, "demo")
+    r = ValidRange(1.0, 2.0, "demo")
     @test _check_range(1.5, r) == 1.5
     @test _check_range(1.0, r) == 1.0      # closed lower bound
     @test _check_range(2.0, r) == 2.0      # closed upper bound
@@ -334,7 +334,7 @@ end
     @test_throws ArgumentError _check_range(Inf, r)
 
     # T-GUARDRAIL: the NamedTuple method validates each value against its keyed range.
-    ranges = (a = ValidityRange(0.0, 1.0, "a"), b = ValidityRange(10.0, 20.0, "b"))
+    ranges = (a = ValidRange(0.0, 1.0, "a"), b = ValidRange(10.0, 20.0, "b"))
     @test _check_range((a = 0.5, b = 15.0), ranges) === nothing
     @test_throws ArgumentError _check_range((a = 0.5, b = 25.0), ranges)
 
