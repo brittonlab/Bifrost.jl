@@ -764,12 +764,12 @@ end
     @test total_spin(b; s_start = 1.0, s_end = 3.0) == 0.5 * 2.0
 end
 
-@testset "Spin — frame() returns spin_rate" begin
+@testset "Spin — bishop_frame() returns spin_rate" begin
     sb = SubpathBuilder(); start!(sb; spin_rate = 2.5)
     straight!(sb; length = 1.0)
     _seal_at_z(sb, 1.0)
     b = build(sb)
-    @test frame(b, 0.4).spin_rate == 2.5
+    @test bishop_frame(b, 0.4).spin_rate == 2.5
 end
 
 @testset "Spin — material spin does not rotate the transported frame" begin

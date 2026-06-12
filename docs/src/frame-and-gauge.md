@@ -233,7 +233,7 @@ unit normals, and belongs to the conformity check, not the gauge.
 | --- | --- |
 | Per-segment closed-form transport | `_parallel_transport_local` (straight/bend/catenary/helix), `path-geometry.jl` |
 | Connector discrete transport (double reflection, doi:10.1145/1330511.1330513) | `e1_table` + `_parallel_transport_local(::QuinticConnector, …)`, `path-geometry-connector.jl` |
-| Transported frame queries | `bishop_e1`, `bishop_e2`, `frame` |
+| Transported frame queries | `bishop_e1`, `bishop_e2`, `bishop_frame` |
 | Curvature vector | `curvature_vector`, `_curvature_vector_local` |
 | Anchor | `_initial_frame_from_tangent` |
 | Subpath gauge continuity | `_resolve_bishop_gauge`, `_bishop_gauge_at_s0` |

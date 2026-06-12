@@ -391,7 +391,7 @@ module PlotRuntime
         path_geometry = fiber_path(f)
         if !isnothing(path_geometry)
             ss = collect(range(Float64(s1), Float64(s2), length = n))
-            frames = [frame(path_geometry, s) for s in ss]
+            frames = [bishop_frame(path_geometry, s) for s in ss]
 
             x = [Float64(fr.position[1]) for fr in frames]
             y = [Float64(fr.position[2]) for fr in frames]

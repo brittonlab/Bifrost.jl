@@ -5,7 +5,7 @@ This file defines a small authoring DSL for building piecewise paths from
 local-frame segment primitives, compiling them to an immutable global-frame
 form, and querying differential geometry (position, tangent, curvature and
 curvature vector, torsion) and material spin along arc length. The transverse
-frame exposed by `bishop_e1`/`bishop_e2`/`frame` is the parallel-transported
+frame exposed by `bishop_e1`/`bishop_e2`/`bishop_frame` is the parallel-transported
 (Bishop / relatively-parallel) frame: continuous everywhere, zero twist about
 the tangent, anchored at the path start by a static lab-frame convention.
 
@@ -86,7 +86,7 @@ continuous cross-Subpath spin phase (`_spin_phi_at_s0`).
     tangent(path, s)
     bishop_e1(path, s)   # transported (Bishop) e1
     bishop_e2(path, s)   # transported (Bishop) e2 = T × e1
-    frame(path, s)
+    bishop_frame(path, s)
     breakpoints(path)
     sample(path, s_values)
     sample_uniform(path; n)
@@ -827,23 +827,32 @@ _resolve_at_placement(seg::AbstractPathSegment, ::AbstractVector, ::AbstractMatr
 A segment together with its placement in the global frame.
 
 Records the segment, its cumulative arc-length offset at its start
-(`s_offset_eff`), its global start `origin`, the 3×3 `frame` whose columns
-are `[N_global | B_global | T_global]` and which transforms local vectors to
-global as `v_g = frame * v_l`, and `bishop_e1` — the global transported
+(`s_offset_eff`), its global start `origin`, the 3×3 `placement_frame` whose
+columns are `[N, B, T]` and which transforms local vectors to global as
+`v_g = placement_frame * v_l`, and `bishop_e1` — the global transported
 (Bishop) `e1` at the segment's entry, advanced segment-to-segment by
 `_parallel_transport_local` in the `build` placement loop.
 
-`frame` carries the geometric construction axes (they interpret `axis_angle`
-and the connector boundary data); `bishop_e1` carries the optical gauge. The
-two coincide only at the path start.
+`placement_frame` is the chained geometric **construction** frame, distinct from
+the optical gauge carried by `bishop_e1` (the two coincide only at the path
+start). It is *not* the public [`bishop_frame`](@ref)`(path, s)` API. The
+construction frame is kept because the path-authoring DSL depends on it:
+
+  - `axis_angle` is interpreted relative to the incoming local `N`/`B`
+    construction axes;
+  - `bend!`, `helix!`, `catenary!`, and `jumpby!` placement all rely on those
+    axes;
+  - connector boundary data are expressed in that local construction frame;
+  - keeping this machinery means positions and tangents remain bit-identical to
+    the old build logic.
 """
 struct PlacedSegment
     segment::AbstractPathSegment
-    s_offset_eff::Real          # cumulative arc-length at segment start
-    origin::AbstractVector      # global start position (length 3)
-    frame::AbstractMatrix       # 3×3, columns [N_global | B_global | T_global]
-                                # transforms local vectors → global: v_g = frame * v_l
-    bishop_e1::AbstractVector   # global transported e1 at the segment entry
+    s_offset_eff::Real             # cumulative arc-length at segment start
+    origin::AbstractVector         # global start position (length 3)
+    placement_frame::AbstractMatrix # 3×3 construction frame, columns [N, B, T];
+                                   # transforms local → global: v_g = placement_frame * v_l
+    bishop_e1::AbstractVector      # global transported e1 at the segment entry
 end
 
 # -----------------------------------------------------------------------
@@ -1278,7 +1287,7 @@ position(::Subpath, ::Real)         = error("Subpath: call build(subpath) before
 tangent(::Subpath, ::Real)          = error("Subpath: call build(subpath) before querying tangent")
 bishop_e1(::Subpath, ::Real)        = error("Subpath: call build(subpath) before querying bishop_e1")
 bishop_e2(::Subpath, ::Real)        = error("Subpath: call build(subpath) before querying bishop_e2")
-frame(::Subpath, ::Real)            = error("Subpath: call build(subpath) before querying frame")
+bishop_frame(::Subpath, ::Real)     = error("Subpath: call build(subpath) before querying bishop_frame")
 
 # -----------------------------------------------------------------------
 # SubpathBuilt and PathBuilt
@@ -1411,20 +1420,20 @@ questions in local coordinates:
    local axes?
 
 The placement loop rotates those local answers into global coordinates and
-chains them (the "frame propagation" steps below). The frame matrix (columns
-`[N | B | T]`) is the rotation from local to global, so `frame * v_local`
-converts any local vector to global.
+chains them (the "frame propagation" steps below). The `placement_frame` matrix
+(columns `[N, B, T]`) is the rotation from local to global, so
+`placement_frame * v_local` converts any local vector to global.
 
 Two distinct frames are propagated through the loop:
 
-- the chained `[N | B | T]` **construction frame**, which interprets each
-  segment's `axis_angle` and the connector boundary data — it absorbs each
-  segment's local end frame and is internal to placement;
+- the chained `[N, B, T]` **construction frame** (`placement_frame`), which
+  interprets each segment's `axis_angle` and the connector boundary data — it
+  absorbs each segment's local end frame and is internal to placement;
 - the **transported (Bishop) frame** `e1` (with `e2 = T × e1`), advanced by
   each segment's closed-form parallel transport
   ([`_parallel_transport_local`](@ref)) and anchored at the Subpath start by
   [`_initial_frame_from_tangent`](@ref). This is the frame returned by
-  [`bishop_e1`](@ref)/[`bishop_e2`](@ref)/[`frame`](@ref) and the gauge in
+  [`bishop_e1`](@ref)/[`bishop_e2`](@ref)/[`bishop_frame`](@ref) and the gauge in
   which the fiber layer expresses birefringence axes.
 """
 function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothing)::SubpathBuilt
@@ -1449,10 +1458,10 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
     placed = PlacedSegment[]  # in global coordinate system
 
     for seg_orig in segs
-        frame      = hcat(N_frame, B_frame, T_frame)   # columns: [N | B | T]
-        seg_placed = _resolve_at_placement(seg_orig, pos, frame, K_in_global)
-        push!(placed, PlacedSegment(seg_placed, s_eff, copy(pos), copy(frame),
-                                    copy(E1)))
+        placement_frame = hcat(N_frame, B_frame, T_frame)   # columns: [N, B, T]
+        seg_placed = _resolve_at_placement(seg_orig, pos, placement_frame, K_in_global)
+        push!(placed, PlacedSegment(seg_placed, s_eff, copy(pos),
+                                    copy(placement_frame), copy(E1)))
 
         # Advance position and frame
         # Note: Each of Straight, Bend, Catenary, Helix and QuniticConnector has its own
@@ -1461,14 +1470,15 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
         (T_end_l, N_end_l, _) = _end_frame_local(seg_placed)
         L_seg = arc_length(seg_placed)
 
-        # Frame propagation. The chained [N|B|T] frame is the geometric
-        # construction frame (it interprets the next segment's axis_angle and
-        # the connector boundary data); E1 advances independently by parallel
-        # transport and carries the optical gauge.
-        E1      = frame * _parallel_transport_local(seg_placed, frame' * E1, L_seg)
-        pos     = pos + frame * pos_end_local
-        T_frame = _safe_normalize(frame * T_end_l)
-        N_end_g = frame * N_end_l
+        # Frame propagation. The chained [N, B, T] construction frame interprets
+        # the next segment's axis_angle and the connector boundary data; E1
+        # advances independently by parallel transport and carries the optical
+        # gauge.
+        E1      = placement_frame *
+                  _parallel_transport_local(seg_placed, placement_frame' * E1, L_seg)
+        pos     = pos + placement_frame * pos_end_local
+        T_frame = _safe_normalize(placement_frame * T_end_l)
+        N_end_g = placement_frame * N_end_l
         N_frame = _safe_normalize(N_end_g - dot(N_end_g, T_frame) * T_frame)
         B_frame = cross(T_frame, N_frame)
         # Numerical hygiene: keep E1 exactly transverse and unit.
@@ -1483,7 +1493,7 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
     end
 
     # Resolve the terminal connector inline.
-    frame = hcat(N_frame, B_frame, T_frame)
+    placement_frame = hcat(N_frame, B_frame, T_frame)
     if sub.jumpto_natural
         # Natural seal: no target to reach. Build the terminal connector
         # directly at the natural exit, bypassing the quintic solver (a
@@ -1498,15 +1508,16 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
     else
         # Destination is global (sub.jumpto_point); transform to local frame to
         # call _build_quintic_connector.
-        p1_local  = frame' * (collect(sub.jumpto_point) .- pos)
+        p1_local  = placement_frame' * (collect(sub.jumpto_point) .- pos)
         chord     = norm(p1_local)
         t_hat_out = isnothing(sub.jumpto_incoming_tangent) ?
             (chord > 1e-15 ? p1_local ./ chord : [0.0, 0.0, 1.0]) :
-            _safe_normalize(frame' * _safe_normalize(collect(sub.jumpto_incoming_tangent)))
-        K0_local = frame' * K_in_global
+            _safe_normalize(placement_frame' *
+                            _safe_normalize(collect(sub.jumpto_incoming_tangent)))
+        K0_local = placement_frame' * K_in_global
         K1_local = isnothing(sub.jumpto_incoming_curvature) ?
             zeros(eltype(K0_local), 3) :
-            frame' * collect(sub.jumpto_incoming_curvature)
+            placement_frame' * collect(sub.jumpto_incoming_curvature)
         # The caller may constrain the terminal connector's arc length (the fiber
         # supplies this to thermally expand the connector).
         # `min_bend_radius` is always honored: with a target set the
@@ -1521,7 +1532,8 @@ function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothi
     # PlacedSegment wrapper for the terminal connector: anchor at the
     # position/frame at the end of the interior segments. Stored alongside
     # the connector so query functions treat it like any other placed segment.
-    jumpto_placed = PlacedSegment(connector, s_eff, copy(pos), copy(frame), copy(E1))
+    jumpto_placed = PlacedSegment(connector, s_eff, copy(pos),
+                                  copy(placement_frame), copy(E1))
 
     # `:inherit` spin needs a predecessor; it can only be resolved by the
     # vector build.
@@ -1844,10 +1856,10 @@ end
     _local_to_global(ps::PlacedSegment, v_local) -> AbstractVector
 
 Rotate a local-frame vector into global coordinates via the placed segment's
-frame (`v_g = frame * v_l`).
+construction frame (`v_g = placement_frame * v_l`).
 """
 function _local_to_global(ps::PlacedSegment, v_local::AbstractVector)
-    return ps.frame * v_local
+    return ps.placement_frame * v_local
 end
 
 """
@@ -2022,8 +2034,8 @@ by [`curvature_vector`](@ref).
 """
 function bishop_e1(b::SubpathBuilt, s::Real)
     ps, s_local = _find_placed_segment(b, s)
-    e1_entry_local = ps.frame' * ps.bishop_e1
-    return ps.frame * _parallel_transport_local(ps.segment, e1_entry_local, s_local)
+    e1_entry_local = ps.placement_frame' * ps.bishop_e1
+    return ps.placement_frame * _parallel_transport_local(ps.segment, e1_entry_local, s_local)
 end
 
 """
@@ -2053,14 +2065,14 @@ function curvature_vector(b::SubpathBuilt, s::Real)
 end
 
 """
-    frame(path, s) -> NamedTuple
+    bishop_frame(path, s) -> NamedTuple
 
 Return all differential-geometry quantities of a built `path` at arc length
 `s` as a `NamedTuple`: `position`, `tangent`, `bishop_e1`, `bishop_e2` (the
 parallel-transported pair — see [`bishop_e1`](@ref)), `curvature_vector`,
 `curvature`, `geometric_torsion`, and `spin_rate`.
 """
-function frame(b::SubpathBuilt, s::Real)
+function bishop_frame(b::SubpathBuilt, s::Real)
     T = tangent(b, s)
     e1 = bishop_e1(b, s)
     e2 = cross(T, e1)
@@ -2425,7 +2437,7 @@ function sample_path(b::SubpathBuilt, s1::Real, s2::Real; fidelity::Float64 = 1.
     n = length(all_s)
     samples = Vector{Sample}(undef, n)
     for i in eachindex(all_s)
-        fr = frame(b, all_s[i])
+        fr = bishop_frame(b, all_s[i])
         samples[i] = Sample(
             all_s[i],
             fr.position,
@@ -2484,10 +2496,10 @@ breakpoints(b::SubpathBuilt) = path_segment_breakpoints(b)
 """
     sample(path, s_values) -> Vector{NamedTuple}
 
-Return the [`frame`](@ref) of a built `path` at each arc length in `s_values`.
+Return the [`bishop_frame`](@ref) of a built `path` at each arc length in `s_values`.
 """
 function sample(b::SubpathBuilt, s_values)
-    return [frame(b, s) for s in s_values]
+    return [bishop_frame(b, s) for s in s_values]
 end
 
 """
@@ -2560,7 +2572,7 @@ end
 # Forward all "point-query at s" methods through _find_subpath. `spin_phase`
 # is point-like at the PathBuilt level because each Subpath's `_spin_phi_at_s0`
 # already encodes the cross-Subpath accumulation. `curvature_vector` is
-# gauge-independent and forwards directly; `bishop_e1`/`bishop_e2`/`frame` are
+# gauge-independent and forwards directly; `bishop_e1`/`bishop_e2`/`bishop_frame` are
 # gauge-aware (below) and apply the Subpath's `_bishop_gauge_at_s0`.
 for f in (:curvature, :geometric_torsion, :spin_rate, :twist_rate, :spin_phase,
           :position, :tangent, :curvature_vector)
@@ -2586,9 +2598,9 @@ function bishop_e2(p::PathBuilt, s::Real)
     return cos(δ) .* e2 .- sin(δ) .* e1
 end
 
-function frame(p::PathBuilt, s::Real)
+function bishop_frame(p::PathBuilt, s::Real)
     sb, s_local = _find_subpath(p, s)
-    fr = frame(sb, s_local)
+    fr = bishop_frame(sb, s_local)
     δ = sb._bishop_gauge_at_s0
     e1 = cos(δ) .* fr.bishop_e1 .+ sin(δ) .* fr.bishop_e2
     e2 = cos(δ) .* fr.bishop_e2 .- sin(δ) .* fr.bishop_e1
@@ -2683,7 +2695,7 @@ function breakpoints(p::PathBuilt)
 end
 
 function sample(p::PathBuilt, s_values)
-    return [frame(p, s) for s in s_values]
+    return [bishop_frame(p, s) for s in s_values]
 end
 
 function sample_uniform(p::PathBuilt; n::Int = 256)
@@ -2697,7 +2709,7 @@ end
 Adaptive sampling of a `PathBuilt` over `[s1, s2]`. Walks each constituent
 `SubpathBuilt`'s clipped interval and concatenates samples with adjacent-
 duplicate suppression at Subpath boundaries. Sample positions/tangents/etc.
-are taken via `frame(p, s)` so they live in the global frame.
+are taken via `bishop_frame(p, s)` so they live in the global frame.
 """
 function sample_path(p::PathBuilt, s1::Real, s2::Real; fidelity::Float64 = 1.0)
     @assert s2 > s1 "sample_path: require s2 > s1"
@@ -2731,7 +2743,7 @@ function sample_path(p::PathBuilt, s1::Real, s2::Real; fidelity::Float64 = 1.0)
     n = length(all_s)
     samples = Vector{Sample}(undef, n)
     for i in eachindex(all_s)
-        fr = frame(p, all_s[i])
+        fr = bishop_frame(p, all_s[i])
         samples[i] = Sample(
             all_s[i],
             fr.position,

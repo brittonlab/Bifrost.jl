@@ -32,7 +32,7 @@ using LinearAlgebra
 using ..PathGeometry
 
 # ---------------------------------------------------------------------------
-# Sampling (uses `frame` from PathGeometry — transported (Bishop) frame data)
+# Sampling (uses `bishop_frame` from PathGeometry — transported (Bishop) frame data)
 # ---------------------------------------------------------------------------
 
 """
@@ -186,7 +186,7 @@ function _collect_segment_labels(path::PathGeometry.SubpathBuilt,
         s_b = min(s_hi, s2f)
         s_a >= s_b - 1e-15 && continue
         s_mid = (s_a + s_b) / 2
-        fr = PathGeometry.frame(path, s_mid)
+        fr = PathGeometry.bishop_frame(path, s_mid)
         r = collect(fr.position); N = collect(fr.bishop_e1)
         nn = norm(N)
         if nn >= 1e-12
@@ -218,7 +218,7 @@ function _collect_segment_labels(path::PathGeometry.PathBuilt,
             s_b = min(s_hi, s2f)
             s_a >= s_b - 1e-15 && continue
             s_mid = (s_a + s_b) / 2
-            fr = PathGeometry.frame(path, s_mid)
+            fr = PathGeometry.bishop_frame(path, s_mid)
             r = collect(fr.position); N = collect(fr.bishop_e1)
             nn = norm(N)
             if nn >= 1e-12
