@@ -63,32 +63,39 @@ const PURE_GERMANIA = GeO2()
 #
 #################################################
 
+# Combined validity window: the intersection of the Fleming Sellmeier model
+# (doi:10.1364/AO.23.004486) and the Rego thermo-optic model (doi:10.3390/s24154857).
+const GERMANIA_VALIDITY = (
+    T_K = ValidityRange(243.0, 373.0, "temperature"),
+    λ = ValidityRange(1300e-9, 1700e-9, "wavelength"),
+)
+
+runtime_ranges(::GeO2) = GERMANIA_VALIDITY
+
 # From G. M. Rego, Sensors (2024), doi:10.3390/s24154857
 function thermo_optic_index_shift(material::GeO2, T_K)
-    T = validate_model_temperature(T_K)
     Tref = GERMANIA_REFERENCE_TEMPERATURE_K
-    return 6.2153e-13 / 4 * (T^4 - Tref^4) -
-           5.3387e-10 / 3 * (T^3 - Tref^3) +
-           1.6654e-7 / 2 * (T^2 - Tref^2)
+    return 6.2153e-13 / 4 * (T_K^4 - Tref^4) -
+           5.3387e-10 / 3 * (T_K^3 - Tref^3) +
+           1.6654e-7 / 2 * (T_K^2 - Tref^2)
 end
 
 function _sellmeier_coefficients(::GeO2, T_K)
-    T = validate_model_temperature(T_K)
-    return _evaluate_sellmeier_constants(_GERMANIA_SELLMEIER_COEFFICIENTS, T)
+    return _evaluate_sellmeier_constants(_GERMANIA_SELLMEIER_COEFFICIENTS, T_K)
 end
 
 function refractive_index(::ValueOnly, material::GeO2, λ, T_K)
-    T = validate_model_temperature(T_K)
-    base_coeffs = _sellmeier_coefficients(material, T)
+    check_range((; T_K, λ), runtime_ranges(material))
+    base_coeffs = _sellmeier_coefficients(material, T_K)
     n_ref = sellmeier_index_from_coefficients(base_coeffs, λ)
-    return n_ref + thermo_optic_index_shift(material, T)
+    return n_ref + thermo_optic_index_shift(material, T_K)
 end
 
 function refractive_index(::WithDerivative, material::GeO2, λ, T_K)
-    T = validate_model_temperature(T_K)
-    base_coeffs = _sellmeier_coefficients(material, T)
+    check_range((; T_K, λ), runtime_ranges(material))
+    base_coeffs = _sellmeier_coefficients(material, T_K)
     base = sellmeier_index_from_coefficients_dω(base_coeffs, λ)
-    return SpectralResponse(base.value + thermo_optic_index_shift(material, T), base.dω)
+    return SpectralResponse(base.value + thermo_optic_index_shift(material, T_K), base.dω)
 end
 
 #################################################

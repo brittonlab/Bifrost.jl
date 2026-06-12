@@ -322,6 +322,34 @@ end
     @test_throws ArgumentError refractive_index(f_glass, 1700.001e-9, 297.15)
 end
 
+@testset "Validity range primitives" begin
+    # T-GUARDRAIL: a range checks one value, returning it in range and throwing outside.
+    r = ValidityRange(1.0, 2.0, "demo")
+    @test check_range(1.5, r) == 1.5
+    @test check_range(1.0, r) == 1.0      # closed lower bound
+    @test check_range(2.0, r) == 2.0      # closed upper bound
+    @test_throws ArgumentError check_range(0.999, r)
+    @test_throws ArgumentError check_range(2.001, r)
+    @test_throws ArgumentError check_range(NaN, r)
+    @test_throws ArgumentError check_range(Inf, r)
+
+    # T-GUARDRAIL: the NamedTuple method validates each value against its keyed range.
+    ranges = (a = ValidityRange(0.0, 1.0, "a"), b = ValidityRange(10.0, 20.0, "b"))
+    @test check_range((a = 0.5, b = 15.0), ranges) === nothing
+    @test_throws ArgumentError check_range((a = 0.5, b = 25.0), ranges)
+
+    # T-GUARDRAIL: declared runtime windows carry the documented bounds.
+    for m in (PURE_SILICA, PURE_GERMANIA)
+        rr = runtime_ranges(m)
+        @test rr.T_K.lo == 243.0 && rr.T_K.hi == 373.0
+        @test rr.λ.lo == 1300e-9 && rr.λ.hi == 1700e-9
+    end
+
+    # T-GUARDRAIL: doped glasses inherit silica's runtime window.
+    @test runtime_ranges(SilicaGermaniaGlass(0.036)) === runtime_ranges(PURE_SILICA)
+    @test runtime_ranges(SilicaFluorinatedGlass(0.01)) === runtime_ranges(PURE_SILICA)
+end
+
 @testset "Spectral responses" begin
     λ = 1550e-9
     T = 297.15

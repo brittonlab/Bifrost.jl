@@ -172,6 +172,11 @@ end
     @test normalized_frequency(fiber, λ_cutoff, T) ≈ TEST_V_CUTOFF atol = 1e-6
     @test !is_single_mode(fiber, λ_cutoff - 1e-9, T)
     @test is_single_mode(fiber, λ_cutoff + 1e-9, T)
+
+    # T-GUARDRAIL: the bisection defaults read the core material's wavelength window
+    # rather than any global constant, and give the same result as passing them by hand.
+    window = runtime_ranges(fiber.core_material).λ
+    @test cutoff_wavelength(fiber, T; λ_min = window.lo, λ_max = window.hi) == λ_cutoff
 end
 
 @testset "StepIndexCrossSection spectral responses" begin

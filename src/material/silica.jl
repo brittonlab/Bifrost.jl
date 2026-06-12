@@ -66,20 +66,29 @@ const PURE_SILICA = SiO2()
 #
 #################################################
 
+# Validity window of the Leviton and Frey fused-silica model, doi:10.1117/12.672853.
+const SILICA_VALIDITY = (
+    T_K = ValidityRange(243.0, 373.0, "temperature"),
+    λ = ValidityRange(1300e-9, 1700e-9, "wavelength"),
+)
+
+runtime_ranges(::SiO2) = SILICA_VALIDITY
+
 function _sellmeier_coefficients(::SiO2, T_K)
-    T = validate_model_temperature(T_K)
     return _evaluate_sellmeier_polynomials(
         _SILICA_SELLMEIER_B_COEFFS,
         _SILICA_SELLMEIER_C_COEFFS,
-        T
+        T_K
     )
 end
 
 function refractive_index(::ValueOnly, material::SiO2, λ, T_K)
+    check_range((; T_K, λ), runtime_ranges(material))
     return sellmeier_index_from_coefficients(_sellmeier_coefficients(material, T_K), λ)
 end
 
 function refractive_index(::WithDerivative, material::SiO2, λ, T_K)
+    check_range((; T_K, λ), runtime_ranges(material))
     return sellmeier_index_from_coefficients_dω(_sellmeier_coefficients(material, T_K), λ)
 end
 

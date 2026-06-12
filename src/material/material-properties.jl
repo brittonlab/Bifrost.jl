@@ -49,50 +49,53 @@ refractive_index(material::AbstractMaterial, λ, T_K) =
 
 #################################################
 #
-# Validation utilities
+# Validity ranges
 #
 #################################################
 
-const MIN_VALID_TEMPERATURE_K = 243.0
-const MAX_VALID_TEMPERATURE_K = 373.0
-const MIN_VALID_WAVELENGTH_M = 1300e-9
-const MAX_VALID_WAVELENGTH_M = 1700e-9
+"""
+    ValidityRange(lo, hi, name)
 
-function validate_molar_fraction(x::Real)
-    xf = Float64(x)
-    if !(isfinite(xf) && 0.0 <= xf <= 1.0)
-        throw(ArgumentError("molar fraction must be between 0 and 1 inclusive"))
-    end
-    return xf
+Closed interval `[lo, hi]` bounding the domain over which a material model is
+valid, for a quantity labelled `name` (used only in error messages).
+"""
+struct ValidityRange
+    lo::Float64
+    hi::Float64
+    name::String
 end
 
-# TODO: Edit these functions to make them material-specific, with args for max/min
-function validate_model_temperature(T_K)
-    if !(isfinite(T_K) && T_K > 0.0)
-        throw(ArgumentError("temperature must be a finite positive value in kelvin"))
-    end
-    if !(MIN_VALID_TEMPERATURE_K <= T_K <= MAX_VALID_TEMPERATURE_K)
-        throw(ArgumentError(
-            "temperature is outside the current model validity range " *
-            "[$(MIN_VALID_TEMPERATURE_K), $(MAX_VALID_TEMPERATURE_K)] K: got $(T_K)"
-        ))
-    end
-    return T_K
+"""
+    check_range(value, range::ValidityRange) -> value
+    check_range(values::NamedTuple, ranges::NamedTuple) -> nothing
+
+Validate `value` against `range`, returning it (handy inside constructors) or
+throwing an `ArgumentError` when it is non-finite or outside `[range.lo,
+range.hi]`. The `NamedTuple` method validates several values at once, matching
+each to the range that shares its key.
+
+The check is MCM-safe: it uses only `isfinite` and `lo <= value <= hi`, with no
+coercion or branching on uncertain values, so `Particles` pass through unchanged.
+"""
+function check_range(value, r::ValidityRange)
+    isfinite(value) && r.lo <= value <= r.hi ||
+        throw(ArgumentError("$(r.name) = $(value) outside [$(r.lo), $(r.hi)]"))
+    return value
 end
 
-function validate_model_wavelength(λ)
-    λ = float(λ)
-    if !(isfinite(λ) && λ > 0.0)
-        throw(ArgumentError("wavelength must be a finite positive value in meters"))
-    end
-    if !(MIN_VALID_WAVELENGTH_M <= λ <= MAX_VALID_WAVELENGTH_M)
-        throw(ArgumentError(
-            "wavelength is outside the current model validity range " *
-            "[$(MIN_VALID_WAVELENGTH_M), $(MAX_VALID_WAVELENGTH_M)] m: got $(λ)"
-        ))
-    end
-    return λ
-end
+check_range(values::NamedTuple, ranges::NamedTuple) =
+    foreach(k -> check_range(getfield(values, k), getfield(ranges, k)), keys(ranges))
+
+"""
+    runtime_ranges(material) -> NamedTuple
+
+Per-material runtime validity envelope as a `NamedTuple` of [`ValidityRange`](@ref)s
+keyed by quantity (for example `(; T_K, λ)`). Defaults to empty; each material
+declares its own. Consuming layers read these bounds directly — the step-index
+cutoff search, for instance, takes its bisection limits from
+`runtime_ranges(material).λ`.
+"""
+runtime_ranges(::AbstractMaterial) = NamedTuple()
 
 #################################################
 #
@@ -140,6 +143,10 @@ fraction of a dopant. We provide the _evaluate_sellmeier_polynomials(B_coeffs, C
 and _evaluate_sellmeier_constants(coeffs, x) utilities; see silica.jl and germania.jl for
 examples of their use. 
 
+These evaluators are pure numerics and do no domain validation: callers validate their
+inputs at the `refractive_index` entry via `check_range` against the material's
+`runtime_ranges`.
+
 Note also that any implemented material must ensure compatibility with `Particles` to allow
 Monte Carlo calculation. This happens naturally through the Sellmeier structure included here.
 """
@@ -156,8 +163,7 @@ function _evaluate_sellmeier_constants(coeffs, x)
 end
 
 function sellmeier_index_from_coefficients(coeffs, λ)
-    λ_m = validate_model_wavelength(λ)
-    λ_um = λ_m * 1e6
+    λ_um = λ * 1e6
     total = one(λ_um)
     for (B, C) in coeffs
         total += B * λ_um^2 / (λ_um^2 - C^2)
@@ -166,8 +172,7 @@ function sellmeier_index_from_coefficients(coeffs, λ)
 end
 
 function sellmeier_index_from_coefficients_dω(coeffs, λ)
-    λ_m = validate_model_wavelength(λ)
-    λ_um = λ_m * 1e6
+    λ_um = λ * 1e6
     total = one(λ_um)
     dtotal_dλm = zero(λ_um)
     for (B, C) in coeffs
@@ -178,6 +183,6 @@ function sellmeier_index_from_coefficients_dω(coeffs, λ)
     end
     n = sqrt(total)
     dn_dλ = dtotal_dλm / (2 * n)
-    dλ_dω = -(λ_m^2) / (2π * SPEED_OF_LIGHT_M_PER_S)
+    dλ_dω = -(λ^2) / (2π * SPEED_OF_LIGHT_M_PER_S)
     return SpectralResponse(n, dn_dλ * dλ_dω)
 end
