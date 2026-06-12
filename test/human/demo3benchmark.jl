@@ -51,8 +51,7 @@ function _bench_build_fiber(make_T)
     T_val  = make_T()
     T_K    = T_val + 273.15
     ΔT_K   = T_K - _MCM_DEMO_T_REF_K
-    fiber  = _mcm_demo_fiber(ΔT_K)            # thermal applied at construction
-    return Fiber(fiber.path; cross_section = _MCM_DEMO_XS, T_ref_K = T_K)
+    return _mcm_demo_fiber(ΔT_K)            # thermal applied at construction
 end
 
 # Time the first call to `f()` (JIT + one run) in milliseconds.
@@ -104,8 +103,7 @@ function _run_benchmarks(; scenario::Symbol = :propagate)
             fn     = () -> begin
                 # The build (with thermal scaling) happens here so the benchmark
                 # covers fiber construction and propagation together.
-                f2 = Fiber(_mcm_demo_fiber(ΔT_K).path;
-                           cross_section = _MCM_DEMO_XS, T_ref_K = T_K)
+                f2 = _mcm_demo_fiber(ΔT_K)
                 propagate_fiber(f2; λ_m = _MCM_DEMO_λ_M)
             end
         end

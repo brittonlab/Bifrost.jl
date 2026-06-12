@@ -80,6 +80,7 @@ end
 
 module FiberPath
     using LinearAlgebra
+    using MonteCarloMeasurements: Particles, StaticParticles
     using ..MaterialProperties
     using ..PathGeometry
     # Internal cross-module references. The geometry-layer perturbation mechanism

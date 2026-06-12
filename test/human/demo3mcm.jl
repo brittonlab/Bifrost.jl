@@ -134,11 +134,8 @@ function demo_mcm_temperature_ptf(;
     T_K_particles  = T_C_particles + 273.15
     ΔT_K_particles = T_K_particles - _MCM_DEMO_T_REF_K
 
-    fiber_mcm     = _mcm_demo_fiber(ΔT_K_particles)
-    modified_path = fiber_mcm.path  # thermal already applied at construction
-    fiber_mod     = Fiber(modified_path; cross_section = _MCM_DEMO_XS, T_ref_K = T_K_particles)
     J_p, _        = propagate_fiber(
-        fiber_mod;
+        _mcm_demo_fiber(ΔT_K_particles);
         λ_m = _MCM_DEMO_λ_M,
     )
     MonteCarloMeasurements.unsafe_comparisons(false)
@@ -269,15 +266,8 @@ function demo_mcm_temperature_ptf_scatter(;
     T_K_particles  = T_C_particles + 273.15
     ΔT_K_particles = T_K_particles - _MCM_DEMO_T_REF_K
 
-    fiber_mcm = _mcm_demo_fiber(ΔT_K_particles)
-    modified_path = fiber_mcm.path  # thermal already applied at construction
-    # T_ref_K = Particles so material birefringence is also uncertain.
-    fiber_mod = Fiber(modified_path;
-                      cross_section = _MCM_DEMO_XS,
-                      T_ref_K       = T_K_particles)
-
     J_p, _ = propagate_fiber(
-        fiber_mod;
+        _mcm_demo_fiber(ΔT_K_particles);
         λ_m = _MCM_DEMO_λ_M,
     )
     MonteCarloMeasurements.unsafe_comparisons(false)

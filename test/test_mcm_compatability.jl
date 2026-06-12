@@ -386,17 +386,31 @@ end
         )
         λ = 1550e-9
         T_nom = 297.15
-        T_ref = T_nom ± 2.0
+        ΔT = 0.0 ± 2.0
 
         path = _build_mcm_path(; spin_rate = 1.0) do sb
-            bend!(sb; radius = 0.05, angle = π / 2, axis_angle = 0.1)
+            bend!(sb; radius = 0.05, angle = π / 2, axis_angle = 0.1,
+                  meta = [MCMadd(:T_K, ΔT)])
         end
-        fiber = Fiber(path; cross_section = xs, T_ref_K = T_ref)
+        # T-GUARDRAIL: the baseline reference temperature is deterministic.
+        # Temperature uncertainty enters through per-segment :T_K metadata.
+        @test_throws ArgumentError Fiber(path; cross_section = xs,
+                                         T_ref_K = T_nom ± 2.0)
+        @test_throws ArgumentError Fiber(path; cross_section = xs,
+                                         T_ref_K = StaticParticles(5))
+        sb_reject = SubpathBuilder(); start!(sb_reject)
+        bend!(sb_reject; radius = 0.05, angle = π / 2)
+        seal!(sb_reject)
+        @test_throws ArgumentError Fiber(sb_reject; cross_section = xs,
+                                         T_ref_K = T_nom ± 2.0)
+
+        fiber = Fiber(path; cross_section = xs, T_ref_K = T_nom)
 
         @test fiber.s_end isa Float64
         @test fiber.path === path
         @test fiber.cross_section === xs
-        @test fiber.T_ref_K isa Particles
+        @test fiber.T_ref_K == T_nom
+        @test temperature(fiber, 0.02) isa Particles
 
         K = generator_K(fiber, λ)(0.02)
         Kω = generator_Kω(fiber, λ)(0.02)
