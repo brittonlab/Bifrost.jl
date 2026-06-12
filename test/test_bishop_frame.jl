@@ -57,7 +57,7 @@ _wrap_angle(x) = mod(x + π, 2π) - π
     b = _bishop_mixed_path()
     L = Float64(_qc_nominalize(s_end(b)))
     for s in range(1e-6, L - 1e-6; length = 401)
-        T = tangent(b, s); e1 = normal(b, s); e2 = binormal(b, s)
+        T = tangent(b, s); e1 = bishop_e1(b, s); e2 = bishop_e2(b, s)
         @test abs(norm(T) - 1) < 1e-12
         @test abs(norm(e1) - 1) < 1e-9
         @test abs(dot(T, e1)) < 1e-9
@@ -76,8 +76,8 @@ end
     h = 1e-6
     for s in range(1e-4, L - 1e-4; length = 801)
         minimum(abs.(bps .- s)) > 2h || continue
-        e2 = binormal(b, s)
-        de1 = (normal(b, s + h) - normal(b, s - h)) ./ (2h)
+        e2 = bishop_e2(b, s)
+        de1 = (bishop_e1(b, s + h) - bishop_e1(b, s - h)) ./ (2h)
         @test abs(dot(de1, e2)) < 1e-6   # rad/m, FD-limited
     end
 end
@@ -99,7 +99,7 @@ end
         bend!(sb; radius = 0.05, angle = π / 3, axis_angle = 0.4)
         seal!(sb)
         b = build(sb)
-        @test normal(b, 0.0) ≈ e1_expected atol = 1e-12
+        @test bishop_e1(b, 0.0) ≈ e1_expected atol = 1e-12
     end
     # Oblique tangent: e1 = (x̂ − (x̂·T)T)/‖·‖ with T = (1,1,1)/√3.
     T = [1.0, 1.0, 1.0] ./ sqrt(3.0)
@@ -107,7 +107,7 @@ end
     sb = SubpathBuilder(); start!(sb; outgoing_tangent = Tuple(T))
     straight!(sb; length = 0.3)
     seal!(sb)
-    @test normal(build(sb), 0.0) ≈ e1_expected atol = 1e-12
+    @test bishop_e1(build(sb), 0.0) ≈ e1_expected atol = 1e-12
 end
 
 @testset "Bishop — perpendicular corner has distinct Jones axes (#88)" begin
@@ -318,7 +318,7 @@ end
         # ...identical transported frame field (gauge-continuous across the
         # boundary)...
         for s in range(1e-6, L - 1e-6; length = 101)
-            @test normal(p_two, s) ≈ normal(p_one, s) atol = 1e-8
+            @test bishop_e1(p_two, s) ≈ bishop_e1(p_one, s) atol = 1e-8
         end
         # ...identical optics with axis-angle-sensitive sources.
         f_one = Fiber(p_one; cross_section = BISHOP_XS_ELLIPTICAL,
@@ -346,7 +346,7 @@ end
     κ_max = maximum(curvature(b, s) for s in range(0.0, L; length = 2001))
     @test κ_max < 0.05   # the connector really is nearly straight
     h = 1e-5
-    rate_max = maximum(norm(normal(b, s + h) - normal(b, s - h)) / (2h)
+    rate_max = maximum(norm(bishop_e1(b, s + h) - bishop_e1(b, s - h)) / (2h)
                        for s in range(0.11, 0.39; length = 501))
     @test rate_max <= 2 * κ_max + 1e-6
 end
@@ -363,7 +363,7 @@ end
     seal!(sb)
     b = build(sb)
     @test twist_phase(b, Lf) ≈ τm * Lf atol = 1e-12
-    @test normal(b, Lf - 1e-6) ≈ normal(b, 1e-6) atol = 1e-12
+    @test bishop_e1(b, Lf - 1e-6) ≈ bishop_e1(b, 1e-6) atol = 1e-12
 
     f = Fiber(b; cross_section = BISHOP_XS, T_ref_K = 297.15)
     J, _ = propagate_fiber(f; λ_m = BISHOP_λ, verbose = false)

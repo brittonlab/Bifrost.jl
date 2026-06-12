@@ -12,7 +12,7 @@ data, and is not exposed by the query API.
 
 ## The transported (Bishop) frame
 
-The transverse frame returned by `normal`/`binormal`/`frame` is the
+The transverse frame returned by `bishop_e1`/`bishop_e2`/`frame` is the
 **parallel-transported (Bishop) pair** (e1, e2 = T̂ × e1):
 
     de1/ds = −(k⃗ · e1) T̂,        k⃗ ≡ dT̂/ds

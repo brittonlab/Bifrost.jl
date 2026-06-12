@@ -193,7 +193,7 @@ function _fb_section_primer()
 
     sg = range(1e-4, L - 1e-4; length = 61)
     rs = [Float64.(position(b, s)) for s in sg]
-    e1s = [Float64.(normal(b, s)) for s in sg]
+    e1s = [Float64.(bishop_e1(b, s)) for s in sg]
     fss = [_fb_fs_normal_fd(b, s) for s in sg]
 
     traces = String[
@@ -462,8 +462,8 @@ function _fb_patho_boundary()
 
     # Angle of each build's e1 relative to the single-subpath reference.
     function rel_angle(p, s)
-        e1r = normal(p_one, s); e2r = binormal(p_one, s)
-        e1 = normal(p, s)
+        e1r = bishop_e1(p_one, s); e2r = bishop_e2(p_one, s)
+        e1 = bishop_e1(p, s)
         return atan(dot(e1, e2r), dot(e1, e1r))
     end
     θ_two = [rel_angle(p_two, s) for s in ss]
@@ -477,8 +477,8 @@ function _fb_patho_boundary()
     seal!(sb2n)
     b2_alone = build(sb2n)
     θ_naive = [s <= s_bnd ? 0.0 :
-               (e1 = normal(b2_alone, s - s_bnd);
-                atan(dot(e1, binormal(p_one, s)), dot(e1, normal(p_one, s))))
+               (e1 = bishop_e1(b2_alone, s - s_bnd);
+                atan(dot(e1, bishop_e2(p_one, s)), dot(e1, bishop_e1(p_one, s))))
                for s in ss]
 
     traces = String[
@@ -644,7 +644,7 @@ function _fb_section_anchor()
         seal!(sb)
         f = Fiber(build(sb); cross_section = _FB_XS, T_ref_K = _FB_T)
         b = fiber_path(f)
-        e10 = Float64.(normal(b, 0.0))
+        e10 = Float64.(bishop_e1(b, 0.0))
         J, G, _ = propagate_fiber_sensitivity(f; λ_m = _FB_λ, verbose = false)
         dgd = output_dgd_2x2(J, G)
         push!(rows, @sprintf("%-22s e1(0) = (%+.3f, %+.3f, %+.3f)   DGD = %.6e s",
@@ -657,7 +657,7 @@ function _fb_section_anchor()
             [Float64(position(b, s)[3]) for s in ss];
             name = label, color = colors[i]))
         rs = [Float64.(position(b, s)) for s in range(0.0, L; length = 13)]
-        e1s = [Float64.(normal(b, s)) for s in range(0.0, L; length = 13)]
+        e1s = [Float64.(bishop_e1(b, s)) for s in range(0.0, L; length = 13)]
         push!(traces, _fb_glyphs(rs, e1s; scale = 0.015,
                                  name = "e1 — $(label)", color = colors[i]))
     end

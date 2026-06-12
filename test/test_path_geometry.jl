@@ -674,8 +674,8 @@ end
     ss = range(0.0, _s_end_interior(b); length = 31)
     for s in ss
         T = tangent(b, s)
-        N = normal(b, s)
-        B = binormal(b, s)
+        N = bishop_e1(b, s)
+        B = bishop_e2(b, s)
         @test is_orthonormal(T, N, B)
     end
 end
@@ -780,7 +780,7 @@ end
     straight!(sb; length = 2.0)
     _seal_at_z(sb, 2.0)
     b = build(sb)
-    @test normal(b, 1.9) ≈ normal(b, 0.1) atol = 1e-12
+    @test bishop_e1(b, 1.9) ≈ bishop_e1(b, 0.1) atol = 1e-12
     @test isapprox(total_spin(b; s_start = 0.0, s_end = 2.0), 1.0; atol = 1e-12)
 end
 
@@ -1058,8 +1058,8 @@ end
     b = build(sb)
     for s in range(0.0, _s_end_interior(b); length = 11)
         T = tangent(b, s)
-        N = normal(b, s)
-        B = binormal(b, s)
+        N = bishop_e1(b, s)
+        B = bishop_e2(b, s)
         @test is_orthonormal(T, N, B)
     end
 end

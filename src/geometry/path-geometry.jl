@@ -5,7 +5,7 @@ This file defines a small authoring DSL for building piecewise paths from
 local-frame segment primitives, compiling them to an immutable global-frame
 form, and querying differential geometry (position, tangent, curvature and
 curvature vector, torsion) and material spin along arc length. The transverse
-frame exposed by `normal`/`binormal`/`frame` is the parallel-transported
+frame exposed by `bishop_e1`/`bishop_e2`/`frame` is the parallel-transported
 (Bishop / relatively-parallel) frame: continuous everywhere, zero twist about
 the tangent, anchored at the path start by a static lab-frame convention.
 
@@ -84,8 +84,8 @@ continuous cross-Subpath spin phase (`_spin_phi_at_s0`).
     spin_rate(path, s)
     position(path, s)
     tangent(path, s)
-    normal(path, s)      # transported (Bishop) e1
-    binormal(path, s)    # transported (Bishop) e2 = T × e1
+    bishop_e1(path, s)   # transported (Bishop) e1
+    bishop_e2(path, s)   # transported (Bishop) e2 = T × e1
     frame(path, s)
     breakpoints(path)
     sample(path, s_values)
@@ -133,7 +133,7 @@ MCM-valued fields):
 `_normal_local`/`_binormal_local`/`_end_frame_local` are internal geometric
 construction axes (they orient `axis_angle`, the placement chaining, and the
 connector boundary data); they are not the optical frame. The public
-transverse frame returned by [`normal`](@ref)/[`binormal`](@ref) is the
+transverse frame returned by [`bishop_e1`](@ref)/[`bishop_e2`](@ref) is the
 parallel-transported (Bishop) frame built from `_parallel_transport_local`.
 
 `JumpBy` resolves at `build` time into a parametric [`QuinticConnector`](@ref)
@@ -1276,8 +1276,8 @@ spin_phase(::Subpath, ::Real)      = error("Subpath: call build(subpath) before 
 curvature_vector(::Subpath, ::Real) = error("Subpath: call build(subpath) before querying curvature_vector")
 position(::Subpath, ::Real)         = error("Subpath: call build(subpath) before querying position")
 tangent(::Subpath, ::Real)          = error("Subpath: call build(subpath) before querying tangent")
-normal(::Subpath, ::Real)           = error("Subpath: call build(subpath) before querying normal")
-binormal(::Subpath, ::Real)         = error("Subpath: call build(subpath) before querying binormal")
+bishop_e1(::Subpath, ::Real)        = error("Subpath: call build(subpath) before querying bishop_e1")
+bishop_e2(::Subpath, ::Real)        = error("Subpath: call build(subpath) before querying bishop_e2")
 frame(::Subpath, ::Real)            = error("Subpath: call build(subpath) before querying frame")
 
 # -----------------------------------------------------------------------
@@ -1419,13 +1419,13 @@ Two distinct frames are propagated through the loop:
 
 - the chained `[N | B | T]` **construction frame**, which interprets each
   segment's `axis_angle` and the connector boundary data — it absorbs each
-  segment's Frenet end frame and is internal to placement;
+  segment's local end frame and is internal to placement;
 - the **transported (Bishop) frame** `e1` (with `e2 = T × e1`), advanced by
   each segment's closed-form parallel transport
   ([`_parallel_transport_local`](@ref)) and anchored at the Subpath start by
   [`_initial_frame_from_tangent`](@ref). This is the frame returned by
-  [`normal`](@ref)/[`binormal`](@ref)/[`frame`](@ref) and the gauge in which
-  the fiber layer expresses birefringence axes.
+  [`bishop_e1`](@ref)/[`bishop_e2`](@ref)/[`frame`](@ref) and the gauge in
+  which the fiber layer expresses birefringence axes.
 """
 function build(sub::Subpath; perturb::Bool = false, jumpto_target_length = nothing)::SubpathBuilt
     (sub.inherit_start_point || sub.inherit_start_tangent || sub.inherit_start_curvature) &&
@@ -1609,13 +1609,13 @@ function _resolve_bishop_gauge(builts::Vector{SubpathBuilt})
         prev = out[i-1]
         s_prev = Float64(_qc_nominalize(s_end(prev)))
         δp = prev._bishop_gauge_at_s0
-        e1p = normal(prev, s_prev)
-        e2p = binormal(prev, s_prev)
+        e1p = bishop_e1(prev, s_prev)
+        e2p = bishop_e2(prev, s_prev)
         e1p_corr = cos(δp) .* e1p .+ sin(δp) .* e2p
         b = builts[i]
         T0 = tangent(b, 0.0)
-        e10 = normal(b, 0.0)
-        e20 = binormal(b, 0.0)
+        e10 = bishop_e1(b, 0.0)
+        e20 = bishop_e2(b, 0.0)
         ẽ = e1p_corr .- dot(e1p_corr, T0) .* T0
         δ = atan(dot(ẽ, e20), dot(ẽ, e10))
         out[i] = SubpathBuilt(b.subpath, b.placed_segments, b.jumpto_quintic_connector,
@@ -2007,7 +2007,7 @@ function tangent(b::SubpathBuilt, s::Real)
 end
 
 """
-    normal(path, s) -> Vector
+    bishop_e1(path, s) -> Vector
 
 Return the global-frame transverse unit vector `e1` of the parallel-transported
 (Bishop / relatively-parallel) frame of a built `path` at arc length `s`.
@@ -2020,21 +2020,21 @@ static lab-frame convention of [`_initial_frame_from_tangent`](@ref). It is
 **not** the Frenet–Serret normal; the curvature direction is exposed separately
 by [`curvature_vector`](@ref).
 """
-function normal(b::SubpathBuilt, s::Real)
+function bishop_e1(b::SubpathBuilt, s::Real)
     ps, s_local = _find_placed_segment(b, s)
     e1_entry_local = ps.frame' * ps.bishop_e1
     return ps.frame * _parallel_transport_local(ps.segment, e1_entry_local, s_local)
 end
 
 """
-    binormal(path, s) -> Vector
+    bishop_e2(path, s) -> Vector
 
 Return the global-frame transverse unit vector `e2 = T̂ × e1` of the
 parallel-transported (Bishop) frame of a built `path` at arc length `s`. See
-[`normal`](@ref).
+[`bishop_e1`](@ref).
 """
-function binormal(b::SubpathBuilt, s::Real)
-    return cross(tangent(b, s), normal(b, s))
+function bishop_e2(b::SubpathBuilt, s::Real)
+    return cross(tangent(b, s), bishop_e1(b, s))
 end
 
 """
@@ -2045,7 +2045,7 @@ at arc length `s`: magnitude `curvature(path, s)`, direction the local center
 of curvature. Zero on straight regions and continuous through inflections —
 unlike a unit Frenet normal it requires no normalization. The bend
 birefringence axis is the projection of this vector onto the transported frame
-(`normal`/`binormal`).
+(`bishop_e1`/`bishop_e2`).
 """
 function curvature_vector(b::SubpathBuilt, s::Real)
     ps, s_local = _find_placed_segment(b, s)
@@ -2056,19 +2056,19 @@ end
     frame(path, s) -> NamedTuple
 
 Return all differential-geometry quantities of a built `path` at arc length
-`s` as a `NamedTuple`: `position`, `tangent`, `normal`, `binormal` (the
-parallel-transported pair — see [`normal`](@ref)), `curvature_vector`,
+`s` as a `NamedTuple`: `position`, `tangent`, `bishop_e1`, `bishop_e2` (the
+parallel-transported pair — see [`bishop_e1`](@ref)), `curvature_vector`,
 `curvature`, `geometric_torsion`, and `spin_rate`.
 """
 function frame(b::SubpathBuilt, s::Real)
     T = tangent(b, s)
-    N = normal(b, s)
-    Bi = cross(T, N)
+    e1 = bishop_e1(b, s)
+    e2 = cross(T, e1)
     k⃗ = curvature_vector(b, s)
     κ = curvature(b, s)
     τ = geometric_torsion(b, s)
     m = spin_rate(b, s)
-    return (; position = position(b, s), tangent = T, normal = N, binormal = Bi,
+    return (; position = position(b, s), tangent = T, bishop_e1 = e1, bishop_e2 = e2,
               curvature_vector = k⃗, curvature = κ, geometric_torsion = τ,
               spin_rate = m)
 end
@@ -2276,18 +2276,18 @@ end
     Sample
 
 One evaluated point on a path: arc-length coordinate `s` plus all frame
-quantities (position, tangent/normal/binormal, curvature, geometric torsion,
+quantities (position, tangent/bishop_e1/bishop_e2, curvature, geometric torsion,
 spin rate).
 
-`normal`/`binormal` are the parallel-transported (Bishop) pair — continuous
-along the whole path, zero twist about the tangent; see [`normal`](@ref).
+`bishop_e1`/`bishop_e2` are the parallel-transported (Bishop) pair — continuous
+along the whole path, zero twist about the tangent; see [`bishop_e1`](@ref).
 """
 struct Sample
     s                 :: Real
     position          :: AbstractVector
     tangent           :: AbstractVector
-    normal            :: AbstractVector
-    binormal          :: AbstractVector
+    bishop_e1         :: AbstractVector
+    bishop_e2         :: AbstractVector
     curvature         :: Real
     geometric_torsion :: Real
     spin_rate    :: Real
@@ -2430,8 +2430,8 @@ function sample_path(b::SubpathBuilt, s1::Real, s2::Real; fidelity::Float64 = 1.
             all_s[i],
             fr.position,
             fr.tangent,
-            fr.normal,
-            fr.binormal,
+            fr.bishop_e1,
+            fr.bishop_e2,
             fr.curvature,
             fr.geometric_torsion,
             fr.spin_rate,
@@ -2560,7 +2560,7 @@ end
 # Forward all "point-query at s" methods through _find_subpath. `spin_phase`
 # is point-like at the PathBuilt level because each Subpath's `_spin_phi_at_s0`
 # already encodes the cross-Subpath accumulation. `curvature_vector` is
-# gauge-independent and forwards directly; `normal`/`binormal`/`frame` are
+# gauge-independent and forwards directly; `bishop_e1`/`bishop_e2`/`frame` are
 # gauge-aware (below) and apply the Subpath's `_bishop_gauge_at_s0`.
 for f in (:curvature, :geometric_torsion, :spin_rate, :twist_rate, :spin_phase,
           :position, :tangent, :curvature_vector)
@@ -2570,18 +2570,18 @@ for f in (:curvature, :geometric_torsion, :spin_rate, :twist_rate, :spin_phase,
     end
 end
 
-function normal(p::PathBuilt, s::Real)
+function bishop_e1(p::PathBuilt, s::Real)
     sb, s_local = _find_subpath(p, s)
-    e1 = normal(sb, s_local)
-    e2 = binormal(sb, s_local)
+    e1 = bishop_e1(sb, s_local)
+    e2 = bishop_e2(sb, s_local)
     δ = sb._bishop_gauge_at_s0
     return cos(δ) .* e1 .+ sin(δ) .* e2
 end
 
-function binormal(p::PathBuilt, s::Real)
+function bishop_e2(p::PathBuilt, s::Real)
     sb, s_local = _find_subpath(p, s)
-    e1 = normal(sb, s_local)
-    e2 = binormal(sb, s_local)
+    e1 = bishop_e1(sb, s_local)
+    e2 = bishop_e2(sb, s_local)
     δ = sb._bishop_gauge_at_s0
     return cos(δ) .* e2 .- sin(δ) .* e1
 end
@@ -2590,10 +2590,10 @@ function frame(p::PathBuilt, s::Real)
     sb, s_local = _find_subpath(p, s)
     fr = frame(sb, s_local)
     δ = sb._bishop_gauge_at_s0
-    N = cos(δ) .* fr.normal .+ sin(δ) .* fr.binormal
-    Bi = cos(δ) .* fr.binormal .- sin(δ) .* fr.normal
-    return (; position = fr.position, tangent = fr.tangent, normal = N,
-              binormal = Bi, curvature_vector = fr.curvature_vector,
+    e1 = cos(δ) .* fr.bishop_e1 .+ sin(δ) .* fr.bishop_e2
+    e2 = cos(δ) .* fr.bishop_e2 .- sin(δ) .* fr.bishop_e1
+    return (; position = fr.position, tangent = fr.tangent, bishop_e1 = e1,
+              bishop_e2 = e2, curvature_vector = fr.curvature_vector,
               curvature = fr.curvature, geometric_torsion = fr.geometric_torsion,
               spin_rate = fr.spin_rate)
 end
@@ -2736,8 +2736,8 @@ function sample_path(p::PathBuilt, s1::Real, s2::Real; fidelity::Float64 = 1.0)
             all_s[i],
             fr.position,
             fr.tangent,
-            fr.normal,
-            fr.binormal,
+            fr.bishop_e1,
+            fr.bishop_e2,
             fr.curvature,
             fr.geometric_torsion,
             fr.spin_rate,

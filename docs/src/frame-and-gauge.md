@@ -124,7 +124,7 @@ $\varphi$ measured from $e_1$:
 | Mechanical twist | — (circular) | $\Delta\beta_c = g\,\tau_m$ | `twist_generator_K` |
 
 - $\vec k\cdot e_{1,2}$ are `bend_components` (`fiber-path.jl`): the projection
-  of `curvature_vector(path, s)` onto `normal`/`binormal`. The double-angle
+  of `curvature_vector(path, s)` onto `bishop_e1`/`bishop_e2`. The double-angle
   form $(\cos 2\theta_b, \sin 2\theta_b) = ((k_x^2-k_y^2)/k^2,\ 2k_xk_y/k^2)$
   is normalization- and branch-free (`_bend_axis_c2s2`).
 - $\phi_{\mathrm{spin}} = \int_0^s \xi\,ds'$ (`spin_phase`) is the frozen-in
@@ -176,7 +176,7 @@ edits) and a user-supplied vector (API surface for a pure gauge choice) — buy
 nothing physical, because observables are anchor-independent (Section 6). To
 report $J$ on specific laboratory axes, conjugate by the constant rotations
 between $(e_1, e_2)$ and those axes at the two fiber ends — both available from
-`normal`/`binormal` at $s = 0$ and $s = L$.
+`bishop_e1`/`bishop_e2` at $s = 0$ and $s = L$.
 
 ## 8. Subpath boundaries
 
@@ -233,7 +233,7 @@ unit normals, and belongs to the conformity check, not the gauge.
 | --- | --- |
 | Per-segment closed-form transport | `_parallel_transport_local` (straight/bend/catenary/helix), `path-geometry.jl` |
 | Connector discrete transport (double reflection, doi:10.1145/1330511.1330513) | `e1_table` + `_parallel_transport_local(::QuinticConnector, …)`, `path-geometry-connector.jl` |
-| Transported frame queries | `normal`, `binormal`, `frame` |
+| Transported frame queries | `bishop_e1`, `bishop_e2`, `frame` |
 | Curvature vector | `curvature_vector`, `_curvature_vector_local` |
 | Anchor | `_initial_frame_from_tangent` |
 | Subpath gauge continuity | `_resolve_bishop_gauge`, `_bishop_gauge_at_s0` |

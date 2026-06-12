@@ -49,12 +49,12 @@ function _expand(ps::PathGeometry.PathSample)
     tx       = [smpl.tangent[1]           for smpl in ps.samples]
     ty       = [smpl.tangent[2]           for smpl in ps.samples]
     tz       = [smpl.tangent[3]           for smpl in ps.samples]
-    nx       = [smpl.normal[1]            for smpl in ps.samples]
-    ny       = [smpl.normal[2]            for smpl in ps.samples]
-    nz       = [smpl.normal[3]            for smpl in ps.samples]
-    bx       = [smpl.binormal[1]          for smpl in ps.samples]
-    by       = [smpl.binormal[2]          for smpl in ps.samples]
-    bz       = [smpl.binormal[3]          for smpl in ps.samples]
+    nx       = [smpl.bishop_e1[1]         for smpl in ps.samples]
+    ny       = [smpl.bishop_e1[2]         for smpl in ps.samples]
+    nz       = [smpl.bishop_e1[3]         for smpl in ps.samples]
+    bx       = [smpl.bishop_e2[1]         for smpl in ps.samples]
+    by       = [smpl.bishop_e2[2]         for smpl in ps.samples]
+    bz       = [smpl.bishop_e2[3]         for smpl in ps.samples]
     kappa    = [smpl.curvature            for smpl in ps.samples]
     tau_geom = [smpl.geometric_torsion    for smpl in ps.samples]
     tau_spin  = [smpl.spin_rate       for smpl in ps.samples]
@@ -187,7 +187,7 @@ function _collect_segment_labels(path::PathGeometry.SubpathBuilt,
         s_a >= s_b - 1e-15 && continue
         s_mid = (s_a + s_b) / 2
         fr = PathGeometry.frame(path, s_mid)
-        r = collect(fr.position); N = collect(fr.normal)
+        r = collect(fr.position); N = collect(fr.bishop_e1)
         nn = norm(N)
         if nn >= 1e-12
             N ./= nn
@@ -219,7 +219,7 @@ function _collect_segment_labels(path::PathGeometry.PathBuilt,
             s_a >= s_b - 1e-15 && continue
             s_mid = (s_a + s_b) / 2
             fr = PathGeometry.frame(path, s_mid)
-            r = collect(fr.position); N = collect(fr.normal)
+            r = collect(fr.position); N = collect(fr.bishop_e1)
             nn = norm(N)
             if nn >= 1e-12
                 N ./= nn

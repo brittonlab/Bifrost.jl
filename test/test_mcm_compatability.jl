@@ -477,7 +477,7 @@ end
             helix!(sb; radius = 0.03, pitch = 0.01 ± 0.001, turns = 2.0)
         end
         s_mid = 0.5 * Float64(pmean(arc_length(path)))
-        e1 = normal(path, s_mid)
+        e1 = bishop_e1(path, s_mid)
         @test any(c isa Particles && pstd(c) > 0.0 for c in e1)
         bc = FiberPath.bend_components(path, s_mid)
         @test bc.kx isa Particles || bc.ky isa Particles

@@ -66,7 +66,7 @@ if !isdefined(Main, :DEFAULT_T_REF_K)
 end
 
 # Path-backed fibers express birefringence axes in the path's transported
-# (Bishop) frame `(e1, e2) = (normal, binormal)`. The bend axis is the
+# (Bishop) frame `(e1, e2) = (bishop_e1, bishop_e2)`. The bend axis is the
 # projection of the curvature vector k⃗ = dT̂/ds onto that frame, so both
 # transverse components are live: discrete curvature-direction jumps at
 # segment joints (e.g. perpendicular-plane corners) land on existing
@@ -75,8 +75,8 @@ end
 # `Particles` propagate.
 function bend_components(path::Union{SubpathBuilt, PathBuilt}, s::Real)
     k⃗ = curvature_vector(path, s)
-    e1 = normal(path, s)
-    e2 = binormal(path, s)
+    e1 = bishop_e1(path, s)
+    e2 = bishop_e2(path, s)
     kx = k⃗[1] * e1[1] + k⃗[2] * e1[2] + k⃗[3] * e1[3]
     ky = k⃗[1] * e2[1] + k⃗[2] * e2[2] + k⃗[3] * e2[3]
     return (kx = kx, ky = ky, k2 = kx * kx + ky * ky)

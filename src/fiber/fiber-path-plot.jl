@@ -399,24 +399,24 @@ module PlotRuntime
             tx = [Float64(fr.tangent[1]) for fr in frames]
             ty = [Float64(fr.tangent[2]) for fr in frames]
             tz = [Float64(fr.tangent[3]) for fr in frames]
-            nx = [Float64(fr.normal[1]) for fr in frames]
-            ny = [Float64(fr.normal[2]) for fr in frames]
-            nz = [Float64(fr.normal[3]) for fr in frames]
-            bx = [Float64(fr.binormal[1]) for fr in frames]
-            by = [Float64(fr.binormal[2]) for fr in frames]
-            bz = [Float64(fr.binormal[3]) for fr in frames]
+            nx = [Float64(fr.bishop_e1[1]) for fr in frames]
+            ny = [Float64(fr.bishop_e1[2]) for fr in frames]
+            nz = [Float64(fr.bishop_e1[3]) for fr in frames]
+            bx = [Float64(fr.bishop_e2[1]) for fr in frames]
+            by = [Float64(fr.bishop_e2[2]) for fr in frames]
+            bz = [Float64(fr.bishop_e2[3]) for fr in frames]
             e1x = copy(nx)
             e1y = copy(ny)
             e1z = copy(nz)
             e2x = copy(bx)
             e2y = copy(by)
             e2z = copy(bz)
-            kx = [Float64(fr.curvature_vector[1] * fr.normal[1] +
-                          fr.curvature_vector[2] * fr.normal[2] +
-                          fr.curvature_vector[3] * fr.normal[3]) for fr in frames]
-            ky = [Float64(fr.curvature_vector[1] * fr.binormal[1] +
-                          fr.curvature_vector[2] * fr.binormal[2] +
-                          fr.curvature_vector[3] * fr.binormal[3]) for fr in frames]
+            kx = [Float64(fr.curvature_vector[1] * fr.bishop_e1[1] +
+                          fr.curvature_vector[2] * fr.bishop_e1[2] +
+                          fr.curvature_vector[3] * fr.bishop_e1[3]) for fr in frames]
+            ky = [Float64(fr.curvature_vector[1] * fr.bishop_e2[1] +
+                          fr.curvature_vector[2] * fr.bishop_e2[2] +
+                          fr.curvature_vector[3] * fr.bishop_e2[3]) for fr in frames]
             k2 = [kx[i]^2 + ky[i]^2 for i in eachindex(kx)]
             Rb = [k2[i] == 0.0 ? Inf : inv(sqrt(k2[i])) for i in eachindex(k2)]
             theta_b = [atan(ky[i], kx[i]) for i in eachindex(kx)]
