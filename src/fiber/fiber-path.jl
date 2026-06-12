@@ -15,8 +15,8 @@ High-level authoring happens in `path-geometry.jl`:
 It owns:
 - the immutable built `SubpathBuilt` or `PathBuilt`
 - the `FiberCrossSection`
-- a single reference temperature `T_ref_K` (reference for path geometry and
-  cross-section dimensions)
+- a single deterministic reference temperature `T_ref_K` (reference for path
+  geometry and cross-section dimensions)
 - the fiber domain `[s_start, s_end]` — a `SubpathBuilt`'s domain starts at
   0 and runs to `arc_length(path)`
 
@@ -86,11 +86,23 @@ struct Fiber{P,T,S}
     s_end::S
 end
 
+_is_mcm_particles(::Particles) = true
+_is_mcm_particles(::StaticParticles) = true
+_is_mcm_particles(_) = false
+
+function _validate_T_ref_K(T_ref_K)
+    _is_mcm_particles(T_ref_K) && throw(ArgumentError(
+        "Fiber: T_ref_K must be deterministic; put MCM temperature uncertainty " *
+        "on segment meta as MCMadd(:T_K, ΔT_K) instead."))
+    return T_ref_K
+end
+
 function Fiber(
     path::Union{SubpathBuilt, PathBuilt};
     cross_section::FiberCrossSection,
     T_ref_K = DEFAULT_T_REF_K,
 )
+    T_ref_K = _validate_T_ref_K(T_ref_K)
     s_start_val = 0.0
     s_end_val   = Float64(_qc_nominalize(arc_length(path)))
     s_start, s_end = promote(s_start_val, s_end_val)
@@ -185,7 +197,11 @@ end
 # material `cte`/`youngs_modulus` lookups are gated behind the presence of the
 # corresponding meta so a plain fiber on a cladding with neither defined still
 # builds. Returns the resolved Subpath and that target length (or `nothing`).
-function _resolve_thermal_and_tension(sub::Subpath, cross_section::FiberCrossSection, T_ref_K)
+function _resolve_thermal_and_tension(
+    sub::Subpath,
+    cross_section::FiberCrossSection,
+    T_ref_K,
+)
     _validate_seal_meta(sub)   # reject unsupported MCM on the terminal connector
     seal_ΔT     = _seal_delta_T(sub)
     seal_F      = _seal_tension(sub)
@@ -300,24 +316,31 @@ and tension length scalings compose multiplicatively. A terminal `jumpto!` carry
 `:tension` elongates the connector the same way. The `:tension` meta is left on the
 segment for on-demand recovery, as `:T_K` is.
 """
-Fiber(spec::SubpathBuilder; cross_section::FiberCrossSection, T_ref_K = DEFAULT_T_REF_K) =
-    Fiber(Subpath(spec); cross_section = cross_section, T_ref_K = T_ref_K)
+function Fiber(spec::SubpathBuilder; cross_section::FiberCrossSection,
+               T_ref_K = DEFAULT_T_REF_K)
+    T_ref_K = _validate_T_ref_K(T_ref_K)
+    return Fiber(Subpath(spec); cross_section = cross_section, T_ref_K = T_ref_K)
+end
 
 function Fiber(spec::Subpath; cross_section::FiberCrossSection, T_ref_K = DEFAULT_T_REF_K)
+    T_ref_K = _validate_T_ref_K(T_ref_K)
     built = _build_perturbed(spec, cross_section, T_ref_K)
     return Fiber(built; cross_section = cross_section, T_ref_K = T_ref_K)
 end
 
 function Fiber(spec::Vector{Subpath}; cross_section::FiberCrossSection,
                T_ref_K = DEFAULT_T_REF_K)
+    T_ref_K = _validate_T_ref_K(T_ref_K)
     built = _build_perturbed(spec, cross_section, T_ref_K)
     return Fiber(built; cross_section = cross_section, T_ref_K = T_ref_K)
 end
 
-Fiber(spec::Vector{SubpathBuilder}; cross_section::FiberCrossSection,
-      T_ref_K = DEFAULT_T_REF_K) =
-    Fiber(Subpath[Subpath(b) for b in spec];
-          cross_section = cross_section, T_ref_K = T_ref_K)
+function Fiber(spec::Vector{SubpathBuilder}; cross_section::FiberCrossSection,
+               T_ref_K = DEFAULT_T_REF_K)
+    T_ref_K = _validate_T_ref_K(T_ref_K)
+    return Fiber(Subpath[Subpath(b) for b in spec];
+                 cross_section = cross_section, T_ref_K = T_ref_K)
+end
 
 fiber_path(f::Fiber) = f.path
 

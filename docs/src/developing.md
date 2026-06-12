@@ -118,9 +118,8 @@ is the contract for keeping it that way.
 
 `Particles` may arrive on these inputs:
 
-- temperature: the user sets it through the thermal `:T_K` segment annotation (and
-  the baseline `T_ref_K`); `temperature(f, s)` resolves these to the internal `T_K`
-  slot that the cross-section and material layers consume, so that slot must lift too,
+- temperature: the user sets uncertainty through the thermal `:T_K` segment
+  annotation; `T_ref_K` is a deterministic baseline. 
 
 - bend, twist, tension, and axis-ratio properties,
 - segment shrinkage and field-level `MCMadd`/`MCMmul` perturbations,
@@ -180,4 +179,3 @@ Conventions:
 - under unsafe comparisons, structural invariants ("breakpoints are sorted and
   deduplicated") reduce via `pmean` rather than failing;
 - compare `pmean` of a `Particles` result against the nominal `Float64` baseline.
-
