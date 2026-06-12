@@ -36,14 +36,18 @@ cte_value = cte(glass, T_K)
 #
 #################################################
 
+# Germania enters as a molar fraction over the physical interval [0, 1].
+const GERMANIA_FRACTION_RANGE = ValidityRange(0.0, 1.0, "germania molar fraction")
+
 struct SilicaGermaniaGlass <: AbstractMaterial
     x_ge::Float64
-    
-    function SilicaGermaniaGlass(x_ge::Real)
-        xf = validate_molar_fraction(x_ge)
-        return new(xf)
-    end
+
+    SilicaGermaniaGlass(x_ge::Real) =
+        new(check_range(Float64(x_ge), GERMANIA_FRACTION_RANGE))
 end
+
+# A silica-germania mixture is valid over silica's runtime window.
+runtime_ranges(::SilicaGermaniaGlass) = runtime_ranges(PURE_SILICA)
 
 #################################################
 #
@@ -52,12 +56,14 @@ end
 #################################################
 
 function refractive_index(::ValueOnly, glass::SilicaGermaniaGlass, λ, T_K)
+    check_range((; T_K, λ), runtime_ranges(glass))
     n_silica = refractive_index(ValueOnly(), PURE_SILICA, λ, T_K)
     n_germania = refractive_index(ValueOnly(), PURE_GERMANIA, λ, T_K)
     return interpolate_scalar(n_silica, n_germania, glass.x_ge)
 end
 
 function refractive_index(::WithDerivative, glass::SilicaGermaniaGlass, λ, T_K)
+    check_range((; T_K, λ), runtime_ranges(glass))
     n_silica = refractive_index(WithDerivative(), PURE_SILICA, λ, T_K)
     n_germania = refractive_index(WithDerivative(), PURE_GERMANIA, λ, T_K)
     return SpectralResponse(

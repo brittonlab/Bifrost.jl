@@ -37,14 +37,19 @@ const _FLUORINE_SELLMEIER_C_CORRECTION_COEFFS = (
     (0.0, -24.695, 1090.5)
 )
 
+# Fluorine enters as a molar fraction over the physical interval [0, 1], matching the
+# binary-glass coefficient source's fraction validation.
+const FLUORINE_MOLAR_FRACTION_RANGE = ValidityRange(0.0, 1.0, "fluorine molar fraction")
+
 struct SilicaFluorinatedGlass <: AbstractMaterial
     x_f::Float64
 
-    function SilicaFluorinatedGlass(x_f::Real)
-        xf = validate_molar_fraction(x_f)
-        return new(xf)
-    end
+    SilicaFluorinatedGlass(x_f::Real) =
+        new(check_range(Float64(x_f), FLUORINE_MOLAR_FRACTION_RANGE))
 end
+
+# Fluorine doping does not shift the validity window inherited from pure silica.
+runtime_ranges(::SilicaFluorinatedGlass) = runtime_ranges(PURE_SILICA)
 
 function _sellmeier_coefficients(glass::SilicaFluorinatedGlass, T_K)
     silica_coeffs = _sellmeier_coefficients(PURE_SILICA, T_K)
@@ -60,10 +65,12 @@ function _sellmeier_coefficients(glass::SilicaFluorinatedGlass, T_K)
 end
 
 function refractive_index(::ValueOnly, material::SilicaFluorinatedGlass, λ, T_K)
+    check_range((; T_K, λ), runtime_ranges(material))
     return sellmeier_index_from_coefficients(_sellmeier_coefficients(material, T_K), λ)
 end
 
 function refractive_index(::WithDerivative, material::SilicaFluorinatedGlass, λ, T_K)
+    check_range((; T_K, λ), runtime_ranges(material))
     return sellmeier_index_from_coefficients_dω(_sellmeier_coefficients(material, T_K), λ)
 end
 

@@ -372,7 +372,8 @@ is_single_mode(fiber::StepIndexCrossSection, λ, T_K) =
 """
     cutoff_wavelength(fiber, T_K; λ_min, λ_max, atol, maxiter)
 
-Bisect for the LP11 cutoff wavelength.
+Bisect for the LP11 cutoff wavelength. The search bracket `[λ_min, λ_max]` defaults to the
+core material's wavelength validity window (`runtime_ranges(fiber.core_material).λ`).
 
 !!! note "MCM compatibility"
     `T_K` must be a scalar (not `Particles`). The bisection's `signbit` branching is
@@ -382,8 +383,8 @@ Bisect for the LP11 cutoff wavelength.
 function cutoff_wavelength(
     fiber::StepIndexCrossSection,
     T_K;
-    λ_min::Real = MIN_VALID_WAVELENGTH_M,
-    λ_max::Real = MAX_VALID_WAVELENGTH_M,
+    λ_min::Real = runtime_ranges(fiber.core_material).λ.lo,
+    λ_max::Real = runtime_ranges(fiber.core_material).λ.hi,
     atol::Real = 1e-12,
     maxiter::Integer = 200
 )
