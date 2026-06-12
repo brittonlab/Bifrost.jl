@@ -1,11 +1,18 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "bifrost"
-version = "0.1.0"
-description = "Repo-local Python shim for driving BIFROST (a Julia birefringence simulator) via juliacall. Not a distributable Python package."
-readme = "README.md"
+version = "1.0.0"
+description = "Polarization simulation in optical fibers"
 requires-python = ">=3.10"
 dependencies = [
     "juliacall>=0.9.34",
     "matplotlib>=3.8",
-    "numpy>=1.26",
+    "numpy>=2.0",
 ]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["bifrost_py"]
