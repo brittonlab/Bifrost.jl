@@ -83,14 +83,9 @@ From the repository root, run the test suite:
 julia --project=. test/runtests.jl
 ```
 
-Run the smallest end-to-end example:
-
-```bash
-julia --project=. test/human/demo-smallest.jl
-```
-
-Human-inspected demos live under `test/human/` and write standalone HTML
-artifacts under `output/`.
+Human-inspected visual demos live in the notebook
+`test/human/bifrost-demos.ipynb` (its §1 is the smallest end-to-end example); the
+notebook activates the environment pinned by `test/human/Project.toml`.
 
 ## Documentation
 

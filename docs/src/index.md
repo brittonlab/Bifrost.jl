@@ -68,7 +68,8 @@ dgd = output_dgd(J, G)   # use output_dgd_2x2(J, G) on MonteCarloMeasurements pa
 ```
 
 See [Examples](@ref) for the full Julia and Python walkthroughs, [Usage](@ref) for the
-authoring model, and `test/human/demo-smallest.jl` for the smallest runnable example.
+authoring model, and §1 of `test/human/bifrost-demos.ipynb` for the smallest runnable
+example.
 Installation instructions live in the project `README.md`.
 
 ## Regime of Operation

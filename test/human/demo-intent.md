@@ -269,11 +269,10 @@ table (§V8). Lessons: the ensemble overhead of MCM relative to Float64;
 `StaticParticles` SIMD sweet spot at small N; JIT cost vs marginal cost. Numbers are
 environment-dependent — the demo is informational, never asserted.
 
-Notebook scaling: the cells are guarded by a `RUN_BENCHMARKS` flag (default `false`)
-so casual runs skip them; the stored outputs come from one real run with
-`Particles(500)` standing in for the legacy `Particles(2000)` and a single warm
-timing instead of BenchmarkTools' repeated minimum (the legacy methodology, noted in
-the cell, takes hours on modest hardware).
+Notebook scaling: the benchmark fiber keeps the 5-segment structure but scales the
+helices down to 1000 turns (the legacy ~10000-turn, mid-fringe-tuned fiber exists for
+sensitivity, which is irrelevant to a speed comparison), making BenchmarkTools
+tractable; a note in the cell records the reduction.
 
 ## Legacy orchestration (replaced by notebook structure)
 

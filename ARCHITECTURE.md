@@ -36,7 +36,8 @@ This is a high-level schematic. Do not update it to reflect every file.
 - [12] Cross-sectional fiber optics and local birefringence responses.
 - [13] Path-backed fiber assembly and generator construction.
 - [14] 3D geometry and propagation visualization pipeline.
-- [15] Runnable Julia demos; visual demos write HTML files to `output/`.
+- [15] Runnable Julia demos: `bifrost-demos.ipynb` (inline visual demos),
+  `demo-helper.jl` (its plotting layer), and `demo-intent.md` (demo narratives).
 - [16] Reserved Julia nonlinear namespace; legacy Raman and Brillouin Python
   scripts remain under `test/legacy-python/`.
 - [19] Julia tests.
@@ -147,7 +148,7 @@ The fiber-specific layers combine those pieces:
      discontinuities.
    - Uses phase-insensitive error metrics for Jones propagation.
 
-5. **Presentation layer** (`fiber-path-plot.jl`, `demo*.jl`)
+5. **Presentation layer** (`fiber-path-plot.jl`, `test/human/bifrost-demos.ipynb`)
 
    - Generates visual diagnostics and runnable examples.
    - Keeps visual demos as human-inspected outputs rather than reusable library
@@ -155,7 +156,7 @@ The fiber-specific layers combine those pieces:
 
 ## Runtime Flow
 
-0. See `test/human/demo-smallest.jl` for the smallest runnable example.
+0. See §1 of `test/human/bifrost-demos.ipynb` for the smallest runnable example.
 1. Build a `SubpathBuilder` with path primitives and optional metadata
    (`start!` → segment calls → `jumpto!` or `seal!`).
 2. Bind it into `Fiber(builder; cross_section, T_ref_K)` — the constructor
