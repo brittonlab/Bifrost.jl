@@ -42,15 +42,17 @@ Lesson: the full layer stack in ~10 lines. The bend's fixed-axis birefringence m
 
 ### 1.1 · Smallest MCM example
 
-Same geometry; the only change is an uncertain operating temperature:
+Same geometry; the only change is an uncertain operating wavelength:
 
 ```julia
-fiber = Fiber(build(sb); cross_section = xs, T_ref_K = 297.15 ± 2.0)
-J_p, _ = propagate_fiber(fiber; λ_m = 1550e-9)   # entries are Particles
+fiber = Fiber(build(sb); cross_section = xs, T_ref_K = 297.15)
+J_p, _ = propagate_fiber(fiber; λ_m = 1550e-9 ± 50e-9)   # entries are Particles
 ```
 
 Lesson: one uncertain input is all it takes — the whole ensemble propagates in one
-call and `J_p`'s entries display as mean ± std. MCM blocks wrap in
+call and `J_p`'s entries display as mean ± std. `T_ref_K` stays a deterministic
+baseline (the `Fiber` constructor rejects `Particles` there); temperature
+uncertainty enters as `MCMadd(:T_K, ΔT)` segment meta instead. MCM blocks wrap in
 `unsafe_comparisons(true)`; ensembles are seeded for notebook reproducibility.
 
 ## §2 — Path geometry (geometry layer only, no optics)
@@ -281,11 +283,11 @@ Fiber(sb; cross_section = MCM_DEMO_XS, T_ref_K = 303.15)
 ```
 
 Physics: bend birefringence ∝ 1/R²; at R = 2.5 cm the first helix accumulates
-|Δβ|·L ≈ 1775·2π rad. The fractional turn count puts 30 °C exactly at mid-fringe
-(mod(Γ, 2π) = π), the point of maximum dPTF/dT. Temperature enters twice —
-`MCMadd(:T_K, ΔT_K)` geometry meta (thermal expansion via the cladding CTE, baked in
-by `Fiber`) and `T_ref_K = T_K_particles` on the final binding (material indices).
-Per-particle Jones matrices are sliced into Stokes observables for input state H
+|Δβ|·L ≈ 886·2π rad. Temperature uncertainty enters as `MCMadd(:T_K, ΔT_K)` geometry
+meta (`T_ref_K` is deterministic by contract; the `Fiber` constructor rejects
+`Particles` there). The operating point and turn count are sized so the ensemble's
+retardation deviations reach ≥ π/4 over T = 30 °C ± 5 °C. Per-particle Jones
+matrices are sliced into Stokes observables for input state H
 (`dh_stokes_ensemble`).
 
 - **9.1 ptf** — `T_C = StaticParticles(50, Normal(30, 5))`; legacy two-panel format
