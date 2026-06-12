@@ -23,8 +23,8 @@ n = refractive_index(glass, λ, T_K)
 cte_value = cte(glass, T_K)
 """
 
-# Caution: the validity range is an estimate.
-const GERMANIA_FRACTION_RANGE = ValidRange(0.00, 0.05, "germania molar fraction")
+# Caution: the validity range is an estimate; proper ranges tracked in issue #4.
+const GERMANIA_FRACTION_RANGE = ValidRange(0.0, 0.05, "germania molar fraction")
 
 struct SilicaGermaniaGlass <: AbstractMaterial
     x_ge::Float64
@@ -42,14 +42,14 @@ runtime_range(::SilicaGermaniaGlass) = runtime_range((SiO2(), GeO2()))
 #################################################
 
 function refractive_index(::ValueOnly, glass::SilicaGermaniaGlass, λ, T_K)
-    _check_range((; T_K, λ), (SILICA_VALIDITY, GERMANIA_VALIDITY))
+    _check_range((; T_K, λ), runtime_range(glass))
     n_silica = refractive_index(ValueOnly(), SiO2(), λ, T_K)
     n_germania = refractive_index(ValueOnly(), GeO2(), λ, T_K)
     return _interpolate_scalar(n_silica, n_germania, glass.x_ge)
 end
 
 function refractive_index(::WithDerivative, glass::SilicaGermaniaGlass, λ, T_K)
-    _check_range((; T_K, λ), (SILICA_VALIDITY, GERMANIA_VALIDITY))
+    _check_range((; T_K, λ), runtime_range(glass))
     n_silica = refractive_index(WithDerivative(), SiO2(), λ, T_K)
     n_germania = refractive_index(WithDerivative(), GeO2(), λ, T_K)
     return SpectralResponse(

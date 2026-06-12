@@ -106,15 +106,17 @@ function finite_difference_dω(f, λ_meters; dλ = 1e-12)
 end
 
 @testset "Constructors and Sellmeier internals" begin
+    # Both dopant fractions are validated over the narrow estimated window
+    # [0, 0.05] (proper ranges tracked in issue #4).
     @test SilicaGermaniaGlass(0.0).x_ge == 0.0
-    @test SilicaGermaniaGlass(1.0).x_ge == 1.0
+    @test SilicaGermaniaGlass(0.05).x_ge == 0.05
     @test SilicaFluorinatedGlass(0.0).x_f == 0.0
-    @test SilicaFluorinatedGlass(1.0).x_f == 1.0
+    @test SilicaFluorinatedGlass(0.05).x_f == 0.05
 
     @test_throws ArgumentError SilicaGermaniaGlass(-1e-6)
-    @test_throws ArgumentError SilicaGermaniaGlass(1.000001)
+    @test_throws ArgumentError SilicaGermaniaGlass(0.050001)
     @test_throws ArgumentError SilicaFluorinatedGlass(-1e-6)
-    @test_throws ArgumentError SilicaFluorinatedGlass(1.000001)
+    @test_throws ArgumentError SilicaFluorinatedGlass(0.050001)
 
     exported_names = Set(names(MP))
     old_sellmeier_helpers = (
@@ -194,23 +196,18 @@ end
     λ = 1550e-9
     T = 297.15
 
+    # x_ge = 0 reproduces pure silica exactly. The x_ge = 1 pure-germania
+    # endpoint lies outside the estimated [0, 0.05] validity window (issue #4),
+    # so the GeO2() endpoint is not exercised here.
     pure_silica_glass = SilicaGermaniaGlass(0.0)
-    pure_germania_glass = SilicaGermaniaGlass(1.0)
     @test refractive_index(pure_silica_glass, λ, T) == refractive_index(SiO2(), λ, T)
-    @test refractive_index(pure_germania_glass, λ, T) == refractive_index(GeO2(), λ, T)
     @test cte(pure_silica_glass, T) == cte(SiO2(), T)
-    @test cte(pure_germania_glass, T) == cte(GeO2(), T)
     @test softening_temperature(pure_silica_glass, T) == softening_temperature(SiO2(), T)
-    @test softening_temperature(pure_germania_glass, T) == softening_temperature(GeO2(), T)
     @test poisson_ratio(pure_silica_glass, T) == poisson_ratio(SiO2(), T)
-    @test poisson_ratio(pure_germania_glass, T) == poisson_ratio(GeO2(), T)
     @test photoelastic_constants(pure_silica_glass, T) == photoelastic_constants(SiO2(), T)
-    @test photoelastic_constants(pure_germania_glass, T) ==
-          photoelastic_constants(GeO2(), T)
     @test youngs_modulus(pure_silica_glass, T) == youngs_modulus(SiO2(), T)
-    @test youngs_modulus(pure_germania_glass, T) == youngs_modulus(GeO2(), T)
 
-    for x in (0.036, 0.25)
+    for x in (0.036, 0.05)
         glass = SilicaGermaniaGlass(x)
         n_expected = reference_scalar_mix(
             reference_silica_index(λ, T),
@@ -239,7 +236,7 @@ end
 
     glass0 = SilicaGermaniaGlass(0.0)
     glass_small = SilicaGermaniaGlass(0.036)
-    glass_large = SilicaGermaniaGlass(1.0)
+    glass_large = SilicaGermaniaGlass(0.05)
     @test refractive_index(glass_small, λ, T) > refractive_index(glass0, λ, T)
     @test cte(glass0, T) < cte(glass_small, T) < cte(glass_large, T)
     @test poisson_ratio(glass0, T) <
@@ -325,18 +322,18 @@ end
 @testset "Validity range primitives" begin
     # T-GUARDRAIL: a range checks one value, returning it in range and throwing outside.
     r = ValidRange(1.0, 2.0, "demo")
-    @test _check_range(1.5, r) == 1.5
-    @test _check_range(1.0, r) == 1.0      # closed lower bound
-    @test _check_range(2.0, r) == 2.0      # closed upper bound
-    @test_throws ArgumentError _check_range(0.999, r)
-    @test_throws ArgumentError _check_range(2.001, r)
-    @test_throws ArgumentError _check_range(NaN, r)
-    @test_throws ArgumentError _check_range(Inf, r)
+    @test MP._check_range(1.5, r) == 1.5
+    @test MP._check_range(1.0, r) == 1.0      # closed lower bound
+    @test MP._check_range(2.0, r) == 2.0      # closed upper bound
+    @test_throws ArgumentError MP._check_range(0.999, r)
+    @test_throws ArgumentError MP._check_range(2.001, r)
+    @test_throws ArgumentError MP._check_range(NaN, r)
+    @test_throws ArgumentError MP._check_range(Inf, r)
 
     # T-GUARDRAIL: the NamedTuple method validates each value against its keyed range.
     ranges = (a = ValidRange(0.0, 1.0, "a"), b = ValidRange(10.0, 20.0, "b"))
-    @test _check_range((a = 0.5, b = 15.0), ranges) === nothing
-    @test_throws ArgumentError _check_range((a = 0.5, b = 25.0), ranges)
+    @test MP._check_range((a = 0.5, b = 15.0), ranges) === nothing
+    @test_throws ArgumentError MP._check_range((a = 0.5, b = 25.0), ranges)
 
     # T-GUARDRAIL: declared runtime windows carry the documented bounds.
     for m in (SiO2(), GeO2(), SilicaGermaniaGlass(0.036), SilicaFluorinatedGlass(0.01))
