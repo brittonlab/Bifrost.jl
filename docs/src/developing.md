@@ -54,9 +54,10 @@ The rendered site is written to `docs/build/` (open `docs/build/index.html`).
 
 ## Extending Bifrost
 
-The package is layered with strictly hierarchical dependencies - material ≤ cross section ≤ fiber, geometry ≤ fiber — with the
-propagation layer consuming callable generators. `ARCHITECTURE.md` (Layered Design)
-maps the layers to files. Each extension point below names the layer it belongs to.
+The package is layered with strictly hierarchical dependencies —
+material ≤ cross section ≤ fiber, geometry ≤ fiber — with the propagation layer
+consuming callable generators. `ARCHITECTURE.md` (Layered Design) maps the layers to
+files. Each extension point below names the layer it belongs to.
 Whatever you add, write code that satisfies the
 [MCM compatibility](@ref mcm-compatibility) contract from the start: retrofitting
 `Particles` support is much harder than designing for it.
@@ -131,9 +132,11 @@ The files on those paths — all of `src/material/`, `src/fiber-cross-section/`,
 
 ### The rules
 
-1. **No annotations or coercions that exclude `Particles`.** Leave uncertain-input
-   slots unannotated where possible. This is because `Particles <: Real` (but not `<: AbstractFloat`). Use of  `::Float64` or `::AbstractFloat` silently
-   excludes the ensemble and degrade performance. Never coerce with `Float64(·)` on a path that may carry  `Particles`: promotion does the right thing, coercion destroys the ensemble.
+1. **No annotations or coercions that exclude `Particles`.** `Particles <: Real`
+   but not `<: AbstractFloat`, so `::Float64` or `::AbstractFloat` on an
+   uncertain-input slot silently excludes the ensemble. Leave those slots
+   unannotated. Never coerce with `Float64(·)` on a path that may carry
+   `Particles`: promotion does the right thing, coercion destroys the ensemble.
 2. **No per-particle branching.** A conditional on a `Particles` value is an error
    (which branch would the ensemble take?). Either write branch-free code (`sign`,
    `flipsign`, `clamp`, elementwise arithmetic), or reduce to a representative scalar

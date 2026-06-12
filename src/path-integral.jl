@@ -58,6 +58,7 @@ Return `sinh(μ) / μ` using a Taylor expansion near zero.
 function sinhc(μ)
     # The small-μ branch uses the Taylor series; large-μ uses the analytic ratio.
     # Under MCM we cannot branch per-particle, so we reduce |μ| to a scalar first.
+    # Elementwise arithmetic in both branches lifts through Particles automatically.
     if scalar_reduce(abs(μ)) < 1e-8
         μ2 = μ * μ
         return 1 + μ2 / 6 + μ2 * μ2 / 120 + μ2 * μ2 * μ2 / 5040
