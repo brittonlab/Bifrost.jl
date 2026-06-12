@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Bifrost.jl — birefringent fiber cross section with fast and slow axes</title>
+  <circle cx="256" cy="256" r="190" fill="#E8ECFA" stroke="#4063D8" stroke-width="14"/>
+  <line x1="118" y1="256" x2="394" y2="256" stroke="#CB3C33" stroke-width="12"
+        stroke-linecap="round" stroke-dasharray="2 26"/>
+  <line x1="256" y1="118" x2="256" y2="394" stroke="#389826" stroke-width="12"
+        stroke-linecap="round" stroke-dasharray="2 26"/>
+  <ellipse cx="256" cy="256" rx="84" ry="64" fill="#9558B2" stroke="#7A4496"
+           stroke-width="10"/>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Bifrost.jl — Julia dots threaded by a fiber</title>
+  <path d="M 72 436 C 130 420 116 220 256 172 C 396 124 380 320 440 436"
+        fill="none" stroke="#4063D8" stroke-width="20" stroke-linecap="round"/>
+  <circle cx="160" cy="330" r="58" fill="#CB3C33" stroke="#A52A22" stroke-width="8"/>
+  <circle cx="256" cy="172" r="58" fill="#389826" stroke="#2C7A1E" stroke-width="8"/>
+  <circle cx="352" cy="330" r="58" fill="#9558B2" stroke="#7A4496" stroke-width="8"/>
+</svg>

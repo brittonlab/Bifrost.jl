@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Bifrost.jl — bent fiber guiding three polarization strands</title>
+  <path d="M 64 428 C 256 428 256 84 448 84" fill="none" stroke="#4063D8"
+        stroke-opacity="0.22" stroke-width="62" stroke-linecap="round"/>
+  <path d="M 64 412 C 256 412 256 68 448 68" fill="none" stroke="#CB3C33"
+        stroke-width="12" stroke-linecap="round"/>
+  <path d="M 64 428 C 256 428 256 84 448 84" fill="none" stroke="#389826"
+        stroke-width="12" stroke-linecap="round"/>
+  <path d="M 64 444 C 256 444 256 100 448 100" fill="none" stroke="#9558B2"
+        stroke-width="12" stroke-linecap="round"/>
+</svg>

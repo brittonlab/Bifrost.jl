@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Bifrost.jl — letter B stroked with the Julia color spectrum</title>
+  <defs>
+    <linearGradient id="julia-spectrum" gradientUnits="userSpaceOnUse"
+                    x1="150" y1="96" x2="400" y2="416">
+      <stop offset="0" stop-color="#CB3C33"/>
+      <stop offset="0.35" stop-color="#389826"/>
+      <stop offset="0.7" stop-color="#9558B2"/>
+      <stop offset="1" stop-color="#4063D8"/>
+    </linearGradient>
+  </defs>
+  <path d="M 180 96 L 180 416 M 180 96 H 268 A 80 80 0 0 1 268 256 H 180
+           M 180 256 H 288 A 80 80 0 0 1 288 416 H 180"
+        fill="none" stroke="url(#julia-spectrum)" stroke-width="40"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

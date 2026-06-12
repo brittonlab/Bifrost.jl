@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Bifrost.jl — rainbow bridge built from Julia-colored dots</title>
+  <circle cx="76"  cy="420" r="17" fill="#CB3C33"/>
+  <circle cx="82"  cy="373" r="17" fill="#389826"/>
+  <circle cx="100" cy="330" r="17" fill="#9558B2"/>
+  <circle cx="129" cy="293" r="17" fill="#4063D8"/>
+  <circle cx="166" cy="264" r="17" fill="#CB3C33"/>
+  <circle cx="209" cy="246" r="17" fill="#389826"/>
+  <circle cx="256" cy="240" r="17" fill="#9558B2"/>
+  <circle cx="303" cy="246" r="17" fill="#4063D8"/>
+  <circle cx="346" cy="264" r="17" fill="#CB3C33"/>
+  <circle cx="383" cy="293" r="17" fill="#389826"/>
+  <circle cx="412" cy="330" r="17" fill="#9558B2"/>
+  <circle cx="430" cy="373" r="17" fill="#4063D8"/>
+  <circle cx="436" cy="420" r="17" fill="#CB3C33"/>
+</svg>
