@@ -1,3 +1,6 @@
+[sources]
+Bifrost = {path = "../.."}
+
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Bifrost = "94b252b5-e259-4c09-a257-2d20bce7d594"
