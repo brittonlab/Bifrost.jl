@@ -96,7 +96,7 @@ function _mcm_demo_fiber(ΔT_K)
     helix!(spec; radius = 0.025, pitch = 0.05, turns = 10000.0,
            axis_angle = 0.0, meta = [Nickname("reference helix")])
     straight!(spec; length = 5.0, meta = [Nickname("lead-out")])
-    seal!(spec)
+    # Fiber(::_PathSequence) seals the trailing Subpath itself; no explicit seal!.
     # Fiber(builder) applies the :T_K thermal scaling (via the cladding CTE at
     # T_ref) during the single build; no separate modify step.
     return Fiber(spec; cross_section = _MCM_DEMO_XS, T_ref_K = _MCM_DEMO_T_REF_K)
