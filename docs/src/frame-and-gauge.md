@@ -111,38 +111,67 @@ diagnostic `geometric_torsion`/`total_torsion`, with no optical role.
 
 ## 5. The birefringence sources in this gauge
 
-With the gauge fixed, each mechanism enters $K$ as a linear retarder
-$\tfrac{i}{2}\Delta\beta\,(\cos 2\varphi\,\sigma_3 + \sin 2\varphi\,\sigma_1)$
-or a circular rotator $\tfrac{1}{2}\Delta\beta_c\,(-i\sigma_2)$, with axis
-$\varphi$ measured from $e_1$:
+With the gauge fixed, optical generators come only from **material
+anisotropy**. A scalar phase such as `spin_phase` or `twist_phase` may rotate
+the axes used by a linear-retarder generator, but it is not itself a
+birefringence generator. The two are kept in separate tables below to make the
+taxonomy explicit.
 
-| Source | Axis $\varphi(s)$ | Magnitude | Code |
+Linear retarders enter the generator as
+
+```math
+K_\ell = \frac{i}{2}\,\Delta\beta_\ell
+\left(\cos 2\varphi\,\sigma_3 + \sin 2\varphi\,\sigma_1\right),
+```
+
+and circular birefringence as
+
+```math
+K_c = \frac{1}{2}\,\Delta\beta_c\,(-i\sigma_2).
+```
+
+All linear-retarder axes $\varphi$ are measured from the transported Bishop
+leg $e_1(s)$.
+
+**Generators (birefringence mechanisms):**
+
+| Mechanism | Generator type | Axis used in generator | Magnitude | Code |
+| --- | --- | --- | --- | --- |
+| Bend stress from curvature | linear retarder | $\theta_b = \operatorname{atan2}(\vec k\cdot e_2,\ \vec k\cdot e_1)$ | $\Delta\beta_b \propto \kappa^2$ | `bend_generator_K` |
+| Axial tension on a bend | linear retarder | $\theta_b$ (same bend eigen-axis) | $\propto F\kappa$ | `tension_generator_K` |
+| Core ellipticity + asymmetric frozen-in stress | linear retarder | $\theta_{\mathrm{int}}(s)$ — see the phase table for how it moves | from cross-section | `ellipticity_generator_K` |
+| Mechanical twist photoelasticity | circular | none (circular about $\hat T$) | $\Delta\beta_c = g\,\tau_m$ | `twist_generator_K` |
+| Geometric torsion | **none** | — | — | no optical generator |
+
+**Orientation phases and rates (rotate axes; generate nothing):**
+
+| Phase / rate | What it does | Physical origin | Code |
 | --- | --- | --- | --- |
-| Bend (curvature stress) | $\theta_b = \operatorname{atan2}(\vec k\cdot e_2, \vec k\cdot e_1)$ | $\Delta\beta_b \propto \kappa^2$ | `bend_generator_K` |
-| Axial tension on a bend | $\theta_b$ (same eigen-axis) | $\propto F\kappa$ | `tension_generator_K` |
-| Core ellipticity + asymmetric thermal stress | $\theta_{\mathrm{int}} = \theta_{\mathrm{int}}(0) + \phi_{\mathrm{spin}}(s) + \phi_{\mathrm{twist}}(s)$ | from cross-section | `ellipticity_generator_K` |
-| Mechanical twist | — (circular) | $\Delta\beta_c = g\,\tau_m$ | `twist_generator_K` |
+| $\phi_{\mathrm{spin}}(s) = \int_0^s \xi\,ds'$ | advects the intrinsic axes: $\theta_{\mathrm{int}}(s) = \theta_{\mathrm{int}}(0) + \phi_{\mathrm{spin}} + \phi_{\mathrm{twist}}$ | frozen-in rotation imparted during draw; no stress | `spin_phase` |
+| $\phi_{\mathrm{twist}}(s) = \int_0^s \tau_m\,ds'$ | advects the intrinsic axes (same formula) | elastic twist of the laid fiber | `twist_phase` |
+| $\tau_{\mathrm{geom}}(s)$ | nothing optical — shape diagnostic only | centerline geometry | `geometric_torsion` |
+
+`spin_phase` is not a birefringence source: it is an authored material
+rotation phase that advects the intrinsic axes through
+`ellipticity_generator_K`'s axis argument. Mechanical twist appears twice for
+different reasons — the accumulated $\phi_{\mathrm{twist}}$ advects those same
+axes, while the *local rate* $\tau_m$ additionally creates the circular
+birefringence $\Delta\beta_c = g\,\tau_m$ through `twist_generator_K`, with
+$g \approx 0.14$–$0.16$ in silica (Ulrich and Simon,
+doi:10.1364/AO.18.002241). Geometric torsion belongs to neither table's
+physics: in this gauge it has no optical role at all (Section 4).
+
+Implementation notes:
 
 - $\vec k\cdot e_{1,2}$ are `bend_components` (`fiber-path.jl`): the projection
   of `curvature_vector(path, s)` onto `bishop_e1`/`bishop_e2`. The double-angle
   form $(\cos 2\theta_b, \sin 2\theta_b) = ((k_x^2-k_y^2)/k^2,\ 2k_xk_y/k^2)$
   is normalization- and branch-free (`_bend_axis_c2s2`).
-- $\phi_{\mathrm{spin}} = \int_0^s \xi\,ds'$ (`spin_phase`) is the frozen-in
-  rotation of the glass imparted during draw: it carries the intrinsic axes but
-  creates no stress and no circular birefringence.
-- $\phi_{\mathrm{twist}} = \int_0^s \tau_m\,ds'$ (`twist_phase`) is elastic
-  twist: it both co-rotates the intrinsic axes *and* produces photoelastic
-  circular birefringence $g\,\tau_m$ with $g \approx 0.14$–$0.16$ in silica
-  (Ulrich and Simon, doi:10.1364/AO.18.002241).
 - Bend-stress magnitudes follow Ulrich, Rashleigh, and Eickhoff
   (doi:10.1364/OL.5.000273); the spun-bent formulation parallels
   Przhiyalkovsky et al. (doi:10.1109/JLT.2020.3017795).
-
-Three rotations that must never be conflated: **geometric torsion** (gauge —
-absent here), **spin** (material rotation of the anisotropy axes, no stress),
-**twist** (material rotation *plus* circular birefringence). Only the last two
-are physical inputs; both are integrals of authored rates and are continuous
-across Subpath boundaries by construction.
+- Both material phases are integrals of authored rates and are continuous
+  across Subpath boundaries by construction.
 
 ## 6. DGD and gauge invariance
 
