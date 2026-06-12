@@ -203,15 +203,64 @@ end
     @test β_resp.dω ≈ finite_difference_dω(λp -> propagation_constant(fiber, λp, T), λ) atol = 1e-12 rtol = 1e-6
     @test neff_resp.dω ≈ finite_difference_dω(λp -> effective_mode_index(fiber, λp, T), λ) atol = 1e-16 rtol = 1e-6
 
+    # T-GUARDRAIL: every birefringence dω must match a finite difference of its own
+    # value over ω. The atol of each dω check sits far below the derivative's
+    # magnitude so the rtol is what binds (a loose atol masked a 4.6% chain-rule
+    # error in the core-noncircularity dω until issue #11).
     bend_resp = bending_birefringence(WithDerivative(), fiber, λ, T; bend_radius_m = 0.03)
     twist_resp = twisting_birefringence(WithDerivative(), fiber, λ, T; twist_rate_rad_per_m = 0.7)
     cnc_resp = core_noncircularity_birefringence(WithDerivative(), fiber, λ, T; axis_ratio = 1.01)
+    ats_resp = asymmetric_thermal_stress_birefringence(WithDerivative(), fiber, λ, T; axis_ratio = 1.01)
+    tension_resp = axial_tension_birefringence(WithDerivative(), fiber, λ, T; bend_radius_m = 0.03, axial_tension_N = 0.5)
     @test bend_resp.Δβ ≈ bending_birefringence(fiber, λ, T; bend_radius_m = 0.03) atol = 1e-14
     @test twist_resp.Δβ ≈ twisting_birefringence(fiber, λ, T; twist_rate_rad_per_m = 0.7) atol = 1e-14
     @test cnc_resp.Δβ ≈ core_noncircularity_birefringence(fiber, λ, T; axis_ratio = 1.01) atol = 1e-14
+    @test ats_resp.Δβ ≈ asymmetric_thermal_stress_birefringence(fiber, λ, T; axis_ratio = 1.01) atol = 1e-14
+    @test tension_resp.Δβ ≈ axial_tension_birefringence(fiber, λ, T; bend_radius_m = 0.03, axial_tension_N = 0.5) atol = 1e-14
     @test bend_resp.dω ≈ finite_difference_dω(λp -> bending_birefringence(fiber, λp, T; bend_radius_m = 0.03), λ) atol = 1e-18 rtol = 1e-6
     @test twist_resp.dω ≈ finite_difference_dω(λp -> twisting_birefringence(fiber, λp, T; twist_rate_rad_per_m = 0.7), λ) atol = 1e-18 rtol = 1e-6
-    @test cnc_resp.dω ≈ finite_difference_dω(λp -> core_noncircularity_birefringence(fiber, λp, T; axis_ratio = 1.01), λ) atol = 1e-12 rtol = 1e-6
+    @test cnc_resp.dω ≈ finite_difference_dω(λp -> core_noncircularity_birefringence(fiber, λp, T; axis_ratio = 1.01), λ) atol = 1e-20 rtol = 1e-6
+    @test ats_resp.dω ≈ finite_difference_dω(λp -> asymmetric_thermal_stress_birefringence(fiber, λp, T; axis_ratio = 1.01), λ) atol = 1e-18 rtol = 1e-6
+    @test tension_resp.dω ≈ finite_difference_dω(λp -> axial_tension_birefringence(fiber, λp, T; bend_radius_m = 0.03, axial_tension_N = 0.5), λ) atol = 1e-18 rtol = 1e-6
+end
+
+@testset "StepIndexCrossSection literature validation" begin
+    # T-VALIDATION: bend- and tension-coil birefringence magnitudes against the
+    # published coefficients for fused silica fiber.
+    #   bend:    βb ≈ 7.7×10⁷ (r/R)² deg/m at 633 nm
+    #            (Ulrich, Rashleigh, Eickhoff, Opt. Lett. 5, 273 (1980),
+    #            doi:10.1364/OL.5.000273)
+    #   tension: βtc ≈ 28×10⁷ εz (r/R) deg/m at 633 nm
+    #            (Rashleigh, Ulrich, Opt. Lett. 5, 354 (1980),
+    #            doi:10.1364/OL.5.000354)
+    # Both formulas scale as k0·n³ with constant photoelastic factors, and 633 nm
+    # is outside the material model's validity window, so the published anchors
+    # are transferred to 1550 nm by the factor (λ_pub/λ)·(n(λ)/n_pub)³ with
+    # n_pub = 1.45702 for fused silica at 633 nm (Malitson, J. Opt. Soc. Am. 55,
+    # 1205 (1965), doi:10.1364/JOSA.55.001205). Tolerance reflects the two
+    # significant figures of the published values plus small differences in the
+    # elastic/photoelastic constants, not solver precision.
+    fiber = StepIndexCrossSection(
+        SilicaGermaniaGlass(0.0),          # pure-silica core, as in the experiments
+        SilicaFluorinatedGlass(0.005),
+        8.2e-6,
+        125e-6
+    )
+    λ = 1550e-9
+    T = 297.15
+    R = 0.05
+    r = cladding_radius(fiber)
+    n = refractive_index(fiber.core_material, λ, T)
+    transfer = (633e-9 / λ) * (n / 1.45702)^3
+    rad_to_deg = 180 / π
+
+    bend = bending_birefringence(fiber, λ, T; bend_radius_m = R)
+    @test abs(bend) * rad_to_deg / (r / R)^2 ≈ 7.7e7 * transfer rtol = 0.03
+
+    F = 0.5
+    ε_z = F / (π * r^2 * youngs_modulus(fiber.core_material, T))
+    tension = axial_tension_birefringence(fiber, λ, T; bend_radius_m = R, axial_tension_N = F)
+    @test abs(tension) * rad_to_deg / (ε_z * r / R) ≈ 28e7 * transfer rtol = 0.03
 end
 
 @testset "StepIndexCrossSection perturbation formulas and invariants" begin

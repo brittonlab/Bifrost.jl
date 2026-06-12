@@ -153,6 +153,9 @@ function modal_prefactor_prime(V)
     return 2 * α^2 * dt_dV / den^3
 end
 
+# Note: the `d*_dω` slots are zeroed except `dk0_dω`, so any `*_dω(...).dω` built
+# from `ValueOnly` terms is a *partial* derivative, not zero and not the full one.
+# Only the `.Δβ` field is meaningful under `ValueOnly`; use `WithDerivative` for `dω`.
 function mode_terms(::ValueOnly, fiber::StepIndexCrossSection, λ, T_K)
     n_core = core_refractive_index(fiber, λ, T_K)
     n_clad = cladding_refractive_index(fiber, λ, T_K)
@@ -453,7 +456,8 @@ function core_noncircularity_dω(style::SpectralStyle, fiber::StepIndexCrossSect
     h_prime = h / V * (3 / log(V) - 3 - inv(one(V) + log(V)))
     prefactor = eccentricity_squared(ε) / terms.core_radius
     Δβ = prefactor * (2*χ)^(3 / 2) * h
-    dω = prefactor * ((3 / 2) * sqrt(2*χ) * dχ_dω * h + (2*χ)^(3 / 2) * h_prime * terms.dV_dω)
+    # d/dω (2χ)^(3/2) = 3·√(2χ)·dχ/dω — the inner factor 2 contributes to the chain rule.
+    dω = prefactor * (3 * sqrt(2*χ) * dχ_dω * h + (2*χ)^(3 / 2) * h_prime * terms.dV_dω)
     return BirefringenceResponse(Δβ, dω)
 end
 
@@ -536,7 +540,15 @@ end
 # polarization tracks the geometric rotation of the medium (the leading `1`)
 # reduced by the photoelastic slip `n²(p₁₁−p₁₂)/2` (negative for silica), so the
 # net rotation rate is `(1 + n²(p₁₁−p₁₂)/2)·τ_m`. The generator places this on
-# the real antisymmetric (rotation) part of K; see `circular_birefringence_generator
+# the real antisymmetric (rotation) part of K; see `circular_birefringence_generator`.
+#
+# FLAG (issue #11, unresolved): the two sentences above are mutually exclusive.
+# `circular_birefringence_generator` rotates the polarization by Δβc·L/2, so with
+# Δβc = βLC − βRC the realized rotation rate is `(1 + n²(p₁₁−p₁₂)/2)·τ_m / 2 ≈ 0.42·τ_m`
+# (matches legacy `fibers.py`). If the experimentally validated rotation in [3] is
+# `(1 − g)·τ_m ≈ 0.84·τ_m`, this value must be doubled; if [3] validates `0.42·τ_m`,
+# only the "net rotation rate" sentence is wrong. Pinned by a T-SIM-REGRESSION test
+# until adjudicated against [3].
 #
 # We believe this method is correct.
 # It is wrong in v1 of our 2025 paper [1] and in the seminal 1983 Rashleigh paper [2].
