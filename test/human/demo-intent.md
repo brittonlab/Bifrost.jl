@@ -1,33 +1,30 @@
 # Demo Intent
 
-This file records the intent of every visual demo that historically lived in
-`test/human/demo*.jl`, distilled by running all demos at HEAD, inspecting the generated
-`output/*.html` artifacts (including headless-browser snapshots), and reading the demo
-sources. It is the authoritative narrative from which the consolidated notebook
-`bifrost-demos.ipynb` and its support file `demo-helper.jl` are authored. Each class
-below tells the story of what the demos teach, which edge case or invariant they
-codify, and what a reader should look for in the output.
-
-Bifrost API calls appear only where the precise geometry is the point of the demo.
+This file records the intent of every visual demo in `bifrost-demos.ipynb`: the
+lesson, edge case, or invariant each one codifies, the geometry that produces it
+(as Bifrost API calls — precise enough to reconstruct the demo), and what a reader
+should look for in the output. Section numbers match the notebook. All plotting
+machinery lives in `demo-helper.jl` (`dh_*` functions; see Visual techniques at the
+end).
 
 ## Class index
 
-| # | Class | Legacy source | Atomic demos |
-| --- | --- | --- | --- |
-| 0 | Smallest example | `demo-smallest.jl` | 1 |
-| 1 | Path geometry | `demo-path-geometry.jl` | 7 |
-| 2 | Modify (field-level MCM meta) | `demo1.jl` | 12 |
-| 3 | Material spin | `demo1.jl` | 1 |
-| 4 | Adaptive step-doubling | `demo1.jl` | 1 |
-| 5 | JumpBy / JumpTo — 2D sweeps | `demo2.jl` | 5 |
-| 6 | Meta × JumpTo interplay — 2D | `demo2.jl` | 3 |
-| 7 | JumpBy / JumpTo — 3D scenes | `demo2.jl` | 12 |
-| 8 | MCM temperature PTF | `demo3mcm.jl` | 2 |
-| 9 | MCM speed benchmarks | `demo3benchmark.jl` | 2 |
+| § | Class | Atomic demos |
+| --- | --- | --- |
+| 1 | Smallest runnable examples | 2 |
+| 2 | Path geometry | 5 |
+| 3 | Modify (field-level MCM meta) | 12 |
+| 4 | Material spin | 1 |
+| 5 | Adaptive step-doubling | 1 |
+| 6 | JumpBy / JumpTo — 2D sweeps | 5 |
+| 7 | Meta × JumpTo interplay — 2D | 3 |
+| 8 | JumpBy / JumpTo — 3D scenes | 12 |
+| 9 | MCM temperature PTF | 2 |
+| 10 | MCM speed benchmarks | 2 |
 
-## Class 0 — Smallest example
+## §1 — Smallest runnable examples
 
-The minimum ceremony from nothing to a propagated Jones matrix:
+### 1.0 · Deterministic
 
 ```julia
 xs = StepIndexCrossSection(SilicaGermaniaGlass(0.036), SilicaGermaniaGlass(0.0),
@@ -39,316 +36,317 @@ fiber = Fiber(build(sb); cross_section = xs, T_ref_K = 297.15)
 J, stats = propagate_fiber(fiber; λ_m = 1550e-9)
 ```
 
-Lesson: the full layer stack (material → cross-section → geometry → fiber →
-propagation) in ~10 lines. The 90° bend at R = 0.05 m introduces bend birefringence
-with a fixed axis, so `J` comes out diagonal `diag(e^{-iφ}, e^{+iφ})` with
-φ ≈ 0.033 rad — a pure retarder, |det J| = 1 (lossless SU(2)). `stats` shows the
-propagation decomposed into 3 intervals: the propagator never steps across the
-straight/bend segment boundaries (breakpoint invariant).
+Lesson: the full layer stack in ~10 lines. The bend's fixed-axis birefringence makes
+`J` diagonal `diag(e^{-iφ}, e^{+iφ})`, φ ≈ 0.033 rad — a pure retarder, |det J| = 1.
+`stats` has 3 intervals: the propagator never steps across segment boundaries.
 
-## Class 1 — Path geometry (geometry layer only, no optics)
+### 1.1 · Smallest MCM example
 
-Human-in-the-loop visual debugging for `path-geometry*.jl`. Every demo builds a path
-and renders the interactive 3D inspector (see Visual techniques, §V1).
+Same geometry; the only change is an uncertain operating temperature:
 
-- **simple** — one Subpath: straight · 90° bend · straight · catenary (`a = 0.03`) ·
-  60° bend · straight, sealed at the natural exit. Lesson: all four curve primitives
-  compose with tangent (G1) continuity at every join; prints `path_length` and
-  `writhe` (0 for this planar path) as scalar geometry queries.
-- **segment_labels** — same spirit plus a helix, every segment authored with a
-  `Nickname` meta (`lead-in`, `90° bend`, `spacer`, `sag`, `spin section`,
-  `lead-out`). Lesson: `Nickname` meta flows from authoring through the build to
-  presentation; names live with the segment definition.
-- **helix_0 / helix_pi_3 / helix_2pi_3** — straight · 2-turn helix
-  (R = 0.03, pitch = 0.02) · straight, with `axis_angle` ∈ {0, π/3, 2π/3}.
-  Lesson/edge case: `axis_angle` rotates the helix axis about the incoming tangent;
-  entry stays tangent-continuous for every value, the exit direction (and where the
-  trailing straight goes) changes, and the arc length is invariant (0.4791 m in all
-  three). Comparing the three outputs side by side is the point.
-- **jumps_min_radius** — the “paddle”: a `PathBuilt` of 5 Subpaths. Vertical 1 m
-  straights at x = 0, 1, 2, 3 alternate up/down and are joined by terminal `jumpto!`
-  connectors with anti-parallel incoming tangents (180° U-turns), each with its own
-  `min_bend_radius` (0.4, 0.1, 0.05). Subpath 4 also carries an *interior* `jumpby!`
-  (local-frame `delta = (-1, 0, 0)`, reversing tangent) before its sealing `jumpto!`.
-  Subpaths 2–5 use `start!(sb, :inherit)` so start states flow from the previous
-  subpath. Lessons: PathBuilt assembly under a shared global arc length; `:inherit`;
-  interior vs terminal connectors; per-connector `min_bend_radius`; G2 quintic
-  U-turns.
-- **pathbuilt** — three Subpaths (straight sealed by `jumpto!` at (0,0,0.2);
-  `:inherit` 90° bend sealed by `jumpto!` at its analytic exit; `:inherit` helix
-  sealed with `seal!`). Lesson: a `jumpto!` seal pins exact handoff coordinates, the
-  conformity check validates each boundary, and per-Subpath `Nickname` meta labels
-  whole subpaths.
+```julia
+fiber = Fiber(build(sb); cross_section = xs, T_ref_K = 297.15 ± 2.0)
+J_p, _ = propagate_fiber(fiber; λ_m = 1550e-9)   # entries are Particles
+```
 
-## Class 2 — Modify (field-level MCM meta on segment fields)
+Lesson: one uncertain input is all it takes — the whole ensemble propagates in one
+call and `J_p`'s entries display as mean ± std. MCM blocks wrap in
+`unsafe_comparisons(true)`; ensembles are seeded for notebook reproducibility.
 
-Twelve structurally identical experiments. Baseline geometry is a 3-segment
-inverted-U (straight L = 1 · π-bend R = 0.5 · straight L = 1) or, for helix targets, a
-4-segment variant with a helix (R = 0.15, pitch = 0.25, turns = 1.5) inserted after
-the bend. Exactly one segment carries one `MCMadd(:field, δ)` or `MCMmul(:field, f)`
-with a plain `Float64` perturbation — so the “MCM” machinery is exercised with
-deterministic offsets and the geometric meaning of each field is visible to the eye.
-`Fiber(builder; ...)` applies the meta during its single build.
+## §2 — Path geometry (geometry layer only, no optics)
 
-Variants render side by side (Visual techniques §V2): perturbed segment red, others
-green, terminal connector faint gray.
+Human-in-the-loop visual debugging for `path-geometry*.jl`. Every demo renders the
+interactive 3D inspector (§V1).
 
-| Demo | Target field | Variants | What it shows |
+### 2.1 · simple
+
+```julia
+sb = SubpathBuilder(); start!(sb)
+straight!(sb; length = 0.10);  bend!(sb; radius = 0.05, angle = π/2)
+straight!(sb; length = 0.12);  catenary!(sb; a = 0.03, length = 0.10, axis_angle = 0.0)
+bend!(sb; radius = 0.06, angle = π/3);  straight!(sb; length = 0.08)
+seal!(sb); path = build(sb)
+```
+
+Lesson: all four curve primitives compose with tangent (G1) continuity at every
+join; `path_length` and `writhe` (0 — planar path) are scalar geometry queries.
+
+### 2.2 · segment nicknames
+
+Same shape plus `helix!(sb; radius = 0.025, pitch = 0.015, turns = 1.2,
+axis_angle = 0.0)`, every segment authored with a descriptive
+`meta = [Nickname("lead-in")]` (`90° bend`, `spacer`, `sag`, `spin section`,
+`lead-out`). Lesson: `Nickname` flows from authoring through build to presentation;
+names live with the segment definition.
+
+### 2.3 · helix axis_angle
+
+```julia
+straight!(sb; length = 0.05)
+helix!(sb; radius = 0.03, pitch = 0.02, turns = 2.0, axis_angle = aa)  # aa ∈ {0, π/3, 2π/3}
+straight!(sb; length = 0.05)
+```
+
+Lesson/edge case: `axis_angle` rotates the helix axis about the incoming tangent;
+entry stays tangent-continuous for every value, the exit direction changes, and arc
+length is invariant (printed: 0.4791 m for all three). Rendered as a §V2 comparison
+row plus one full inspector on the `2π/3` variant.
+
+### 2.4 · jumps_min_radius (the paddle)
+
+A `PathBuilt` of 5 Subpaths; vertical 1 m straights joined by 180° U-turn seals:
+
+```julia
+sb1: straight!(1.0); jumpto!(point = (1,0,1), incoming_tangent = (0,0,-1), min_bend_radius = 0.4)
+sb2: start!(sb2, :inherit); straight!(1.0); jumpto!((2,0,0), (0,0,1),  min_bend_radius = 0.1)
+sb3: start!(sb3, :inherit); straight!(1.0); jumpto!((3,0,1), (0,0,-1), min_bend_radius = 0.05)
+sb4: start!(sb4, :inherit); straight!(1.0)
+     jumpby!(delta = (-1,0,0), tangent = (0,0,-1), min_bend_radius = 0.1)
+     jumpto!((2,0,0), (0,0,1))
+sb5: start!(sb5, :inherit); straight!(1.0); seal!(sb5)
+build([sb1, sb2, sb3, sb4, sb5])
+```
+
+Lessons: PathBuilt under a shared global arc length; `:inherit` start states;
+interior (`jumpby!`) vs terminal (`jumpto!`) connectors; per-connector
+`min_bend_radius`; G2 quintic U-turns.
+
+### 2.5 · pathbuilt (exact handoffs)
+
+```julia
+sb1: straight!(0.2); jumpto!(point = (0,0,0.2), incoming_tangent = (0,0,1))
+sb2: start!(sb2, :inherit); bend!(radius = 0.05, angle = π/2)
+     jumpto!((0.05, 0, 0.25), (1,0,0))      # the bend's analytic exit
+sb3: start!(sb3, :inherit); helix!(radius = 0.025, pitch = 0.02, turns = 1.5,
+     axis_angle = 0.0); seal!(sb3)
+build([sb1, sb2, sb3])
+```
+
+Lesson: a `jumpto!` seal pins exact handoff coordinates, the conformity check
+validates each boundary, and per-Subpath `Nickname` (on the `SubpathBuilder`
+constructor) labels whole subpaths.
+
+## §3 — Modify (field-level MCM meta on segment fields)
+
+Twelve structurally identical experiments. Baselines:
+
+```julia
+# inverted-U (targets 1–3):
+straight!(sb; length = 1.0)
+bend!(sb; radius = 0.5, angle = π, axis_angle = 0.0)
+straight!(sb; length = 1.0); seal!(sb)
+
+# helix variant (targets 1–4): same with
+helix!(sb; radius = 0.15, pitch = 0.25, turns = 1.5, axis_angle = 0.0)
+# inserted between bend and final straight
+```
+
+Exactly one segment carries one `MCMadd(:field, δ)` or `MCMmul(:field, f)` with a
+plain `Float64` value; `Fiber(sb; ...)` applies it during its single build. The
+mutated segment per demo:
+
+| Demo | Mutated segment | Meta | Variants |
 | --- | --- | --- | --- |
-| straight :length (add) | first straight | −0.4 | downstream translates rigidly |
-| bend :radius (add) | π-bend | −0.25, +0.50 | U widens/narrows, exit shifts |
-| bend :angle (add) | π-bend | −π/2, +π/4, +π | +π closes a full circle |
-| straight :length (mul) | first straight | ×(−0.4), ×0.5 | ×negative walks backward |
-| bend :radius (mul) | π-bend | ×0.5, ×2.0 | scale vs offset semantics |
-| bend :angle (mul) | π-bend | ×0.5, ×1.25 | — |
-| helix :radius (add/mul) | helix | ±δ, ×0.5/×2 | coil fattens, pitch fixed |
-| helix :pitch (add/mul) | helix | ±δ, ×0.5/×2 | coil stretches axially |
-| helix :turns (add/mul) | helix | ±0.5, ×0.67/×1.5 | exit phase/direction changes |
+| 3.1a | first `straight!` | `MCMadd(:length, ·)` | −0.4 |
+| 3.1b | `bend!` | `MCMadd(:radius, ·)` | −0.25, +0.50 |
+| 3.1c | `bend!` | `MCMadd(:angle, ·)` | −π/2, +π/4, +π |
+| 3.2a | first `straight!` | `MCMmul(:length, ·)` | −0.4, +0.5 |
+| 3.2b | `bend!` | `MCMmul(:radius, ·)` | 0.5, 2.0 |
+| 3.2c | `bend!` | `MCMmul(:angle, ·)` | 0.5, 1.25 |
+| 3.3a/d | `helix!` | `MCMadd`/`MCMmul` `(:radius, ·)` | −0.05/+0.10; ×0.5/×2 |
+| 3.3b/e | `helix!` | `MCMadd`/`MCMmul` `(:pitch, ·)` | −0.10/+0.20; ×0.5/×2 |
+| 3.3c/f | `helix!` | `MCMadd`/`MCMmul` `(:turns, ·)` | ±0.5; ×0.67/×1.5 |
 
-Lessons: which geometry field each knob actually perturbs; add vs mul semantics
-(including the sign-flip edge case `MCMmul(:length, -0.4)` → backward straight);
-without an anchor, everything downstream of the perturbed segment rides along
-rigidly — the contrast with Class 6’s anchored paths.
+Lessons: which geometry field each knob perturbs; add vs mul semantics (edge case:
+`MCMmul(:length, -0.4)` walks the straight backward); with no anchor everything
+downstream rides along rigidly — the contrast with §7's anchored paths.
 
-## Class 3 — Material spin
+## §4 — Material spin
 
-Geometry-only: `start!(sb; spin_rate = 2π)` on straight (1 m) · helix (R = 0.5,
-pitch = 0.05, 4 turns) · straight (1 m), sealed at the natural exit. In the 3D
-inspector the status box reads τ_spin = 6.2832 rad/m everywhere, ∫τ_spin ds
-accumulates linearly with s, and the red spin arrow rotates in the normal–binormal
-plane as the cursor moves — while T̂/N̂/B̂ follow the geometric frame. Lesson:
-material spin set at `start!` is resolved by the geometry layer into path-coordinate
-spin, carried independently of the helix’s geometric torsion.
+```julia
+sb = SubpathBuilder(); start!(sb; spin_rate = 2π)
+straight!(sb; length = 1.0)
+helix!(sb; radius = 0.5, pitch = 0.05, turns = 4.0, axis_angle = 0.0)
+straight!(sb; length = 1.0); seal!(sb)
+```
 
-## Class 4 — Adaptive step-doubling diagnostic
+In the inspector the readout shows τ_spin = 6.2832 rad/m everywhere, ∫τ_spin ds
+linear in s, and the red spin arrow rotating in the normal–binormal plane while
+T̂/N̂/B̂ follow the geometric frame. Lesson: material spin set at `start!` is
+resolved into path-coordinate spin, carried independently of geometric torsion.
+
+## §5 — Adaptive step-doubling
 
 A solver diagnostic on a smooth, noncommuting generator (not a fiber):
 
     K(s) = α·i·σx·cos(πs) + β·i·σz·sin(2πs),  α = 1.2, β = 0.9, s ∈ [0, 2]
 
-`collect_adaptive_steps` (a recording mirror of the production controller in
-`path-integral.jl`; the solver itself is untouched) returns every accepted and
-rejected trial; rendering is the three-panel diagnostic of §V7. With rtol = 1e-6 the
-run accepts ~370 steps and rejects ~15. What to look for: step size locks to the local
-error budget, growing where ‖K(s)‖ dips; each over-grown step triggers a
-rejection cascade (red ✕ column) right after the ‖K‖ minima; the err/tol panel hugs
-the threshold from below (controller efficiency); accepted-step err/tol never exceeds
-1. Lesson: the controller is working as designed — effort concentrates where the
-generator varies fastest.
+The notebook cell retains the original demo code: `collect_adaptive_steps` (the
+recording mirror of the production controller in `path-integral.jl`; the solver is
+untouched) with `rtol = 1e-6, atol = 1e-9`, rendered in the original three-panel
+diagnostic format (§V7). With these tolerances the run accepts ~370 steps and
+rejects ~15. Look for: step size locking to the local error budget and growing where
+‖K(s)‖ dips; rejection cascades (red ✕) right after the ‖K‖ minima; err/tol hugging
+the threshold from below with no accepted step above 1.
 
-## Class 5 — JumpBy / JumpTo, 2D sweeps (x–z plane)
+## §6 — JumpBy / JumpTo — 2D sweeps
 
-All paths lie in y = 0; rendering is the small-multiples SVG row of §V4. Each demo
-sweeps exactly one connector degree of freedom across an otherwise identical
-scene — straight (1 m) · connector · straight (1 m), connector drawn red.
+Scene for every sweep: `straight!(1.0) · connector · straight!(1.0)`, y = 0 plane,
+x–z projection (§V3); the connector is the red segment. One degree of freedom per
+sweep.
 
-- **jumpby tangent_out** — `jumpby!(delta = (0.4, 0, 0.4), tangent = t)` for
-  t ∈ {(+1,0,1)/√2, (0,0,1), (−1,0,1)/√2}. Lesson: a JumpBy’s outgoing tangent is
-  expressed in the **local** frame; the trailing straight exits in that direction.
-- **jumpto point** — `jumpto!(point = (x, 0, 1.5))` for x ∈ {0, 0.3, 0.6, 1.0}.
-  Lesson: a JumpTo target is a **global** waypoint; growing transverse offset bends
-  the connector harder.
-- **jumpto tangent_global** — fixed point, `incoming_tangent` ∈ {+x, +z, (−1,0,1)/√2}.
-  Lesson: the landing direction is a global-frame constraint; the connector arrives
-  at the same point from three different headings, and the trailing straight leaves
-  along each.
-- **jumpto routing** — three successive `jumpto!`s with anti-parallel incoming
-  tangents (each (0,0,∓1) against the previous exit) building a serpentine.
-  Lesson: composite routing through waypoints; each `jumpto!` seals a Subpath, so the
-  result is multi-Subpath under the hood.
-- **jumpto min_radius** — the canonical infeasibility case (transverse unit chord,
-  anti-parallel tangents): sweep `min_bend_radius` ∈ {0.10, 0.30, 0.49, 0.51, 0.70}.
-  Feasible variants build; infeasible ones throw at build time, are trapped, and
-  render as partial paths labeled “(infeasible — n/3 built)” (§V5). Lesson:
-  `min_bend_radius` is a hard build-time guardrail, and the sweep locates the
-  empirical threshold. *Observed at HEAD:* 0.10 and 0.30 build; 0.49, 0.51, 0.70 are
-  all infeasible — i.e. the real threshold lies between 0.3 and 0.49, not at the
-  ≈ 0.5 m the legacy docstring claimed (0.5 = chord/2 is the circular-arc ideal; the
-  quintic connector’s peak curvature is necessarily higher).
+- **6.1 tangent_out** — `jumpby!(sb; delta = (0.4, 0, 0.4), tangent = t)`,
+  `t ∈ {(1,0,1)/√2, (0,0,1), (−1,0,1)/√2}` (local frame).
+- **6.2 point** — seal `jumpto!(sb1; point = (x, 0, 1.5))`,
+  `x ∈ {0, 0.3, 0.6, 1.0}`; continuation `start!(sb2, :inherit)`.
+- **6.3 incoming tangent** — `jumpto!(sb1; point = (0.5, 0, 1.5),
+  incoming_tangent = t)`, `t ∈ {(1,0,0), (0,0,1), (−1,0,1)/√2}` (global frame).
+- **6.4 routing** — three sealed Subpaths chained by `:inherit`:
+  `jumpto!((1,0,1), (0,0,−1))`, `jumpto!((2,0,0), (0,0,1))`,
+  `jumpto!((3,0,1), (0,0,−1))`, each with `min_bend_radius = 0.1`.
+- **6.5 min_bend_radius** — `jumpto!(sb1; point = (1, 0, 1),
+  incoming_tangent = (0, 0, −1), min_bend_radius = mbr)`,
+  `mbr ∈ {0.10, 0.30, 0.49, 0.51, 0.70}`; infeasible variants throw at `build`
+  (trapped via `dh_try_build`, drawn as the surviving lead-in). Lesson: the
+  guardrail is build-time and hard. Observed: 0.49 is also infeasible — the quintic
+  connector's peak curvature exceeds the circular-arc ideal chord/2 = 0.5, so the
+  true threshold for this U-turn lies between 0.30 and 0.49.
 
-## Class 6 — Meta × JumpTo interplay (2D overlays)
+## §7 — Meta × JumpTo interplay — 2D overlays
 
-Three demos that answer: *when geometry upstream is perturbed, what happens to
-everything downstream?* Rendered as baseline-vs-modified overlays (§V3) with total
-path lengths and Δ% in the legend.
+Overlays (§V4): baseline black, modified red, lengths and Δ% in the legend.
 
-1. **jumpby drift** — S-curve (two opposed 90° bends) · `jumpby!(delta = (0,0,0.8))` ·
-   straight, with `MCMmul(:radius, 1.25)` on both bends. The JumpBy delta is
-   fiber-relative, so there is no anchor: the whole downstream trajectory drifts and
-   the endpoint visibly separates (~10% length growth).
-2. **jumpto anchor** — same S-curve, but sealed by `jumpto!` to a fixed lab-frame
-   point (placed so total baseline length is 4.000 m). With `MCMmul(:radius, 1.5)`
-   the interior swings wide, yet the endpoint stays pinned — the terminal connector
-   absorbs the slack.
-3. **jumpto anchor + thermal** — straight (0.5 m) and its sealing `jumpto!` *both*
-   carry `MCMadd(:T_K, ΔT)` with ΔT = 0.05/α_lin (a 5% thermal expansion). The
-   terminal connector thermally expands — its arc length scales by τ — while still
-   landing at the fixed point (the length-constrained connector resolve). The extra
-   length shows up as visible connector curvature.
+- **7.1 drift** — S-curve with fiber-relative jump; perturbation on both bends:
 
-Lesson trio: unanchored perturbations propagate downstream; a JumpTo anchor confines
-them; `:T_K` on a `jumpto!` seal stretches the connector itself without moving the
-anchor. (`:T_K` interpretation happens in `Fiber`, never in the geometry layer.)
+  ```julia
+  straight!(0.3)
+  bend!(radius = 0.5, angle = π/2, axis_angle = 0.0)   # + MCMmul(:radius, 1.25)
+  bend!(radius = 0.5, angle = π/2, axis_angle = π)     # + MCMmul(:radius, 1.25)
+  straight!(0.3); jumpby!(delta = (0, 0, 0.8)); straight!(1.0); seal!
+  ```
 
-## Class 7 — JumpBy / JumpTo, 3D scenes
+  Lesson: no anchor — the tail shifts and the endpoint separates (~10% longer).
+- **7.2 anchor** — same S-curve but sealed with `jumpto!(point = anchor)` where
+  `anchor` puts the baseline at 4.000 m (computed from a probe build's `end_point`);
+  perturbation `MCMmul(:radius, 1.5)` on both bends. Lesson: the interior swings
+  wide, the endpoint stays pinned, the connector absorbs the slack.
+- **7.3 thermal seal** — `straight!(0.5)` and its sealing
+  `jumpto!(point = (1, 0, 0.5), incoming_tangent = (1, 0, 0))` both carry
+  `MCMadd(:T_K, ΔT)` with `ΔT = 0.05 / cte(cladding, T_ref)` (5% expansion).
+  Lesson: the length-constrained connector resolve — connector arc length scales by
+  τ yet lands on the fixed point; extra length becomes curvature. `:T_K` is
+  interpreted by `Fiber`, never by the geometry layer.
 
-The 2D lessons restaged in 3D (§V2 rendering: connector red, fixed segments green,
-variants offset along x), plus 3D-only G2-continuity content. Scaffold is again
-straight (1 m) · connector · straight (1 m) unless noted.
+## §8 — JumpBy / JumpTo — 3D scenes
 
-JumpBy group (local frame):
+§6 restaged in 3D (§V2 rows) plus the G2 content that needs the third dimension.
+Base scene as in §6 unless noted; connector red.
 
-- **delta axial** — `delta = (0,0,d)`, d ∈ {0.3, 0.6, 1.0}: straight-through gap.
-- **delta transverse** — `delta = (d,0,0.5)`, d ∈ {0, 0.2, 0.5}: lateral dogleg.
-- **tangent_out** — 3D version of the 2D sweep.
-- **curvature_out** — `curvature_out` ∈ {0, (0,±2,0)} with fixed diagonal tangent:
-  the G2 exit knob; the connector leaves with prescribed curvature, bowing out of
-  plane.
-- **after_bend** — a 90° bend precedes the JumpBy; `delta` ∈ {(0,0,0.5), (±0.3,0,0.5)}.
-  Lesson: the delta lives in the **rotated** local frame the bend left behind.
-- **g2_inheritance** — bend (R ∈ {0.30, 0.50, 0.80}, π/4) directly into
-  `jumpby!(delta = (0.3,0,0.3))`. Lesson: with no explicit `curvature_out` /
-  incoming spec, the connector inherits the bend’s exit curvature κ = 1/R (G2
-  continuity by default); smaller R visibly launches the connector on a tighter arc.
+- **8.1a axial delta** — `jumpby!(delta = (0, 0, d))`, `d ∈ {0.3, 0.6, 1.0}`.
+- **8.1b transverse delta** — `jumpby!(delta = (d, 0, 0.5))`, `d ∈ {0, 0.2, 0.5}`.
+- **8.2a tangent_out** — as 6.1.
+- **8.2b curvature_out** — `jumpby!(delta = (0.5, 0, 0.5),
+  tangent = (1,0,1)/√2, curvature_out = κ)`, `κ ∈ {(0,0,0), (0,2,0), (0,−2,0)}`;
+  the ±y variants bow out of plane (G2 exit knob).
+- **8.3a/b point sweeps** — `jumpto!(point = (0,0,z))`, `z ∈ {1.3, 1.6, 2.0}`;
+  `jumpto!(point = (x,0,1.5))`, `x ∈ {0, 0.3, 0.6}`.
+- **8.3c incoming tangent** — as 6.3.
+- **8.3d incoming curvature** — `jumpto!(point = (0.5, 0, 1.5),
+  incoming_tangent = (0,0,1), incoming_curvature = κ)`,
+  `κ ∈ {(0,0,0), (10,0,0), (−10,0,0)}` (G2 landing knob).
+- **8.4a jumpby after bend** — `straight!(1.0) · bend!(radius = 0.5, angle = π/2) ·
+  jumpby!(delta = d) · straight!(1.0)`, `d ∈ {(0,0,0.5), (0.3,0,0.5), (−0.3,0,0.5)}`.
+  Lesson: the delta lives in the rotated local frame.
+- **8.4b jumpto after bend** — same scene, `jumpto!(point = p)`,
+  `p ∈ {(1,0,1.5), (1.3,0,1.5), (0.5,0,2.0)}`. Lesson: the target stays global.
+- **8.5 G2 inheritance** — `bend!(radius = R, angle = π/4) ·
+  jumpby!(delta = (0.3, 0, 0.3)) · straight!(1.0)`, `R ∈ {0.3, 0.5, 0.8}`. Lesson:
+  with no explicit spec the connector inherits the bend's exit curvature 1/R.
+- **8.6 routing 3D** — the 6.4 chain in a 3D scene.
 
-JumpTo group (global frame):
+## §9 — MCM temperature PTF
 
-- **point (axial)** — `point = (0,0,z)`, z ∈ {1.3, 1.6, 2.0}.
-- **point (transverse)** — `point = (x,0,1.5)`, x ∈ {0, 0.3, 0.6}.
-- **tangent_global** — `incoming_tangent` ∈ {+x, +z, (−1,0,1)/√2} at a fixed point.
-- **curvature_global** — `incoming_curvature` ∈ {0, (±10,0,0)}: the G2 landing knob;
-  the connector arrives flat or pre-curled.
-- **after_bend** — 90° bend then `jumpto!` to global destinations. Lesson: unlike
-  JumpBy-after-bend, the target does not rotate with the local frame.
-- **routing** — the serpentine composite in 3D.
+The notebook cells import the legacy demo code largely verbatim (constants,
+variable names, flow); only the path spec is authored with the public builder API:
 
-## Class 8 — MCM temperature PTF (end-to-end uncertainty)
+```julia
+sb = SubpathBuilder(); start!(sb; spin_rate = s -> sin(2π * s / 100.0))
+straight!(sb; length = 5.0)
+helix!(sb; radius = 0.025, pitch = 0.05, turns = 10001.892069208387,
+       axis_angle = 0.0, meta = AbstractMeta[MCMadd(:T_K, ΔT_K)])
+straight!(sb; length = 5.0)
+helix!(sb; radius = 0.025, pitch = 0.05, turns = 10000.0, axis_angle = 0.0)
+straight!(sb; length = 5.0); seal!(sb)
+Fiber(sb; cross_section = MCM_DEMO_XS, T_ref_K = 303.15)
+```
 
-The flagship physics demo. Fiber (cross-section: 3.6% Ge-doped core / pure-silica
-cladding, a = 8.2 µm, λ = 1550 nm, T_ref = 303.15 K):
+Physics: bend birefringence ∝ 1/R²; at R = 2.5 cm the first helix accumulates
+|Δβ|·L ≈ 1775·2π rad. The fractional turn count puts 30 °C exactly at mid-fringe
+(mod(Γ, 2π) = π), the point of maximum dPTF/dT. Temperature enters twice —
+`MCMadd(:T_K, ΔT_K)` geometry meta (thermal expansion via the cladding CTE, baked in
+by `Fiber`) and `T_ref_K = T_K_particles` on the final binding (material indices).
+Per-particle Jones matrices are sliced into Stokes observables for input state H
+(`dh_stokes_ensemble`).
 
-    straight 5 m
-    helix R = 0.025 m, pitch = 0.05 m, turns = 10001.892…   ← MCMadd(:T_K, ΔT)
-    straight 5 m
-    helix R = 0.025 m, pitch = 0.05 m, turns = 10000        (reference)
-    straight 5 m
+- **9.1 ptf** — `T_C = StaticParticles(50, Normal(30, 5))`; legacy two-panel format
+  (§V6): angle vs T | S1/S2/S3/DLP vs T. Look for: angle swinging through the
+  mid-fringe, DLP ≈ 1 and S3 ≈ 0 (helix birefringence rotates the linear
+  polarization angle without adding ellipticity).
+- **9.2 scatter** — `Particles(500, Normal(30, 5))` (legacy used 2000; 500 keeps
+  runtime in minutes); two-panel: angle vs T | S1–S2 Poincaré equatorial projection
+  with unit circle. Look for: the temperature-parameterized arc on the equator.
 
-with a sinusoidal material spin `spin_rate = s -> sin(2πs/100)` over the whole
-Subpath. Physics: bend birefringence scales as 1/R², so at R = 2.5 cm the first helix
-accumulates |Δβ|·L ≈ 1775·2π rad of retardation; the fractional turn count is tuned
-so that at 30 °C it sits exactly at **mid-fringe** (mod(Γ, 2π) = π), the operating
-point of maximum temperature sensitivity (at a crossing, dPTF/dT = 0). ΔT enters
-twice, deliberately: as `:T_K` meta on the helix (geometric thermal expansion via the
-cladding CTE, baked in by `Fiber`) and as `T_ref_K = T_K_particles` on a second
-`Fiber` binding (temperature-dependent material indices). Over ±5 °C the retardation
-swings by ≈ ±0.75π.
+## §10 — MCM speed benchmarks
 
-- **ptf** — `StaticParticles(50)`, T ~ N(30 °C, 5 °C), **one** propagation. Each
-  particle’s Jones matrix is extracted and converted to Stokes parameters for input
-  state H. Output: polarization angle vs T, and S1/S2/S3/DLP vs T (§V6). The output
-  stays nearly linearly polarized (DLP ≈ 1, S3 ≈ 0): the helix birefringence rotates
-  the linear polarization angle without adding ellipticity, so the sensitive
-  observable is the **angle**, not DLP.
-- **scatter** — `Particles(500)` version (the legacy demo used 2000; reduced so the
-  notebook executes in minutes — the ensemble story is unchanged); angle vs T plus
-  the Poincaré equatorial projection (S1–S2), where the ensemble traces an arc
-  parameterized by temperature.
-
-Lessons: a full MCM pipeline (uncertain T → geometry meta + material binding →
-ensemble propagation in one pass → per-particle post-processing); mid-fringe design;
-why ensembles beat nominal-value runs for PTF questions.
-
-## Class 9 — MCM speed benchmarks
-
-Same fiber as Class 8. Cases: `Float64`, `Particles(N)`, `StaticParticles(50)`,
-`StaticParticles(75)`. For each, two timings: **first-call** (JIT + one run, via
-`time_ns`) and **steady-state** (a warm re-run). Two scenarios: `propagate_fiber`
-alone on a pre-built fiber, and build + propagate (the full per-sample pipeline
-including `:T_K` thermal geometry). Output: log-scale grouped bars plus a ratio
-table (§V8). Lessons: the ensemble overhead of MCM relative to Float64;
-`StaticParticles` SIMD sweet spot at small N; JIT cost vs marginal cost. Numbers are
-environment-dependent — the demo is informational, never asserted.
+The notebook cells import the legacy benchmark structure verbatim: the same four
+cases (`Float64`, `Particles(2000)`, `StaticParticles(50)`, `StaticParticles(75)`),
+the same two scenarios (propagate-only on a pre-built fiber; build + propagate
+including `:T_K` interpretation), first-call (JIT + run, `time_ns`) vs steady-state
+(`@belapsed` minimum, 3 samples), and the §V8 presentation (grouped log-scale bars +
+table). Numbers are machine-dependent; nothing is asserted.
 
 Notebook scaling: the benchmark fiber keeps the 5-segment structure but scales the
-helices down to 1000 turns (the legacy ~10000-turn, mid-fringe-tuned fiber exists for
-sensitivity, which is irrelevant to a speed comparison), making BenchmarkTools
-tractable; a note in the cell records the reduction.
+helices to 100 turns (the legacy ~10000-turn, mid-fringe-tuned fiber exists for
+sensitivity, which is irrelevant to a speed comparison) so the repeated timed runs —
+in particular the `Particles(2000)` case — stay tractable; a note in the cell
+records the reduction.
 
-## Legacy orchestration (replaced by notebook structure)
+## Visual techniques (implemented in `demo-helper.jl`)
 
-`demo-index.jl` + `demo-index-helpers.jl` maintained per-file registries of
-`(group, fn, desc)` entries; each demo returned its HTML path(s) and optional inline
-description, and a monolithic `output/demo-index.html` grouped them under section and
-group headings. In the notebook this machinery disappears: sections are the classes
-above, the markdown cell before each demo carries its description, and plots render
-inline.
+- **V1 path inspector** (`dh_path_inspector`) — interactive 3D scene: centerline
+  with arc-length-graded markers, open circles at segment joins, green start / red
+  end dots, `Nickname` labels floated above segment midpoints; a slider scrubs arc
+  length carrying a translucent normal–binormal plane, the T̂/N̂/B̂ triad
+  (orange/blue/green), and a red in-plane spin-phase arrow; a live readout shows
+  s; x, y, z; κ; τ_geom; τ_spin; ∫τ_spin ds. Axes are fixed to the bounding box of
+  all content (path + cursor extents) so they never re-range while scrubbing.
+- **V2 variant rows 3D** (`dh_variant_row`) — N variants of a path side by side
+  with constant x-offsets; subject segments red, context green, terminal connectors
+  optionally faint gray; per-variant start/end dots and labels.
+- **V3 variant rows 2D** (`dh_variant_row_2d`) — the same for planar scenes in the
+  x–z projection, equal-aspect axes.
+- **V4 overlays** (`dh_overlay_compare`) — baseline (black) vs modified (red) in
+  x–z, with segment-boundary ticks and a legend carrying lengths and Δ%.
+- **V5 try-build** (`dh_try_build`) — traps expected build-time errors so
+  infeasible variants render as labeled placeholders instead of aborting a cell.
+- **V6 MCM temperature rows** (`dh_temperature_ptf_row`,
+  `dh_temperature_scatter_row`) — the legacy demo3mcm presentation: two side-by-side
+  panels; angle vs T with a shared Viridis temperature colorbar, and either
+  S1/S2/S3/DLP vs T (Reds/Greens/Blues/Oranges per series, DLP as diamonds) or the
+  S1–S2 equatorial projection with unit circle at locked [−1, 1] unit aspect.
+  `dh_jones_to_stokes` / `dh_stokes_ensemble` convert per-particle Jones matrices to
+  Stokes observables.
+- **V7 adaptive panels** (`dh_adaptive_panels`) — the legacy three-panel
+  diagnostic: step size h(s) with accepted dots / rejected ✕ over a shaded ‖K(s)‖
+  profile; err/tol per trial on a log axis with the acceptance threshold dashed;
+  the generator's component coefficients.
+- **V8 benchmark presentation** (`dh_benchmark_chart`, `dh_benchmark_table`) — the
+  legacy format: grouped first-call vs steady-state bars on a log-time axis, and a
+  compact Markdown table (label, N particles, first, steady, steady-per-particle).
 
-## V — Visual presentation techniques
-
-The catalog below is sufficient to reproduce the visual storytelling without the
-legacy source.
-
-**V1. Interactive 3D path inspector** (library: `write_path_geometry_plot3d`, kept).
-One path in a 3D scene, equal aspect (`aspectmode: data`): faint gray centerline;
-dot markers along the path color-graded by arc length (light → dark); open-circle
-markers at segment boundaries; green start dot, red end dot; segment `Nickname`
-labels floated as 3D text. A cursor driven by horizontal mouse position scrubs arc
-length: at the cursor sit a black dot, a translucent square spanning the local
-normal–binormal plane, a short axis triad T̂ (orange), N̂ (blue), B̂ (green), and a
-red arrow in the N–B plane pointing along the accumulated spin phase ∫τ_spin ds. A
-status box updates live with s; x, y, z; κ; τ_geom; τ_spin; ∫τ_spin ds (rad and
-deg). A `fidelity` knob scales sampling density. A footer explains the mouse
-interaction.
-
-**V2. Side-by-side variant row (3D)** — the workhorse comparison layout. N variants
-of one scenario, differing in exactly one parameter, each built independently and
-offset along +x by a `variant_spacing`; per-variant floating text label above the
-scene; semantic line coloring: red = the element under study (connector or perturbed
-segment), green = fixed context segments, faint gray = terminal connector when it is
-incidental; green start dots; dark background; camera looking from −y. Driven
-parametrically by a list of `(label, build_fn)` pairs — this is the parametric
-tooling that makes the sweeps cheap to author.
-
-**V3. Baseline-vs-modified overlay (2D, x–z)** — two paths drawn in the same axes:
-baseline black, modified red, on a light background with an equal-aspect mapping,
-padded bounds, and a unit grid. Open circles mark the start and end of every placed
-segment (shared boundary markers overlay). A legend reports L_baseline, L_modified,
-and Δ% — the quantitative readout of thermal/parametric growth. Legend corner is
-selectable so it never covers the interesting part.
-
-**V4. Small-multiples sweep (2D, x–z)** — like V2 but flat: per-variant x-offset
-columns, red/green semantic coloring, white dots at segment ends, per-variant labels
-at the top, dark background. (Legacy: hand-emitted SVG; the notebook re-renders the
-same composition with the standard plotting stack.)
-
-**V5. Failure-tolerant sweep** — a sweep variant where some parameter values are
-*expected to fail to build*: each variant’s builder calls are replayed one at a time,
-the first failing step is trapped, the longest successfully built prefix is rendered
-in place, and the variant label is annotated “(infeasible — n/m built)”. Codifies
-that `min_bend_radius` infeasibility throws at build time and shows where the
-threshold sits.
-
-**V6. Ensemble scatter colored by the uncertain parameter** — per-particle scatter
-plots where marker color encodes the uncertain input (temperature, Viridis): observable
-vs T (angle, Stokes components, DLP), and a Poincaré **equatorial projection**
-(S1–S2, axes locked to [−1, 1], unit aspect) where the ensemble traces an arc. Hover
-shows per-particle values. An explanatory paragraph above the plots states the
-physical reading (DLP ≈ 1, angle is the sensitive observable).
-
-**V7. Stacked solver-diagnostic panels** — three aligned panels over s: (top) step
-size h on log-y as green accepted dots and dark-red ✕ rejected trials, with scaled
-‖K(s)‖ as a shaded background band; (middle) err/tol per trial on log-y with a
-dashed threshold at 1, green below / red above; (bottom) the generator’s component
-coefficients as labeled line traces. Together they let the eye correlate
-solver effort with generator behavior.
-
-**V8. Benchmark bars + table** — grouped bars (first-call vs steady-state) on log-y,
-one group per case, plus an HTML table of the raw ms numbers and ratios against the
-Float64 baseline. Bars give shape; the table gives the numbers.
-
-**Cross-cutting conventions**: dark backgrounds for 3D scenes and sweeps, light
-backgrounds for overlay comparisons; red = subject, green = context everywhere;
-equal-aspect for any geometric plot; every figure has a one-line title carrying the
-swept parameter; variant labels carry the parameter value (and feasibility
-annotation when relevant); prints accompanying a figure are limited to scalar
-geometry/solver facts (arc length, writhe, accepted/rejected step counts).
+**Cross-cutting conventions**: dark backgrounds throughout; red = subject,
+green = context everywhere; equal/fixed aspect for any geometric plot; every figure
+title carries the swept parameter; variant labels carry the parameter value (and
+feasibility annotation when relevant); prints accompanying a figure are limited to
+scalar geometry/solver facts (arc length, writhe, step counts); MCM ensembles are
+seeded (`Random.seed!`) so the notebook is deterministic.

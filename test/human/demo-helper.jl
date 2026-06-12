@@ -26,10 +26,11 @@ using Bifrost.PathGeometry: SubpathBuilt, PathBuilt, PlacedSegment, Nickname,
     sample_path, s_end, s_offsets, path_length, arc_length, position, total_spin,
     _qc_nominalize, _all_placed_segs
 
-export path_inspector,
-    variant_row, variant_row_2d, overlay_compare, try_build,
-    jones_to_stokes, stokes_ensemble, ensemble_scatter, poincare_equatorial,
-    adaptive_panels, benchmark_chart, benchmark_table
+export dh_path_inspector,
+    dh_variant_row, dh_variant_row_2d, dh_overlay_compare, dh_try_build,
+    dh_jones_to_stokes, dh_stokes_ensemble, dh_ensemble_scatter, dh_poincare_equatorial,
+    dh_adaptive_panels, dh_benchmark_chart, dh_benchmark_table,
+    dh_temperature_ptf_row, dh_temperature_scatter_row
 
 # ---------------------------------------------------------------------
 # Palette and layout conventions (demo-intent.md “cross-cutting conventions”)
@@ -54,17 +55,29 @@ _nom(x) = Float64(_qc_nominalize(x))
 
 Shared dark 3D scene layout: equal aspect, muted axes, legend styled for dark.
 """
-function _dark3d(title::AbstractString; height::Int = 560)
+function _dark3d(title::AbstractString; height::Int = 560, ranges = nothing)
+    xax = merge(_DARK_AX3, attr(title = "x (m)"))
+    yax = merge(_DARK_AX3, attr(title = "y (m)"))
+    zax = merge(_DARK_AX3, attr(title = "z (m)"))
+    if ranges === nothing
+        scene = attr(bgcolor = _DARK_BG, xaxis = xax, yaxis = yax, zaxis = zax,
+                     aspectmode = "data")
+    else
+        # Fixed bounding box: axes never re-range as slider/cursor traces move.
+        xr, yr, zr = ranges
+        spans = (xr[2] - xr[1], yr[2] - yr[1], zr[2] - zr[1])
+        m = max(spans...)
+        scene = attr(bgcolor = _DARK_BG,
+            xaxis = merge(xax, attr(range = [xr...], autorange = false)),
+            yaxis = merge(yax, attr(range = [yr...], autorange = false)),
+            zaxis = merge(zax, attr(range = [zr...], autorange = false)),
+            aspectmode = "manual",
+            aspectratio = attr(x = spans[1] / m, y = spans[2] / m, z = spans[3] / m))
+    end
     return Layout(
         title = attr(text = title, font = attr(color = "#eee", size = 15)),
         paper_bgcolor = _DARK_BG,
-        scene = attr(
-            bgcolor = _DARK_BG,
-            xaxis = merge(_DARK_AX3, attr(title = "x (m)")),
-            yaxis = merge(_DARK_AX3, attr(title = "y (m)")),
-            zaxis = merge(_DARK_AX3, attr(title = "z (m)")),
-            aspectmode = "data",
-        ),
+        scene = scene,
         height = height,
         margin = attr(l = 0, r = 0, t = 42, b = 0),
         legend = attr(font = attr(color = "#ddd")),
@@ -165,7 +178,7 @@ end
 # ---------------------------------------------------------------------
 
 """
-    path_inspector(path; title = "", fidelity = 1.0, nsteps = 50) -> Plot
+    dh_path_inspector(path; title = "", fidelity = 1.0, nsteps = 50) -> Plot
 
 Interactive inspector for a built path (`SubpathBuilt` or `PathBuilt`):
 
@@ -179,7 +192,7 @@ Interactive inspector for a built path (`SubpathBuilt` or `PathBuilt`):
 
 The frame shown is the parallel-transport frame reported by `sample_path`.
 """
-function path_inspector(path; title::AbstractString = "", fidelity::Float64 = 1.0,
+function dh_path_inspector(path; title::AbstractString = "", fidelity::Float64 = 1.0,
                         nsteps::Int = 50)
     hi = _nom(s_end(path))
     ps = sample_path(path, 0.0, hi; fidelity = fidelity)
@@ -304,7 +317,13 @@ function path_inspector(path; title::AbstractString = "", fidelity::Float64 = 1.
                           args = [restyle, relayout, cursor_idx]))
     end
 
-    layout = _dark3d(title)
+    # Bounding box over everything the scene can show: the path, the cursor
+    # plane/triad at any s, and floated labels. Axes stay fixed while scrubbing.
+    ext = max(axlen, halfw * sqrt(2)) + 0.03 * diam
+    ranges = ((minimum(xv) - ext, maximum(xv) + ext),
+              (minimum(yv) - ext, maximum(yv) + ext),
+              (minimum(zv) - ext, maximum(zv) + max(ext, 0.08 * diam)))
+    layout = _dark3d(title; ranges = ranges)
     layout[:annotations] = [attr(text = readout(1), x = 0.5, y = -0.02,
         xref = "paper", yref = "paper", showarrow = false,
         font = attr(color = "#ccc", size = 11))]
@@ -320,7 +339,7 @@ end
 # ---------------------------------------------------------------------
 
 """
-    variant_row(variants; spacing = 2.5, title = "", gray_terminal = false)
+    dh_variant_row(variants; spacing = 2.5, title = "", gray_terminal = false)
 
 Side-by-side comparison of path variants in 3D. `variants` is a vector of
 `(label, path, red)` where `red` lists 1-based placed-segment indices to draw
@@ -328,7 +347,7 @@ in the subject color (use `Int[]` for none). Variants are offset along +x by
 `spacing`; non-red segments draw green; with `gray_terminal = true` each
 subpath's terminal connector draws faint gray instead.
 """
-function variant_row(variants::Vector; spacing::Real = 2.5,
+function dh_variant_row(variants::Vector; spacing::Real = 2.5,
                      title::AbstractString = "", gray_terminal::Bool = false,
                      height::Int = 560)
     traces = GenericTrace[]
@@ -361,13 +380,13 @@ function variant_row(variants::Vector; spacing::Real = 2.5,
 end
 
 """
-    variant_row_2d(variants; spacing = 2.5, title = "")
+    dh_variant_row_2d(variants; spacing = 2.5, title = "")
 
-The 2D (x–z plane) version of [`variant_row`](@ref) for paths lying in y = 0:
+The 2D (x–z plane) version of [`dh_variant_row`](@ref) for paths lying in y = 0:
 variant columns offset along x, red/green semantic coloring, white dots at
 segment ends, per-variant labels at the top.
 """
-function variant_row_2d(variants::Vector; spacing::Real = 2.5,
+function dh_variant_row_2d(variants::Vector; spacing::Real = 2.5,
                         title::AbstractString = "", height::Int = 470)
     traces = GenericTrace[]
     annos = []
@@ -405,13 +424,13 @@ end
 # ---------------------------------------------------------------------
 
 """
-    overlay_compare(baseline, modified; title = "", legend = :topleft)
+    dh_overlay_compare(baseline, modified; title = "", legend = :topleft)
 
 Overlay two built paths in the x–z plane on a light background: baseline
 black, modified red, open circles at every placed-segment boundary, and a
 legend reporting both total lengths and the percent change.
 """
-function overlay_compare(baseline, modified; title::AbstractString = "",
+function dh_overlay_compare(baseline, modified; title::AbstractString = "",
                          legend::Symbol = :topleft, height::Int = 470)
     Lb = _nom(path_length(baseline))
     Lm = _nom(path_length(modified))
@@ -450,12 +469,12 @@ end
 # ---------------------------------------------------------------------
 
 """
-    try_build(f) -> (value, error)
+    dh_try_build(f) -> (value, error)
 
 Run the zero-argument builder `f`, returning `(result, nothing)` on success or
 `(nothing, err)` if the build throws (e.g. a `min_bend_radius` infeasibility).
 """
-function try_build(f)
+function dh_try_build(f)
     try
         return (f(), nothing)
     catch err
@@ -468,13 +487,13 @@ end
 # ---------------------------------------------------------------------
 
 """
-    jones_to_stokes(J; input = [1, 0]) -> NamedTuple
+    dh_jones_to_stokes(J; input = [1, 0]) -> NamedTuple
 
 Apply a scalar `ComplexF64` Jones matrix to `input`, normalize, and return
 `(s1, s2, s3, dlp, angle_deg)` where `dlp = hypot(s1, s2)` and `angle_deg` is
 the linear polarization angle folded to [0°, 180°).
 """
-function jones_to_stokes(J::AbstractMatrix; input = ComplexF64[1.0, 0.0])
+function dh_jones_to_stokes(J::AbstractMatrix; input = ComplexF64[1.0, 0.0])
     ψ = Matrix{ComplexF64}(J) * ComplexF64.(input)
     ψ ./= sqrt(abs2(ψ[1]) + abs2(ψ[2]))
     s1 = real(abs2(ψ[1]) - abs2(ψ[2]))
@@ -490,13 +509,13 @@ _particle(z::Complex, k::Int) =
     complex(_particle(real(z), k), _particle(imag(z), k))
 
 """
-    stokes_ensemble(J_p; input = [1, 0]) -> NamedTuple of vectors
+    dh_stokes_ensemble(J_p; input = [1, 0]) -> NamedTuple of vectors
 
 Slice a Jones matrix with MCM `Particles` entries into its per-particle scalar
 matrices and convert each to Stokes observables. Returns
 `(s1, s2, s3, dlp, angle_deg, N)`.
 """
-function stokes_ensemble(J_p::AbstractMatrix; input = ComplexF64[1.0, 0.0])
+function dh_stokes_ensemble(J_p::AbstractMatrix; input = ComplexF64[1.0, 0.0])
     r = real(J_p[1, 1])
     N = hasfield(typeof(r), :particles) ? length(getfield(r, :particles)) : 1
     s1 = zeros(N); s2 = zeros(N); s3 = zeros(N)
@@ -504,7 +523,7 @@ function stokes_ensemble(J_p::AbstractMatrix; input = ComplexF64[1.0, 0.0])
     for k in 1:N
         Jk = ComplexF64[_particle(J_p[1, 1], k) _particle(J_p[1, 2], k);
                         _particle(J_p[2, 1], k) _particle(J_p[2, 2], k)]
-        st = jones_to_stokes(Jk; input = input)
+        st = dh_jones_to_stokes(Jk; input = input)
         s1[k] = st.s1; s2[k] = st.s2; s3[k] = st.s3
         dlp[k] = st.dlp; ang[k] = st.angle_deg
     end
@@ -512,12 +531,12 @@ function stokes_ensemble(J_p::AbstractMatrix; input = ComplexF64[1.0, 0.0])
 end
 
 """
-    ensemble_scatter(x, series; color = x, title, xlab, ylab, yrange = nothing)
+    dh_ensemble_scatter(x, series; color = x, title, xlab, ylab, yrange = nothing)
 
 Scatter one or more observables against an uncertain input, marker color
 encoding `color` (Viridis). `series` is a vector of `(name, values)` pairs.
 """
-function ensemble_scatter(x::AbstractVector, series::Vector;
+function dh_ensemble_scatter(x::AbstractVector, series::Vector;
                           color = x, title::AbstractString = "",
                           xlab::AbstractString = "Temperature (°C)",
                           ylab::AbstractString = "", yrange = nothing,
@@ -544,13 +563,13 @@ function ensemble_scatter(x::AbstractVector, series::Vector;
 end
 
 """
-    poincare_equatorial(s1, s2; color, title = "") -> Plot
+    dh_poincare_equatorial(s1, s2; color, title = "") -> Plot
 
 S1–S2 equatorial projection of the Poincaré sphere: per-particle markers
 colored by the uncertain input, axes locked to [−1, 1] at unit aspect, with
 the unit circle (fully polarized linear states) drawn for reference.
 """
-function poincare_equatorial(s1::AbstractVector, s2::AbstractVector;
+function dh_poincare_equatorial(s1::AbstractVector, s2::AbstractVector;
                              color = nothing, title::AbstractString = "",
                              height::Int = 470)
     θ = range(0, 2π; length = 181)
@@ -582,7 +601,7 @@ end
 # ---------------------------------------------------------------------
 
 """
-    adaptive_panels(records, K_norm, s0, s1; rtol, atol, components = [])
+    dh_adaptive_panels(records, K_norm, s0, s1; rtol, atol, components = [])
 
 Three stacked panels over arc length for `collect_adaptive_steps` output:
 (1) step size h (log y) — accepted green dots, rejected red ✕, scaled ‖K(s)‖
@@ -590,7 +609,7 @@ as a shaded band; (2) err/tol per trial (log y) with the acceptance threshold
 dashed at 1; (3) the generator's labeled component coefficients.
 `components` is a vector of `(label, fn, color)`.
 """
-function adaptive_panels(records::Vector, K_norm, s0::Real, s1::Real;
+function dh_adaptive_panels(records::Vector, K_norm, s0::Real, s1::Real;
                          rtol::Float64 = 1e-6, atol::Float64 = 1e-9,
                          components::Vector = [], height::Int = 760,
                          title::AbstractString = "Adaptive step-doubling")
@@ -650,13 +669,13 @@ end
 # ---------------------------------------------------------------------
 
 """
-    benchmark_chart(results; title = "") -> Plot
+    dh_benchmark_chart(results; title = "") -> Plot
 
 Grouped log-scale bars of first-call (JIT + run) vs steady-state wall time.
 `results` is a vector of NamedTuples `(label, n_particles, first_ms,
 steady_ms)` as produced by the benchmark cells.
 """
-function benchmark_chart(results::Vector; title::AbstractString = "")
+function dh_benchmark_chart(results::Vector; title::AbstractString = "")
     labels = [String(r.label) for r in results]
     p = plot([
         bar(x = labels, y = [r.first_ms for r in results],
@@ -676,11 +695,11 @@ function benchmark_chart(results::Vector; title::AbstractString = "")
 end
 
 """
-    benchmark_table(results) -> Markdown.MD
+    dh_benchmark_table(results) -> Markdown.MD
 
 Markdown table of benchmark numbers with ratios against the first row.
 """
-function benchmark_table(results::Vector)
+function dh_benchmark_table(results::Vector)
     io = IOBuffer()
     println(io, "| Variant | N particles | First-call (ms) | Steady-state (ms) ",
                 "| First ratio | Steady ratio |")
@@ -693,6 +712,80 @@ function benchmark_table(results::Vector)
                 r.steady_ms / results[1].steady_ms)
     end
     return Markdown.parse(String(take!(io)))
+end
+
+
+# ---------------------------------------------------------------------
+# V6 (legacy format) — MCM temperature rows, mirroring demo3mcm's layout
+# ---------------------------------------------------------------------
+
+"""
+    dh_temperature_ptf_row(T_C, st; title = "") -> Plot
+
+Two side-by-side panels in the legacy demo3mcm format: linear polarization
+angle vs temperature (Viridis, shared colorbar) and S1/S2/S3/DLP vs
+temperature (per-series Reds/Greens/Blues/Oranges colorscales, DLP as
+diamonds). `st` is the named tuple from [`dh_stokes_ensemble`](@ref).
+"""
+function dh_temperature_ptf_row(T_C::AbstractVector, st; title::AbstractString = "")
+    p = make_subplots(rows = 1, cols = 2, horizontal_spacing = 0.10,
+        subplot_titles = ["Linear polarization angle vs T" "Stokes parameters vs T"])
+    add_trace!(p, scatter(x = T_C, y = st.angle_deg, mode = "markers",
+        marker = attr(size = 6, color = T_C, colorscale = "Viridis",
+                      opacity = 0.85,
+                      colorbar = attr(title = "T (°C)", x = 0.42, len = 0.85)),
+        name = "pol. angle", showlegend = false), row = 1, col = 1)
+    series = (("S1", st.s1, "Reds", "circle"), ("S2", st.s2, "Greens", "circle"),
+              ("S3", st.s3, "Blues", "circle"), ("DLP", st.dlp, "Oranges", "diamond"))
+    for (nm, y, cs, sym) in series
+        add_trace!(p, scatter(x = T_C, y = y, mode = "markers", name = nm,
+            marker = attr(size = 6, color = T_C, colorscale = cs, opacity = 0.85,
+                          symbol = sym)), row = 1, col = 2)
+    end
+    relayout!(p, height = 470, paper_bgcolor = "#1a1a1a", plot_bgcolor = "#1a1a1a",
+        font = attr(color = "#ccc"), title = attr(text = title),
+        legend = attr(font = attr(color = "#ccc"), x = 1.0, y = 1.0),
+        xaxis  = merge(_DARK_AX, attr(title = "Temperature (°C)")),
+        xaxis2 = merge(_DARK_AX, attr(title = "Temperature (°C)")),
+        yaxis  = merge(_DARK_AX, attr(title = "Angle (deg)", range = [0, 180])),
+        yaxis2 = merge(_DARK_AX, attr(title = "Stokes parameter / DLP",
+                                      range = [-1, 1])))
+    return p
+end
+
+"""
+    dh_temperature_scatter_row(T_C, st; title = "") -> Plot
+
+Two side-by-side panels in the legacy demo3mcm scatter format: polarization
+angle vs temperature, and the Poincaré equatorial projection (S1–S2, unit
+circle for reference, axes locked to [−1, 1] at unit aspect), both colored by
+temperature.
+"""
+function dh_temperature_scatter_row(T_C::AbstractVector, st;
+                                    title::AbstractString = "")
+    p = make_subplots(rows = 1, cols = 2, horizontal_spacing = 0.10,
+        subplot_titles = ["Polarization angle vs T (MCM scatter)" "Poincaré equatorial projection (S1–S2)"])
+    add_trace!(p, scatter(x = T_C, y = st.angle_deg, mode = "markers",
+        marker = attr(size = 4, color = T_C, colorscale = "Viridis",
+                      opacity = 0.7,
+                      colorbar = attr(title = "T (°C)", x = 0.42, len = 0.85)),
+        showlegend = false), row = 1, col = 1)
+    θ = range(0, 2π; length = 181)
+    add_trace!(p, scatter(x = cos.(θ), y = sin.(θ), mode = "lines",
+        line = attr(color = "#444", width = 1), hoverinfo = "skip",
+        showlegend = false), row = 1, col = 2)
+    add_trace!(p, scatter(x = st.s1, y = st.s2, mode = "markers",
+        marker = attr(size = 4, color = T_C, colorscale = "Viridis",
+                      opacity = 0.7),
+        showlegend = false), row = 1, col = 2)
+    relayout!(p, height = 470, paper_bgcolor = "#1a1a1a", plot_bgcolor = "#1a1a1a",
+        font = attr(color = "#ccc"), title = attr(text = title),
+        xaxis  = merge(_DARK_AX, attr(title = "Temperature (°C)")),
+        yaxis  = merge(_DARK_AX, attr(title = "Angle (deg)", range = [0, 180])),
+        xaxis2 = merge(_DARK_AX, attr(title = "S1", range = [-1.05, 1.05])),
+        yaxis2 = merge(_DARK_AX, attr(title = "S2", range = [-1.05, 1.05],
+                                      scaleanchor = "x2", scaleratio = 1)))
+    return p
 end
 
 end # module DemoHelper
