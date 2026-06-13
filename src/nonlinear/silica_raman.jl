@@ -294,6 +294,13 @@ end
 const _IM_HR_NORM = _IM_HR_RAW .* _NORM_C
 const _TAB_SPLINE = DataInterpolations.CubicSpline(_IM_HR_NORM, _FREQ_RAD)
 
+# Largest |Ω| at which the silica Raman gain is experimentally constrained.
+# Pulled from the Lin & Agrawal (2006) tabulation; beyond this point the
+# tabulated and HC models return 0 by construction and the BW analytic form
+# is unvalidated. Used by `_validate_raman_channel` to warn callers when
+# their integration window falls outside the model's domain.
+const _RAMAN_OMEGA_MAX = _FREQ_RAD[end]
+
 "Im[h̃R(Ω)] using the Lin & Agrawal (2006) tabulated spectrum."
 function im_h_R_tabulated(Ω::Real)
     Ωf      = float(Ω)
@@ -451,6 +458,54 @@ function sprs_photon_rate_density(Ω, ω_pump, P_pump, L, γ, T_K;
 end
 
 """
+    _validate_raman_channel(λ_pump, λ_channel, Δλ, sideband)
+
+Sanity-check the spectral window `[λ_channel − Δλ/2, λ_channel + Δλ/2]`
+before integrating the spontaneous-Raman rate density across it. Catches:
+
+  * non-positive wavelengths or width;
+  * a width so large that the lower edge would fall to ≤ 0;
+  * a channel that overlaps or straddles the pump line (the integrand is
+    not defined on that interval);
+  * a channel on the wrong side of the pump for the requested sideband
+    (Stokes ⇒ longer λ than pump, anti-Stokes ⇒ shorter λ).
+
+Emits an `@warn` (rather than throwing) if any part of the channel maps to
+`|Ω| > _RAMAN_OMEGA_MAX`, where the silica gain spectrum is unconstrained
+and the integrand evaluates to ~0 for the tabulated/HC models.
+"""
+function _validate_raman_channel(λ_pump::Real, λ_channel::Real, Δλ::Real,
+                                   sideband::Symbol)
+    λ_pump    > 0 || throw(ArgumentError("λ_pump must be positive, got $λ_pump"))
+    λ_channel > 0 || throw(ArgumentError("λ_channel must be positive, got $λ_channel"))
+    Δλ        > 0 || throw(ArgumentError("Δλ must be positive, got $Δλ"))
+    Δλ < 2λ_channel || throw(ArgumentError(
+        "Δλ = $Δλ m would push the lower channel edge to ≤ 0 (require Δλ < 2·λ_channel = $(2λ_channel) m)"))
+
+    λ_lo, λ_hi = λ_channel - Δλ/2, λ_channel + Δλ/2
+    λ_lo ≤ λ_pump ≤ λ_hi && throw(ArgumentError(
+        "Channel [$λ_lo, $λ_hi] m overlaps the pump (λ_pump = $λ_pump m); the spontaneous-Raman integrand is not defined on this interval."))
+
+    if sideband === :stokes && λ_hi < λ_pump
+        throw(ArgumentError(
+            "sideband=:stokes but channel ∈ [$λ_lo, $λ_hi] m sits at shorter wavelength than λ_pump = $λ_pump m. Did you mean :antistokes?"))
+    elseif sideband === :antistokes && λ_lo > λ_pump
+        throw(ArgumentError(
+            "sideband=:antistokes but channel ∈ [$λ_lo, $λ_hi] m sits at longer wavelength than λ_pump = $λ_pump m. Did you mean :stokes?"))
+    end
+
+    ω_pump = 2π * SPEED_OF_LIGHT_M_PER_S / λ_pump
+    Ω_max  = max(abs(ω_pump - 2π * SPEED_OF_LIGHT_M_PER_S / λ_lo),
+                 abs(ω_pump - 2π * SPEED_OF_LIGHT_M_PER_S / λ_hi))
+    if Ω_max > _RAMAN_OMEGA_MAX
+        @warn @sprintf(
+            "Channel reaches %.2f THz from the pump, beyond the silica Raman gain support (%.2f THz). The tabulated and HC integrands are zero past this point; the BW form is unvalidated.",
+            Ω_max / (2π * 1e12), _RAMAN_OMEGA_MAX / (2π * 1e12))
+    end
+    return nothing
+end
+
+"""
     sprs_noise_in_channel(λ_pump, λ_channel, Δλ, P_pump, L, γ, T_K;
                           sideband=:stokes, pump_depletion=false,
                           n_points=1001, config=RamanConfig())
@@ -462,12 +517,17 @@ Total spontaneous Raman photon rate into a quantum channel [photons / s].
 The first form takes raw `(L, γ, T_K)`. The second derives them from a
 `Fiber`: `γ = (2π/λ)·n₂/A_eff` from `fiber.cross_section` and
 `L = fiber.s_end − fiber.s_start` (override with `length_m`).
+
+The `(λ_pump, λ_channel, Δλ, sideband)` tuple is validated via
+[`_validate_raman_channel`](@ref) before integration; see there for the
+exact geometric and spectral-support constraints enforced.
 """
 function sprs_noise_in_channel(λ_pump, λ_channel, Δλ, P_pump, L, γ, T_K;
                                  sideband::Symbol=:stokes,
                                  pump_depletion::Bool=false,
                                  n_points::Int=1001,
                                  config::RamanConfig=RamanConfig())
+    _validate_raman_channel(λ_pump, λ_channel, Δλ, sideband)
     ω_pump = 2π * SPEED_OF_LIGHT_M_PER_S / λ_pump
     ω_ch   = 2π * SPEED_OF_LIGHT_M_PER_S / λ_channel
     Δω     = 2π * SPEED_OF_LIGHT_M_PER_S * Δλ / λ_channel^2
