@@ -78,9 +78,11 @@ thresholds.
 ### 5. Visual Tests
 
 These are tests that generate a plot or other visual output for debugging by humans.
-They are currently implemented in demo*.jl. 
-- Demos are not reusable library code; resist extracting shared helpers unless
-  two demos are truly identical in structure and the duplication is large.   
+They live in the notebook `test/human/bifrost-demos.ipynb`; its demo narratives are
+recorded in `test/human/demo-intent.md`, and all plotting machinery lives in
+`test/human/demo-helper.jl`.
+- Demo cells are not reusable library code; the Bifrost-API portion of each cell is
+  written to be read, and duplication across cells is deliberate.
   - **Inline `Nickname` meta directly on every segment call** rather than
     deriving names at render time from type information.  The name lives with the
     segment definition, not in a helper function.
@@ -96,11 +98,11 @@ They are currently implemented in demo*.jl.
   - For segments whose role is obvious from context (lead-in, sag, etc.) use a
   descriptive nickname instead of just the type name:
   `PG.Nickname("lead-in")`, `PG.Nickname("90° bend")`.
-- Abstraction related to visual presentation is fine and prefered. 
-- One function, one output file. Each demo function produces exactly one HTML file  and returns its path. No aggregator functions that internally loop over scenes.
-- Names derived from outputs. Function names are demo_ + the HTML filename stem  (hyphens → underscores), so the mapping between function and artifact is unambiguous and mechanical.                                                                 
-- File order mirrors index order.                               
-- Descriptions live next to implementations.     
+- Abstraction related to visual presentation is fine and preferred — that is what
+  `demo-helper.jl` is for; helpers there may be as abstract as convenient.
+- One atomic demo, one cell, one figure. Markdown cells carry each demo's
+  description immediately above its implementation; section order mirrors the
+  class index at the top of the notebook.
 
 ## Key Invariants
 

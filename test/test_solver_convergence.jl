@@ -40,7 +40,7 @@ const _CONV_BREAKS = [0.0, 1.0, 2.5, 4.0]   # multi-interval: exercises piecewis
 const _CONV_J_TARGET = 1e-6
 const _CONV_DGD_TARGET = 1e-6
 
-# Realistic SMF-like fiber, mirroring test/human/demo-smallest.jl.
+# Realistic SMF-like fiber, mirroring bifrost-demos.ipynb §1 (smallest example).
 const _CONV_XS = StepIndexCrossSection(
     SilicaGermaniaGlass(0.036), SilicaGermaniaGlass(0.0),
     8.2e-6, 125e-6,

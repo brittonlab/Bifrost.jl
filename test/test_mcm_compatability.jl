@@ -526,3 +526,61 @@ end
         MonteCarloMeasurements.unsafe_comparisons(false)
     end
 end
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ▓▓▓  path-geometry.jl — rate queries after :T_K thermal scaling  ▓▓▓
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@testset "MCM :: twist_rate survives Particles-valued segment offsets" begin
+    MonteCarloMeasurements.unsafe_comparisons(true)
+    try
+        xs = StepIndexCrossSection(
+            SilicaGermaniaGlass(0.036),
+            SilicaGermaniaGlass(0.0),
+            8.2e-6,
+            125e-6,
+        )
+        ΔT = 0.0 ± 5.0
+        sb = SubpathBuilder(); start!(sb)
+        helix!(sb; radius = 0.025, pitch = 0.05, turns = 2.0, axis_angle = 0.0,
+               meta = AbstractMeta[MCMadd(:T_K, ΔT)])
+        straight!(sb; length = 0.5)
+        seal!(sb)
+        fiber = Fiber(sb; cross_section = xs, T_ref_K = 297.15)
+
+        # T-GUARDRAIL: :T_K scaling gives the helix Particles-valued fields,
+        # so probing inside it hands a Particles segment-local arc length to
+        # the untwisted segment's rate. _eval_rate(::Nothing, ·) must stay
+        # coercion-free (regression: Float64(::Particles) threw).
+        s_probe = 0.1  # inside the ~0.33 m helix
+        τ = Bifrost.PathGeometry.twist_rate(fiber.path, s_probe)
+        @test τ isa Particles
+        @test pmean(τ) == 0.0
+    finally
+        MonteCarloMeasurements.unsafe_comparisons(false)
+    end
+end
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ▓▓▓  path-geometry-connector.jl — nominalization is module-agnostic  ▓▓▓
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Minimal Real carrying a `particles` field, standing in for any MCM-like type.
+struct _FakeParticles <: Real
+    particles::Vector{Float64}
+end
+
+@testset "MCM :: _qc_nominalize reduces particle carriers structurally" begin
+    # T-GUARDRAIL: nominalization must detect the `particles` field itself —
+    # not reflect into Main for the MonteCarloMeasurements binding (regression:
+    # consumers that load MCM inside a module, e.g. notebook executors or
+    # wrapper packages, got un-nominalized Particles back and downstream
+    # Float64() conversions threw).
+    @test Bifrost.PathGeometry._qc_nominalize(_FakeParticles([1.0, 2.0, 3.0])) ≈ 2.0
+    p = Particles(100, Normal(2.0, 0.5))
+    n = Bifrost.PathGeometry._qc_nominalize(p)
+    @test n isa Float64
+    @test n ≈ pmean(p)
+end

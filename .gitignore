@@ -14,7 +14,13 @@ docs/build/
 docs/Manifest.toml
 actions-runner/
 
+# Local PR19 nonlinear-physics review scratch (not tracked)
+test/bifrost_pr19_review/
+
+# Notebook environment locals (test/human)
+test/human/Manifest.toml
+test/human/.CondaPkg/
+
 # VS Code
 .vscode
-
 
